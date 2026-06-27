@@ -46,6 +46,7 @@ gängige Kalorienzähler kaum.
 | Reaktive Daten | **`dexie-react-hooks` (`useLiveQuery`)** | Idiomatisch für lokale DB, weniger Abhängigkeiten als TanStack Query (das kommt erst mit der Cloud) |
 | Formulare | **react-hook-form + zod** | Validierung, wenig Boilerplate |
 | Charts | **Recharts** | Tagesverlauf, Fortschrittsringe |
+| Feier-Effekte | **canvas-confetti** | Konfetti bei Zielerreichung/Badge-Unlock |
 | Bild-Verkleinerung | **Canvas (client-seitig)** | Fotos vor KI-Upload auf ~1024 px / JPEG q0.7 → schneller, billiger, weniger Datenvolumen |
 | Barcode-Scan | **`@zxing/browser`** | Barcode → Produktsuche, on-device |
 | KI-Proxy | **Netlify Function** | Versteckt den OpenRouter-API-Key (nie im Client!), mit Rate-Limit & Tagesbudget |
@@ -138,6 +139,46 @@ Profile {
 }
 ```
 
+```ts
+// Regelbasiertes Ziel (deckt kcal, Makros und jeden Mikronährstoff ab)
+Goal {
+  id: string                // UUID
+  nutrient: string          // 'kcal' | 'protein' | 'vitaminC' | 'iron' | ...
+  type: 'min' | 'max' | 'range'
+  target: number; targetMax?: number   // targetMax nur bei 'range'
+  unit: string              // 'kcal' | 'g' | 'mg' | 'µg' | '%RDA'
+  active: boolean
+  createdBy: 'user' | 'coach'
+  updatedAt: number; deletedAt?: number
+}
+
+// Freigeschalteter Erfolg / Badge
+Achievement {
+  id: string                // UUID
+  key: string               // 'protein_7d' | 'vitaminC_week' | 'logged_30d' | 'first_ai_scan' ...
+  unlockedAt: number
+}
+
+// Challenge (oft vom Coach vorgeschlagen, vom Nutzer bestätigt)
+Challenge {
+  id: string                // UUID
+  title: string             // i18n-Key
+  rule: object              // wie Goal, plus Zeitraum
+  period: 'day' | 'week'
+  status: 'suggested' | 'active' | 'done' | 'failed'
+  createdBy: 'user' | 'coach'
+  updatedAt: number
+}
+
+// Spielstand: Punkte, Level, Streaks
+GamificationState {
+  id: 'me'
+  points: number; level: number
+  streaks: Record<string, number>   // pro Ziel + 'overall'
+  updatedAt: number
+}
+```
+
 Dexie-Schemata werden **versioniert** (Migrationen von Anfang an mitgeplant). Wasser-Tracking
 kommt als eigene kleine Tabelle (`WaterLog`) dazu.
 
@@ -149,6 +190,9 @@ kommt als eigene kleine Tabelle (`WaterLog`) dazu.
 - `mode: 'meal'` — Foto/Video-Frame vom Essen → **erkannte Lebensmittel + geschätzte Mengen** (keine Nährwerte aus der KI; die kommen aus der DB).
 - `mode: 'label'` — Foto einer Nährwerttabelle → Werte auslesen (per 100 g + Portionsgröße). Hier liefert die KI Zahlen direkt (OCR).
 - `mode: 'portion'` — Foto zur reinen Mengenschätzung eines bekannten Lebensmittels.
+- `mode: 'coach'` — **textbasiert**, kein Bild: bekommt eine aggregierte Nährwert-Zusammenfassung
+  (Profil, Ziele, Tages-/Wochenwerte, Defizite) und gibt Beratung / Ziel- & Challenge-Vorschläge
+  als strukturiertes JSON zurück (Vorschläge brauchen Nutzer-Bestätigung).
 
 **Client-Vorverarbeitung:** Bild auf ~1024 px / JPEG q0.7 verkleinern, dann als Base64 senden.
 
@@ -184,8 +228,11 @@ Katalog gespeichert (inkl. üblicher Portion) → beim nächsten Mal vorausgefü
    Mengen-**Presets + Slider**, dann „Übernehmen".
 4. **Nährstoff-Detail** — Mikronährstoffe des Tages, **Defizite hervorgehoben** („zu wenig: Eisen, Vit. D").
 5. **Verlauf** — Tage/Wochen, Trends (Recharts), Wochen-Insights („Protein-Ziel 5/7 Tagen").
-6. **Profil & Ziele** — Onboarding mit **automatischer Zielberechnung** (Mifflin-St-Jeor),
-   Einheiten, **Backup-Export/Import**, Dark Mode, (später) Login/Sync.
+6. **Erfolge & Coach** — Badges/Level/Streaks-Übersicht, aktive Challenges, **KI-Coach-Chat**
+   (Ziel- & Challenge-Vorschläge mit Bestätigung).
+7. **Profil & Ziele** — Onboarding mit **automatischer Zielberechnung** (Mifflin-St-Jeor),
+   regelbasierte Ziele (min/max/Korridor pro Nährstoff), Einheiten, **Backup-Export/Import**,
+   Dark Mode, (später) Login/Sync.
 
 **Bedienprinzipien:** untere Tab-Bar (daumenfreundlich), große Touch-Targets, Bottom-Sheets statt
 Modals, Dark Mode, klare Empty States, schnelle manuelle Suche als Fallback, jeder Eintrag leicht
@@ -232,7 +279,43 @@ wir bekannte Best-Practice-Patterns nutzen — und weil die App über Icons und 
 **Barrierefreiheit:** ausreichender Kontrast (WCAG AA), skalierbare Schrift, Icons mit
 `aria-label`, fokussierbare Touch-Elemente — kostet wenig, hilft allen.
 
-## 9. Roadmap (Phasen)
+## 9. Gamification, Belohnungen & KI-Coach
+
+Ziel: Motivation und Dranbleiben. Erfolge werden **sichtbar gefeiert**, Ziele lassen sich mit Hilfe
+eines **KI-Ernährungscoaches** definieren und anpassen.
+
+### 9.1 Zielarten (flexibel & nährstoffbasiert)
+Ziele sind als kleine Regeln modelliert, damit beliebige Nährstoffe abgedeckt sind:
+- **Mindestziel** — z. B. „≥ 130 g Protein", „≥ 100 % Tagesbedarf Vitamin C", „≥ 30 g Ballaststoffe".
+- **Höchstziel / Limit** — z. B. „≤ 2000 kcal", „≤ 50 g Zucker", „≤ 6 g Salz".
+- **Korridor** — z. B. „2200–2600 kcal" (Aufbau-Phase).
+- Gilt für **kcal, Makros und jeden Mikronährstoff** (Vitamine/Mineralstoffe), Tagesbedarf aus
+  hinterlegten Referenzwerten (RDA/DGE), ableitbar aus dem Profil.
+
+### 9.2 Belohnungssystem
+- **Streaks** — aufeinanderfolgende Tage mit erreichtem Ziel (pro Ziel eigene Streak + Gesamt-Streak).
+- **Badges / Erfolge** — z. B. „7-Tage-Protein", „Vitamin-C-Woche", „30 Tage geloggt", „Erster KI-Scan".
+- **Punkte & Level** — pro erreichtem Tagesziel/Logging gibt es Punkte → Level-Aufstieg.
+- **Tages-/Wochen-Challenges** — kleine, erreichbare Aufgaben (vom Coach vorschlagbar), z. B.
+  „Heute 3 Gemüseportionen".
+- **Feier-Momente** — beim Zielerreichen Konfetti/Erfolgs-Animation (Framer Motion), Badge-Unlock-Sheet.
+  Dezent, nie nervig; respektiert `prefers-reduced-motion`.
+- Fortschritt jederzeit sichtbar: Ringe/Balken füllen sich animiert Richtung Ziel.
+
+### 9.3 KI-Ernährungscoach
+Ein **textbasierter Coach** über dasselbe OpenRouter-Gateway (`mode: 'coach'`). Er bekommt als
+Kontext eine **aggregierte Zusammenfassung** (Profil, Ziele, Tages-/Wochenwerte, Defizite) —
+**keine Fotos, keine Rohdaten** — und kann:
+- **Ziele vorschlagen/definieren** passend zum Profil & Wunsch („abnehmen", „Muskelaufbau",
+  „mehr Eisen") und sie auf Bestätigung als `Goal` anlegen.
+- **Beraten & erklären**: „Dir fehlt diese Woche Magnesium — z. B. Haferflocken, Nüsse, Hülsenfrüchte."
+- **Challenges vorschlagen**, die zu den Zielen passen.
+- **Wochen-Review** geben (was lief gut, woran arbeiten).
+
+Datenschutz: Der Coach läuft nur auf Knopfdruck und sieht nur aggregierte Zahlen. Vorgeschlagene
+Ziele/Challenges werden dem Nutzer zur **Bestätigung** angezeigt, bevor sie aktiv werden.
+
+## 10. Roadmap (Phasen)
 
 **Phase 0 — Setup**
 - Vite + React + TS, Tailwind + shadcn/ui, ESLint/Prettier, Vitest
@@ -254,19 +337,25 @@ wir bekannte Best-Practice-Patterns nutzen — und weil die App über Icons und 
 
 **Phase 3 — Komfort & Motivation**
 - Mengenschätzung per Foto, Mengen-Presets/Slider
-- Nährstoff-Defizit-Ansicht, Wasser-Tracking, Streaks & Wochen-Insights
+- Nährstoff-Defizit-Ansicht, Wasser-Tracking
+- **Gamification:** regelbasierte Ziele, Streaks, Badges, Punkte/Level, Challenges,
+  Feier-Animationen (Konfetti/Badge-Unlock), Wochen-Insights
 
-**Phase 4 — Cloud-Sync (später)**
+**Phase 4 — KI-Ernährungscoach**
+- `mode: 'coach'`: aggregierte Zusammenfassung als Kontext, Beratung im Chat
+- Ziel- & Challenge-Vorschläge mit Nutzer-Bestätigung, Wochen-Review
+
+**Phase 5 — Cloud-Sync (später)**
 - Supabase (Auth + Postgres), Last-Write-Wins-Sync über `updatedAt`/`deletedAt`, Multi-Device, Backup
 
-## 10. Offene Punkte / später zu entscheiden
+## 11. Offene Punkte / später zu entscheiden
 
 - Genauer Umfang der Mineralstoff-/Vitaminliste (Start: gängige ~10, erweiterbar).
 - Video-Handling: vorerst Einzelframe extrahieren (einfacher & billiger als ganzes Video).
 - USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF, Rohzutaten → USDA).
 - iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera.
 
-## 11. Nächste Schritte
+## 12. Nächste Schritte
 
 1. Diesen Plan abnehmen.
 2. Phase 0 umsetzen (Projekt-Grundgerüst + PWA + versioniertes Dexie-Schema).
