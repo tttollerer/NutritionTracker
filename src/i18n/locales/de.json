@@ -47,7 +47,81 @@
     "title": "Profil & Ziele",
     "placeholder": "Onboarding & Ziele kommen in Phase 1."
   },
+  "onboarding": {
+    "title": "Willkommen 👋",
+    "subtitle": "Beantworte ein paar Fragen — daraus berechnen wir deine Tagesziele.",
+    "sex": "Geschlecht",
+    "male": "Männlich",
+    "female": "Weiblich",
+    "age": "Alter",
+    "height": "Größe (cm)",
+    "weight": "Gewicht (kg)",
+    "activity": "Aktivität",
+    "activityLow": "Wenig",
+    "activityMedium": "Mittel",
+    "activityHigh": "Hoch",
+    "goal": "Ziel",
+    "goalLose": "Abnehmen",
+    "goalMaintain": "Halten",
+    "goalGain": "Zunehmen",
+    "persona": "Schwerpunkt",
+    "dietForms": "Ernährungsform",
+    "allergies": "Allergien",
+    "submit": "Ziele berechnen & loslegen",
+    "personas": {
+      "strength": "Kraft/Muskelaufbau",
+      "endurance": "Ausdauer",
+      "weightloss": "Abnehmen",
+      "weightgain": "Zunehmen",
+      "general": "Allgemein"
+    },
+    "diets": {
+      "vegan": "Vegan",
+      "vegetarian": "Vegetarisch",
+      "lowcarb": "Low Carb",
+      "keto": "Keto",
+      "highprotein": "High Protein",
+      "glutenfree": "Glutenfrei"
+    },
+    "allergens": {
+      "gluten": "Gluten",
+      "lactose": "Laktose",
+      "nuts": "Nüsse",
+      "peanuts": "Erdnüsse",
+      "soy": "Soja",
+      "eggs": "Eier",
+      "fish": "Fisch"
+    }
+  },
+  "entry": {
+    "title": "Manuell erfassen",
+    "name": "Name",
+    "namePh": "z. B. Haferflocken",
+    "per": "Bezug",
+    "kcal": "kcal / 100",
+    "protein": "Eiweiß (g)",
+    "carbs": "Kohlenh. (g)",
+    "fat": "Fett (g)",
+    "amount": "Menge",
+    "meal": "Mahlzeit",
+    "recent": "Zuletzt benutzt",
+    "save": "Hinzufügen",
+    "allergyWarning": "Achtung: enthält ggf. ein hinterlegtes Allergen."
+  },
+  "profile": {
+    "title": "Profil & Ziele",
+    "placeholder": "Onboarding & Ziele kommen in Phase 1.",
+    "yourGoals": "Deine Tagesziele",
+    "theme": "Dunkelmodus",
+    "backup": "Backup",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "edit": "Profil bearbeiten",
+    "reset": "Onboarding erneut"
+  },
   "common": {
-    "loading": "Lädt …"
+    "loading": "Lädt …",
+    "cancel": "Abbrechen",
+    "delete": "Löschen"
   }
 }

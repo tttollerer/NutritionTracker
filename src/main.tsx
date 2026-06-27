@@ -6,6 +6,10 @@ import { requestPersistentStorage } from './lib/storage'
 import './i18n'
 import './index.css'
 
+// Gespeichertes Theme früh anwenden (vor dem ersten Render).
+const storedTheme = localStorage.getItem('nt-theme') ?? 'dark'
+document.documentElement.classList.toggle('dark', storedTheme === 'dark')
+
 // PWA-Service-Worker registrieren (Update-Prompt-Strategie).
 registerSW({ immediate: true })
 
