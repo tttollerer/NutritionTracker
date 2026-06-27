@@ -18,8 +18,9 @@ seine tägliche Nährstoffzufuhr verfolgt. Das Erfassen soll möglichst wenig Ti
 4. Ergebnis landet im Tracking: Kalorien, Makros (Eiweiß/Fett/Kohlenhydrate), Mineralstoffe & Vitamine.
 5. **Barcode-Scan** für verpackte Produkte → exakte Daten aus Open Food Facts.
 
-**Differenzierer:** Fokus auf **Mineralstoffe & Vitamine** mit einer Defizit-Ansicht — das bieten
-gängige Kalorienzähler kaum.
+**Differenzierer:** Fokus auf **Mineralstoffe & Vitamine** mit einer Defizit-Ansicht — und konsequente
+**Anpassung an die Zielgruppe** (Sportler, Bodybuilding, Ab-/Zunehmen, vegan, Low Carb/Keto, Allergien),
+über die ein spezialisierter KI-Coach berät. Das bieten gängige Kalorienzähler kaum.
 
 ## 2. Leitentscheidungen
 
@@ -132,12 +133,14 @@ Goals {
   updatedAt: number
 }
 
-// Nutzerprofil für die Zielberechnung (Mifflin-St-Jeor)
+// Nutzerprofil für Zielberechnung (Mifflin-St-Jeor) + Zielgruppen-Anpassung
 Profile {
   id: 'me'
   sex: 'm' | 'f'; age: number; heightCm: number; weightKg: number
   activity: 'low' | 'medium' | 'high'
   goal: 'lose' | 'maintain' | 'gain'
+  persona: 'strength' | 'endurance' | 'weightloss' | 'weightgain' | 'general'
+  dietForms: string[]   // z.B. ['vegan','lowcarb','glutenfree'] — kombinierbar
   updatedAt: number
 }
 ```
@@ -249,9 +252,9 @@ Katalog gespeichert (inkl. üblicher Portion) → beim nächsten Mal vorausgefü
 6. **Erfolge & Coach** — Badges/Level/Streaks, **virtueller Begleiter**, aktive Quests/Challenges,
    freischaltbare Belohnungen; **KI-Coach** als Chat **und Sprachgespräch**, mit Foto-Feedback und
    **Live-Kamera-Modus** (Ziel-/Challenge-/Log-Vorschläge mit Bestätigung).
-7. **Profil & Ziele** — Onboarding mit **automatischer Zielberechnung** (Mifflin-St-Jeor),
-   regelbasierte Ziele (min/max/Korridor pro Nährstoff), Einheiten, **Backup-Export/Import**,
-   Dark Mode, (später) Login/Sync.
+7. **Profil & Ziele** — Onboarding mit **Persona-, Ernährungsform- & Allergie-Auswahl**, daraus
+   **Ziel-Vorlagen** + **automatische Zielberechnung** (Mifflin-St-Jeor), regelbasierte Ziele
+   (min/max/Korridor pro Nährstoff), Einheiten, **Backup-Export/Import**, Dark Mode, (später) Login/Sync.
 
 **Bedienprinzipien:** untere Tab-Bar (daumenfreundlich), große Touch-Targets, Bottom-Sheets statt
 Modals, Dark Mode, klare Empty States, schnelle manuelle Suche als Fallback, jeder Eintrag leicht
@@ -418,7 +421,45 @@ meisten Protein?" oder „Schätz mir das mal".
 - **Datenschutz:** Kamera nur im aktiven Live-Modus; Frames werden nur auf Tap/aktive Frage gesendet;
   nichts wird ohne Zutun dauerhaft gespeichert.
 
-## 10. Roadmap (Phasen)
+## 10. Zielgruppen & Ernährungsprofile
+
+Die App passt sich an **Ziel, Lebensstil und Ernährungsform** an — beim Onboarding gewählt, jederzeit
+änderbar. Aus dem Profil leiten sich **Ziel-Vorlagen** (Makro-/Mikro-Vorgaben) ab; der KI-Coach ist
+auf jede Gruppe spezialisiert und berät entsprechend.
+
+### 10.1 Zielgruppen (Personas) mit Standard-Schwerpunkten
+| Persona / Ziel | Schwerpunkte (Ziel-Vorlage) |
+|---|---|
+| **Kraftsport / Bodybuilding / Muskelaufbau** | Hohes Protein (≈ 1,6–2,2 g/kg), leichter kcal-Überschuss, Verteilung über den Tag |
+| **Ausdauersport** | Mehr Kohlenhydrate, Flüssigkeit/Elektrolyte, Timing um Training |
+| **Abnehmen / Übergewicht** | kcal-Defizit, hoher Protein-/Ballaststoffanteil (Sättigung), Zucker-/Salz-Limits |
+| **Zunehmen / Untergewicht** | kcal-Überschuss, nährstoffdichte Lebensmittel, regelmäßige Mahlzeiten |
+| **Gesund halten / Allgemein** | Ausgewogene Makros, RDA-Abdeckung bei Vitaminen/Mineralstoffen |
+
+### 10.2 Ernährungsformen
+- **Vegan / Vegetarisch** — besonderes Augenmerk auf **B12, Eisen, Omega-3, Protein, Calcium, Zink**;
+  Coach schlägt nur passende Lebensmittel vor.
+- **Low Carb / Keto / „No Carb"** — Kohlenhydrat-Limit als `max`-Ziel, angepasste Makro-Verteilung
+  (mehr Fett/Protein).
+- **High Protein**, **Mediterran**, weitere — als erweiterbare Profile.
+- Mehrere Eigenschaften kombinierbar (z. B. „vegan + Muskelaufbau + glutenfrei").
+
+### 10.3 Allergien & Unverträglichkeiten (Sicherheit)
+- Im Profil hinterlegt (`CoachMemory.allergies`), z. B. Gluten, Laktose, Nüsse, Soja …
+- **Warnung beim Loggen**, wenn ein Lebensmittel ein hinterlegtes Allergen enthält (Datenquelle:
+  Open Food Facts liefert Allergen-/Zutateninfos).
+- Coach **schließt Allergene grundsätzlich aus** Vorschlägen/Rezepten aus.
+- Klar als Hilfestellung gekennzeichnet, **kein Ersatz für medizinische Beratung**.
+
+### 10.4 Auswirkung im System
+- **Onboarding** fragt Persona, Ernährungsform(en), Allergien & Ziel ab → setzt sinnvolle
+  Start-Ziele (editierbar).
+- **Ziel-Vorlagen** füllen `Goal`-Regeln vor (min/max/Korridor je Nährstoff).
+- **Coach-Kontext** enthält Persona + Ernährungsform + Allergien (`CoachMemory`), damit Beratung,
+  Rezepte und Challenges passgenau sind.
+- Alles **flexibel & erweiterbar** — neue Personas/Ernährungsformen ohne Umbau ergänzbar.
+
+## 11. Roadmap (Phasen)
 
 **Phase 0 — Setup**
 - Vite + React + TS, Tailwind + shadcn/ui, ESLint/Prettier, Vitest
@@ -428,7 +469,9 @@ meisten Protein?" oder „Schätz mir das mal".
 - Dexie-Schema (versioniert) + Seed-Daten + `navigator.storage.persist()`
 
 **Phase 1 — Manuelles Tracking (ohne KI), voll offline**
-- Dashboard „Heute" (Mahlzeiten-Gruppen, Ringe), manuelles Erfassen, Profil + Zielberechnung
+- Dashboard „Heute" (Mahlzeiten-Gruppen, Ringe), manuelles Erfassen
+- Onboarding: Persona, Ernährungsform(en), Allergien → Ziel-Vorlagen + Zielberechnung
+- Allergen-Warnung beim Loggen (Open Food Facts)
 - Persönlicher Katalog, Favoriten/„zuletzt", Verlauf
 - **Backup-Export/Import (JSON)** — erstes Sicherheitsnetz
 
@@ -460,14 +503,14 @@ meisten Protein?" oder „Schätz mir das mal".
 **Phase 5 — Cloud-Sync (später)**
 - Supabase (Auth + Postgres), Last-Write-Wins-Sync über `updatedAt`/`deletedAt`, Multi-Device, Backup
 
-## 11. Offene Punkte / später zu entscheiden
+## 12. Offene Punkte / später zu entscheiden
 
 - Genauer Umfang der Mineralstoff-/Vitaminliste (Start: gängige ~10, erweiterbar).
 - Video-Handling: vorerst Einzelframe extrahieren (einfacher & billiger als ganzes Video).
 - USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF, Rohzutaten → USDA).
 - iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera.
 
-## 12. Nächste Schritte
+## 13. Nächste Schritte
 
 1. Diesen Plan abnehmen.
 2. Phase 0 umsetzen (Projekt-Grundgerüst + PWA + versioniertes Dexie-Schema).
