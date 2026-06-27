@@ -47,6 +47,8 @@ gängige Kalorienzähler kaum.
 | Formulare | **react-hook-form + zod** | Validierung, wenig Boilerplate |
 | Charts | **Recharts** | Tagesverlauf, Fortschrittsringe |
 | Feier-Effekte | **canvas-confetti** | Konfetti bei Zielerreichung/Badge-Unlock |
+| Sprache (MVP) | **Web Speech API** (`SpeechRecognition` + `SpeechSynthesis`) | On-device STT/TTS fürs Coach-Gespräch, kostenlos & privat |
+| Sprache (Fallback) | **Server-STT/TTS via Netlify Function** | Qualität/Browser-Kompatibilität, wenn Web Speech API fehlt |
 | Bild-Verkleinerung | **Canvas (client-seitig)** | Fotos vor KI-Upload auf ~1024 px / JPEG q0.7 → schneller, billiger, weniger Datenvolumen |
 | Barcode-Scan | **`@zxing/browser`** | Barcode → Produktsuche, on-device |
 | KI-Proxy | **Netlify Function** | Versteckt den OpenRouter-API-Key (nie im Client!), mit Rate-Limit & Tagesbudget |
@@ -315,6 +317,33 @@ Kontext eine **aggregierte Zusammenfassung** (Profil, Ziele, Tages-/Wochenwerte,
 Datenschutz: Der Coach läuft nur auf Knopfdruck und sieht nur aggregierte Zahlen. Vorgeschlagene
 Ziele/Challenges werden dem Nutzer zur **Bestätigung** angezeigt, bevor sie aktiv werden.
 
+### 9.4 Echtes Sprachgespräch mit dem Coach
+Der Coach soll sich wie ein **echtes Gespräch** anfühlen: man **spricht** mit ihm und er **antwortet
+hörbar**. Ablauf:
+
+```
+🎙️ Sprechen → Speech-to-Text → Coach-LLM (mit Gesprächsverlauf) → Antworttext → Text-to-Speech → 🔊 Antwort
+```
+
+- **Dialog statt Einzelfragen:** Der Gesprächsverlauf wird als Kontext mitgegeben (mehrere Turns),
+  damit Rückfragen und Bezug auf vorher Gesagtes funktionieren. Optional **Freihand-Modus**: nach der
+  Antwort hört die App automatisch wieder zu (Gespräch ohne Tippen/Tappen).
+- **Niedrige Latenz:** Coach-Antwort wird **gestreamt** (Token-Streaming) und satzweise vorgelesen,
+  damit es sich flüssig anfühlt statt „warten bis fertig".
+- **Eingabe & Ausgabe gleichwertig auch als Text** — man kann jederzeit tippen/lesen statt sprechen
+  (laute Umgebung, Barrierefreiheit, `prefers-reduced-motion`/stumm).
+- **Technik (zweistufig):**
+  - *MVP, on-device & kostenlos:* **Web Speech API** — `SpeechRecognition` (STT) + `SpeechSynthesis`
+    (TTS). Schnell, privat, keine Server-Kosten. Einschränkung: Browser-Support variiert (Chrome gut,
+    iOS/Safari & Firefox eingeschränkt).
+  - *Fallback/Qualität:* serverseitige **STT/TTS** über einen Netlify-Function-Proxy (z. B. Whisper-
+    kompatibles STT + Cloud-TTS), wenn die Web Speech API fehlt oder bessere Stimmen gewünscht sind.
+    Audio geht dann verschlüsselt über die Function, Key bleibt serverseitig.
+- **UI:** großer Mikrofon-Button mit Live-Pegel/Animation, sichtbares Transkript des Gesagten,
+  Sprechblasen-Verlauf, Stopp-/Unterbrechen-Taste, Stimme/Sprache in den Einstellungen.
+- **Datenschutz:** Mikrofon nur auf aktiven Tap; bei Server-STT klar kommuniziert, dass Audio
+  kurzzeitig verarbeitet wird; on-device-Modus als datensparsame Voreinstellung wo verfügbar.
+
 ## 10. Roadmap (Phasen)
 
 **Phase 0 — Setup**
@@ -341,9 +370,11 @@ Ziele/Challenges werden dem Nutzer zur **Bestätigung** angezeigt, bevor sie akt
 - **Gamification:** regelbasierte Ziele, Streaks, Badges, Punkte/Level, Challenges,
   Feier-Animationen (Konfetti/Badge-Unlock), Wochen-Insights
 
-**Phase 4 — KI-Ernährungscoach**
+**Phase 4 — KI-Ernährungscoach (Chat & Sprache)**
 - `mode: 'coach'`: aggregierte Zusammenfassung als Kontext, Beratung im Chat
 - Ziel- & Challenge-Vorschläge mit Nutzer-Bestätigung, Wochen-Review
+- **Sprachgespräch:** Web Speech API (STT/TTS), gestreamte Antworten, optional Freihand-Modus;
+  Server-STT/TTS als Fallback
 
 **Phase 5 — Cloud-Sync (später)**
 - Supabase (Auth + Postgres), Last-Write-Wins-Sync über `updatedAt`/`deletedAt`, Multi-Device, Backup
