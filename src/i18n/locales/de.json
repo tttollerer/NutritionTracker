@@ -119,9 +119,35 @@
     "edit": "Profil bearbeiten",
     "reset": "Onboarding erneut"
   },
+  "capture": {
+    "mealTitle": "Essen fotografieren",
+    "labelTitle": "Tabelle scannen",
+    "barcodeTitle": "Barcode scannen",
+    "take": "Foto aufnehmen",
+    "choose": "Aus Galerie wählen",
+    "analyzing": "Analysiere …",
+    "error": "Analyse fehlgeschlagen",
+    "retry": "Erneut versuchen",
+    "hintMeal": "Halte das ganze Essen ins Bild.",
+    "hintLabel": "Fotografiere die Nährwerttabelle scharf und gerade.",
+    "manualBarcode": "Barcode eingeben",
+    "scan": "Scannen",
+    "notFound": "Produkt nicht gefunden",
+    "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein."
+  },
+  "review": {
+    "title": "Ergebnis prüfen",
+    "empty": "Keine Ergebnisse. Bitte erneut versuchen.",
+    "confidence": "Sicherheit",
+    "estimate": "KI-Schätzung — bitte prüfen.",
+    "confirm": "Übernehmen",
+    "perInfo": "Werte je 100 {{unit}}",
+    "allergyWarn": "Enthält ggf. ein hinterlegtes Allergen: {{list}}"
+  },
   "common": {
     "loading": "Lädt …",
     "cancel": "Abbrechen",
-    "delete": "Löschen"
+    "delete": "Löschen",
+    "back": "Zurück"
   }
 }

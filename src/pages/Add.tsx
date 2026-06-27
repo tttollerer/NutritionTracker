@@ -29,10 +29,10 @@ export function Add() {
   const [fat, setFat] = useState('')
   const [amount, setAmount] = useState('100')
 
-  const soon = [
-    { icon: Camera, key: 'photo' },
-    { icon: ScanText, key: 'label' },
-    { icon: Barcode, key: 'barcode' },
+  const captureOptions = [
+    { icon: Camera, key: 'photo', to: `/capture?mode=meal&meal=${meal}` },
+    { icon: ScanText, key: 'label', to: `/capture?mode=label&meal=${meal}` },
+    { icon: Barcode, key: 'barcode', to: `/barcode?meal=${meal}` },
   ] as const
 
   async function quickLog(food: FoodItem) {
@@ -144,16 +144,20 @@ export function Add() {
         </Button>
       </Card>
 
-      {/* Spätere Erfassungsarten */}
+      {/* KI- & Barcode-Erfassung */}
       <div className="grid grid-cols-3 gap-3">
-        {soon.map(({ icon: Icon, key }) => (
-          <Card key={key} className="flex flex-col items-center justify-center gap-2 p-4 opacity-60">
-            <Icon size={26} className="text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">{t(`add.${key}`)}</span>
-          </Card>
+        {captureOptions.map(({ icon: Icon, key, to }) => (
+          <motion.button
+            key={key}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => navigate(to)}
+            className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4"
+          >
+            <Icon size={26} className="text-primary" />
+            <span className="text-xs">{t(`add.${key}`)}</span>
+          </motion.button>
         ))}
       </div>
-      <p className="text-center text-xs text-muted-foreground">{t('add.soon')}</p>
     </div>
   )
 }

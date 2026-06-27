@@ -509,6 +509,10 @@ auf jede Gruppe spezialisiert und berät entsprechend.
 - Video-Handling: vorerst Einzelframe extrahieren (einfacher & billiger als ganzes Video).
 - USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF, Rohzutaten → USDA).
 - iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera.
+- Barcode-Scan nutzt aktuell die native `BarcodeDetector`-API (+ manuelle Eingabe als Fallback);
+  für iOS/Safari ggf. ZXing nachrüsten, da `BarcodeDetector` dort fehlt.
+- KI-Nährwerte für Fotos kommen in Phase 2 noch direkt vom Modell (Schätzung); Umstellung auf
+  vertrauenswürdige DB-Werte (USDA/OFF) wie in §2 vorgesehen folgt.
 
 ## 13. Nächste Schritte
 

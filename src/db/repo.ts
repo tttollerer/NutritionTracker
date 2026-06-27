@@ -80,6 +80,7 @@ export interface NewFoodInput {
   carbs: number
   fat: number
   source?: FoodItem['source']
+  barcode?: string
 }
 
 /** Neues Lebensmittel im Katalog anlegen. */
@@ -88,6 +89,7 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
     id: uuid(),
     name: input.name.trim(),
     source: input.source ?? 'manual',
+    barcode: input.barcode,
     per: input.per,
     kcal: input.kcal,
     protein: input.protein,
@@ -98,6 +100,12 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   }
   await db.foods.put(food)
   return food
+}
+
+/** Hinterlegte Allergene des Nutzers (für Warnungen beim Erfassen). */
+export async function getAllergies(): Promise<string[]> {
+  const mem = await db.coachMemory.get('me')
+  return mem?.allergies ?? []
 }
 
 /** Eine Portion eines Lebensmittels für einen Tag/Mahlzeit loggen. */

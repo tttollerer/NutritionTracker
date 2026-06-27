@@ -5,6 +5,9 @@ import { Layout } from '@/components/Layout'
 import { Onboarding } from '@/pages/Onboarding'
 import { Today } from '@/pages/Today'
 import { Add } from '@/pages/Add'
+import { Capture } from '@/pages/Capture'
+import { Barcode } from '@/pages/Barcode'
+import { Review } from '@/pages/Review'
 import { Coach } from '@/pages/Coach'
 import { Awards } from '@/pages/Awards'
 import { Profile } from '@/pages/Profile'
@@ -41,6 +44,9 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Today /> },
       { path: 'add', element: <Add /> },
+      { path: 'capture', element: <Capture /> },
+      { path: 'barcode', element: <Barcode /> },
+      { path: 'review', element: <Review /> },
       { path: 'coach', element: <Coach /> },
       { path: 'awards', element: <Awards /> },
       { path: 'profile', element: <Profile onReset={() => undefined} /> },
