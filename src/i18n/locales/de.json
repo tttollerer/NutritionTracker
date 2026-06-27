@@ -1,0 +1,53 @@
+{
+  "app": {
+    "name": "NutritionTracker"
+  },
+  "nav": {
+    "today": "Heute",
+    "add": "Erfassen",
+    "coach": "Coach",
+    "awards": "Erfolge",
+    "profile": "Profil"
+  },
+  "today": {
+    "title": "Heute",
+    "kcalLeft": "{{count}} kcal übrig",
+    "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
+    "meals": {
+      "breakfast": "Frühstück",
+      "lunch": "Mittag",
+      "dinner": "Abend",
+      "snack": "Snack"
+    },
+    "macros": {
+      "protein": "Eiweiß",
+      "carbs": "Kohlenhydrate",
+      "fat": "Fett"
+    }
+  },
+  "add": {
+    "title": "Erfassen",
+    "photo": "Essen fotografieren",
+    "label": "Tabelle scannen",
+    "barcode": "Barcode",
+    "manual": "Manuell",
+    "soon": "Kommt in einer späteren Phase."
+  },
+  "coach": {
+    "title": "Coach",
+    "placeholder": "Der KI-Coach kommt in Phase 4."
+  },
+  "awards": {
+    "title": "Erfolge",
+    "placeholder": "Gamification kommt in Phase 3.",
+    "level": "Level {{level}}",
+    "streak": "{{count}} Tage Streak"
+  },
+  "profile": {
+    "title": "Profil & Ziele",
+    "placeholder": "Onboarding & Ziele kommen in Phase 1."
+  },
+  "common": {
+    "loading": "Lädt …"
+  }
+}
