@@ -1,10 +1,13 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { BottomTabBar } from './BottomTabBar'
+import { useGamification } from '@/hooks/useGamification'
 
 /** App-Shell: animierter Seiteninhalt über einer festen Tab-Bar. */
 export function Layout() {
   const location = useLocation()
+  // Globale Gamification-Engine: wertet aus, persistiert und feiert überall.
+  useGamification({ celebrate: true })
   return (
     <div className="mx-auto flex min-h-full max-w-md flex-col">
       <main className="flex-1 px-4 pb-28 pt-4">

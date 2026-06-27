@@ -39,9 +39,30 @@
   },
   "awards": {
     "title": "Erfolge",
-    "placeholder": "Gamification kommt in Phase 3.",
     "level": "Level {{level}}",
-    "streak": "{{count}} Tage Streak"
+    "points": "{{points}} Punkte",
+    "toNext": "noch {{count}} bis Level {{level}}",
+    "streak": "{{count}} Tage Streak",
+    "streakNone": "Heute starten!",
+    "freeze": "{{count}} Joker",
+    "companionTitle": "Dein Begleiter",
+    "companionMood": {
+      "happy": "Bestens gelaunt!",
+      "ok": "Heute schon geloggt.",
+      "sad": "Logge etwas, um mich zu wecken."
+    },
+    "badges": "Abzeichen",
+    "badgeNames": {
+      "first_log": "Erster Eintrag",
+      "logged_7d": "7 Tage dabei",
+      "logged_30d": "30 Tage dabei",
+      "streak_3": "3-Tage-Streak",
+      "streak_7": "7-Tage-Streak",
+      "streak_30": "30-Tage-Streak",
+      "perfect_day": "Perfekter Tag",
+      "first_ai_scan": "Erster KI-Scan",
+      "first_barcode": "Erster Barcode"
+    }
   },
   "profile": {
     "title": "Profil & Ziele",
