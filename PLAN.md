@@ -49,6 +49,7 @@ gängige Kalorienzähler kaum.
 | Feier-Effekte | **canvas-confetti** | Konfetti bei Zielerreichung/Badge-Unlock |
 | Sprache (MVP) | **Web Speech API** (`SpeechRecognition` + `SpeechSynthesis`) | On-device STT/TTS fürs Coach-Gespräch, kostenlos & privat |
 | Sprache (Fallback) | **Server-STT/TTS via Netlify Function** | Qualität/Browser-Kompatibilität, wenn Web Speech API fehlt |
+| Live-Kamera + KI | **getUserMedia + Frame-Snapshots** (MVP); später **multimodale Realtime-API** (z. B. Gemini Live) | „Die KI sieht, was ich sehe" — Essen/Kühlschrank/Speisekarte live |
 | Bild-Verkleinerung | **Canvas (client-seitig)** | Fotos vor KI-Upload auf ~1024 px / JPEG q0.7 → schneller, billiger, weniger Datenvolumen |
 | Barcode-Scan | **`@zxing/browser`** | Barcode → Produktsuche, on-device |
 | KI-Proxy | **Netlify Function** | Versteckt den OpenRouter-API-Key (nie im Client!), mit Rate-Limit & Tagesbudget |
@@ -172,11 +173,24 @@ Challenge {
   updatedAt: number
 }
 
-// Spielstand: Punkte, Level, Streaks
+// Spielstand: Punkte, Level, Streaks, Belohnungen, Begleiter
 GamificationState {
   id: 'me'
   points: number; level: number
   streaks: Record<string, number>   // pro Ziel + 'overall'
+  freezeTokens: number              // Streak-Joker
+  unlocked: string[]                // freigeschaltete Themes/Stimmen/Icons/Badge-Designs
+  companion?: { type: string; stage: number; mood: 'happy'|'ok'|'sad' }  // virtueller Begleiter
+  updatedAt: number
+}
+
+// Langzeit-Gedächtnis des Coaches (Personalisierung)
+CoachMemory {
+  id: 'me'
+  diet?: string                     // 'vegan' | 'keto' | 'vegetarian' | ...
+  allergies: string[]; dislikes: string[]; likes: string[]
+  tone: 'motivating' | 'casual' | 'strict'
+  notes?: string                    // freie, vom Coach gepflegte Merkpunkte
   updatedAt: number
 }
 ```
@@ -192,9 +206,11 @@ kommt als eigene kleine Tabelle (`WaterLog`) dazu.
 - `mode: 'meal'` — Foto/Video-Frame vom Essen → **erkannte Lebensmittel + geschätzte Mengen** (keine Nährwerte aus der KI; die kommen aus der DB).
 - `mode: 'label'` — Foto einer Nährwerttabelle → Werte auslesen (per 100 g + Portionsgröße). Hier liefert die KI Zahlen direkt (OCR).
 - `mode: 'portion'` — Foto zur reinen Mengenschätzung eines bekannten Lebensmittels.
-- `mode: 'coach'` — **textbasiert**, kein Bild: bekommt eine aggregierte Nährwert-Zusammenfassung
-  (Profil, Ziele, Tages-/Wochenwerte, Defizite) und gibt Beratung / Ziel- & Challenge-Vorschläge
-  als strukturiertes JSON zurück (Vorschläge brauchen Nutzer-Bestätigung).
+- `mode: 'coach'` — Dialog mit Kontext (aggregierte Zusammenfassung + Gesprächsverlauf + `CoachMemory`).
+  **Optional mit Bild(ern)** (geloggtes/aufgenommenes Foto) für Foto-Feedback. Gibt Beratung sowie
+  Ziel-/Challenge-/Log-Vorschläge als strukturiertes JSON zurück (brauchen Nutzer-Bestätigung).
+- `mode: 'live'` — Live-Kamera-Gespräch: Einzel-Frames + Sprachfrage in Echtzeit (Ausbaustufe:
+  multimodale Realtime-API, s. 9.5).
 
 **Client-Vorverarbeitung:** Bild auf ~1024 px / JPEG q0.7 verkleinern, dann als Base64 senden.
 
@@ -230,8 +246,9 @@ Katalog gespeichert (inkl. üblicher Portion) → beim nächsten Mal vorausgefü
    Mengen-**Presets + Slider**, dann „Übernehmen".
 4. **Nährstoff-Detail** — Mikronährstoffe des Tages, **Defizite hervorgehoben** („zu wenig: Eisen, Vit. D").
 5. **Verlauf** — Tage/Wochen, Trends (Recharts), Wochen-Insights („Protein-Ziel 5/7 Tagen").
-6. **Erfolge & Coach** — Badges/Level/Streaks-Übersicht, aktive Challenges, **KI-Coach-Chat**
-   (Ziel- & Challenge-Vorschläge mit Bestätigung).
+6. **Erfolge & Coach** — Badges/Level/Streaks, **virtueller Begleiter**, aktive Quests/Challenges,
+   freischaltbare Belohnungen; **KI-Coach** als Chat **und Sprachgespräch**, mit Foto-Feedback und
+   **Live-Kamera-Modus** (Ziel-/Challenge-/Log-Vorschläge mit Bestätigung).
 7. **Profil & Ziele** — Onboarding mit **automatischer Zielberechnung** (Mifflin-St-Jeor),
    regelbasierte Ziele (min/max/Korridor pro Nährstoff), Einheiten, **Backup-Export/Import**,
    Dark Mode, (später) Login/Sync.
@@ -296,26 +313,61 @@ Ziele sind als kleine Regeln modelliert, damit beliebige Nährstoffe abgedeckt s
 
 ### 9.2 Belohnungssystem
 - **Streaks** — aufeinanderfolgende Tage mit erreichtem Ziel (pro Ziel eigene Streak + Gesamt-Streak).
+- **Streak-Freeze / Joker** — ein verpasster Tag zerstört nicht alles (Duolingo-Prinzip). Verdiente
+  oder begrenzte „Freeze"-Token; sanft motivieren statt bestrafen, **„Comeback"-Bonus** nach Pausen.
 - **Badges / Erfolge** — z. B. „7-Tage-Protein", „Vitamin-C-Woche", „30 Tage geloggt", „Erster KI-Scan".
 - **Punkte & Level** — pro erreichtem Tagesziel/Logging gibt es Punkte → Level-Aufstieg.
+- **Freischaltbare Belohnungen (kosmetisch, kein Pay)** — mit Level/XP neue **Themes, App-Icons,
+  Coach-Stimmen, Badge-Designs**. Gibt Punkten echten Wert.
+- **Virtueller Begleiter** — Pflanze/Avatar, die mit gesunder Ernährung **mitwächst** (Tamagotchi-
+  Prinzip); emotionaler Anker, reagiert auf Streaks & erreichte Ziele.
+- **Quests / Missionen** — mehrtägige Reihen mit „Story" (z. B. „7-Tage-Eisen-Boost"), statt nur
+  einzelner Tages-Challenges.
+- **„Perfekter Tag" & persönliche Meilensteine** — alle Makros im Ziel an einem Tag, 100 Mahlzeiten
+  geloggt, erste 7-Tage-Protein-Streak …
 - **Tages-/Wochen-Challenges** — kleine, erreichbare Aufgaben (vom Coach vorschlagbar), z. B.
   „Heute 3 Gemüseportionen".
+- **Gegen die eigene Vorwoche** (lokal, ohne Cloud) + überraschende **Mystery-Badges**
+  (variable Belohnung hält Motivation hoch).
+- **„Wrapped" / Monats- & Jahresrückblick** — „diesen Monat 18× Protein-Ziel getroffen", teilbar.
+- **Reale Belohnungen koppeln** — selbst gesetzt („bei 30-Tage-Streak gönn ich mir X"), App trackt's.
 - **Feier-Momente** — beim Zielerreichen Konfetti/Erfolgs-Animation (Framer Motion), Badge-Unlock-Sheet.
   Dezent, nie nervig; respektiert `prefers-reduced-motion`.
 - Fortschritt jederzeit sichtbar: Ringe/Balken füllen sich animiert Richtung Ziel.
 
 ### 9.3 KI-Ernährungscoach
-Ein **textbasierter Coach** über dasselbe OpenRouter-Gateway (`mode: 'coach'`). Er bekommt als
-Kontext eine **aggregierte Zusammenfassung** (Profil, Ziele, Tages-/Wochenwerte, Defizite) —
-**keine Fotos, keine Rohdaten** — und kann:
+Ein **multimodaler Coach** über dasselbe OpenRouter-Gateway (`mode: 'coach'`). Er bekommt als
+Kontext eine **aggregierte Zusammenfassung** (Profil, Ziele, Tages-/Wochenwerte, Defizite) und kann
+**auf Wunsch auch Fotos sehen** (geloggte Mahlzeiten-Bilder oder ein frisch aufgenommenes Foto).
+
+**Kernfähigkeiten:**
 - **Ziele vorschlagen/definieren** passend zum Profil & Wunsch („abnehmen", „Muskelaufbau",
   „mehr Eisen") und sie auf Bestätigung als `Goal` anlegen.
 - **Beraten & erklären**: „Dir fehlt diese Woche Magnesium — z. B. Haferflocken, Nüsse, Hülsenfrüchte."
 - **Challenges vorschlagen**, die zu den Zielen passen.
 - **Wochen-Review** geben (was lief gut, woran arbeiten).
 
-Datenschutz: Der Coach läuft nur auf Knopfdruck und sieht nur aggregierte Zahlen. Vorgeschlagene
-Ziele/Challenges werden dem Nutzer zur **Bestätigung** angezeigt, bevor sie aktiv werden.
+**Zusätzliche Optimierungen:**
+- **Per Sprache/Text loggen:** „Ich hatte zwei Eier und einen Kaffee" → Coach erzeugt direkt
+  `LogEntry`s (mit Bestätigung). Schnellste Erfassungsart, nutzt die Sprachfunktion (9.4).
+- **Proaktiver Coach:** Nudges anhand des Resttagesbudgets („19 Uhr, dir fehlen 40 g Protein —
+  Vorschlag: …") als sanfte Hinweise/Notifications.
+- **Langzeit-Gedächtnis / Personalisierung:** merkt sich Diätform (vegan/keto…),
+  Allergien/Unverträglichkeiten, Vorlieben & Abneigungen → alle Vorschläge passen dazu (`CoachMemory`).
+- **Konkrete Mahlzeiten- & Rezeptvorschläge:** „Was ess ich, um heute noch Eisen + Protein zu
+  treffen?" → konkrete Gerichte, optional Einkaufsliste.
+- **Foto-Feedback:** zu einem geloggten/aufgenommenen Essensfoto direkt kurzes Coaching
+  („gute Wahl, viel Eisen — etwas mehr Gemüse dazu").
+- **Wählbarer Ton / Persönlichkeit:** motivierend, locker oder streng (zugleich freischaltbares
+  Belohnungs-Item, s. 9.2).
+- **Adaptive Ziele:** justiert Ziele bei Plateau/Fortschritt nach (z. B. kcal beim Abnehmen).
+- **Erklärbarkeit + verantwortungsvolle Leitplanken:** begründet mit DGE/RDA statt Fantasiewerten;
+  klarer Hinweis „keine medizinische Beratung"; bei extrem niedrigen Kalorien / Anzeichen von
+  gestörtem Essverhalten vorsichtig & unterstützend reagieren, ggf. auf Fachstellen verweisen.
+
+**Datenschutz:** Der Coach läuft nur auf Knopfdruck. Aggregierte Zahlen standardmäßig; Fotos nur,
+wenn der Nutzer sie aktiv teilt/aufnimmt. Vorgeschlagene Ziele/Challenges/Log-Einträge werden zur
+**Bestätigung** angezeigt, bevor sie aktiv werden.
 
 ### 9.4 Echtes Sprachgespräch mit dem Coach
 Der Coach soll sich wie ein **echtes Gespräch** anfühlen: man **spricht** mit ihm und er **antwortet
@@ -344,6 +396,28 @@ hörbar**. Ablauf:
 - **Datenschutz:** Mikrofon nur auf aktiven Tap; bei Server-STT klar kommuniziert, dass Audio
   kurzzeitig verarbeitet wird; on-device-Modus als datensparsame Voreinstellung wo verfügbar.
 
+### 9.5 Live-Kamera-Gespräch mit der KI
+Der Coach kann **live durch die Kamera sehen** und man unterhält sich dabei in Echtzeit — z. B. die
+Kamera auf den Teller, den Kühlschrank oder eine Speisekarte halten und fragen „Was davon hat am
+meisten Protein?" oder „Schätz mir das mal".
+
+```
+📷 Live-Kamera (Frames)  +  🎙️ Sprache  →  multimodale KI  →  🔊 gesprochene Antwort (+ Transkript)
+```
+
+- **MVP (snapshot-basiert):** Während des Sprachgesprächs werden bei Bedarf **Einzel-Frames**
+  aus dem Kamerastream gegriffen (client-seitig verkleinert) und mit der Frage an das Vision-Modell
+  geschickt. Günstig, funktioniert über die bestehende `analyze`/`coach`-Pipeline.
+- **Ausbaustufe (echtes Live/Realtime):** Streaming-fähige **multimodale Realtime-API** (z. B.
+  Gemini Live), die Audio + Video kontinuierlich verarbeitet → flüssiges „die KI sieht, was ich
+  sehe"-Erlebnis. Höhere Kosten/Komplexität, daher spätere Stufe.
+- **Anwendungsfälle:** Mahlzeit live schätzen lassen, Kühlschrank-Check „was kann ich Gesundes
+  kochen?", Speisekarte im Restaurant scannen und beraten lassen.
+- **UI:** Kamera-Vollbild mit Mikrofon-Button, Live-Transkript-Overlay, Frame-„Snapshot"-Indikator,
+  jederzeit stoppen.
+- **Datenschutz:** Kamera nur im aktiven Live-Modus; Frames werden nur auf Tap/aktive Frage gesendet;
+  nichts wird ohne Zutun dauerhaft gespeichert.
+
 ## 10. Roadmap (Phasen)
 
 **Phase 0 — Setup**
@@ -367,14 +441,21 @@ hörbar**. Ablauf:
 **Phase 3 — Komfort & Motivation**
 - Mengenschätzung per Foto, Mengen-Presets/Slider
 - Nährstoff-Defizit-Ansicht, Wasser-Tracking
-- **Gamification:** regelbasierte Ziele, Streaks, Badges, Punkte/Level, Challenges,
-  Feier-Animationen (Konfetti/Badge-Unlock), Wochen-Insights
+- **Gamification:** regelbasierte Ziele, Streaks, **Streak-Freeze**, Badges, Punkte/Level,
+  **freischaltbare Belohnungen**, **virtueller Begleiter**, Quests, Meilensteine, Challenges,
+  Vorwochen-Vergleich, „Wrapped"-Rückblick, Feier-Animationen (Konfetti/Badge-Unlock)
 
-**Phase 4 — KI-Ernährungscoach (Chat & Sprache)**
-- `mode: 'coach'`: aggregierte Zusammenfassung als Kontext, Beratung im Chat
-- Ziel- & Challenge-Vorschläge mit Nutzer-Bestätigung, Wochen-Review
+**Phase 4 — KI-Ernährungscoach (Chat, Sprache, Foto)**
+- `mode: 'coach'`: Kontext + `CoachMemory` (Personalisierung), Beratung im Chat
+- **Sprach-/Text-Logging**, **proaktive Nudges**, Rezept-/Mahlzeitvorschläge, adaptive Ziele,
+  wählbarer Ton, verantwortungsvolle Leitplanken
+- **Foto-Feedback:** Coach kommentiert geloggte/aufgenommene Essensfotos
+- Ziel-/Challenge-/Log-Vorschläge mit Nutzer-Bestätigung, Wochen-Review
 - **Sprachgespräch:** Web Speech API (STT/TTS), gestreamte Antworten, optional Freihand-Modus;
   Server-STT/TTS als Fallback
+
+**Phase 4b — Live-Kamera-Gespräch**
+- Snapshot-basiert über bestehende Pipeline (MVP); später multimodale Realtime-API (Gemini Live)
 
 **Phase 5 — Cloud-Sync (später)**
 - Supabase (Auth + Postgres), Last-Write-Wins-Sync über `updatedAt`/`deletedAt`, Multi-Device, Backup
