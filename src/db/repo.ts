@@ -108,6 +108,35 @@ export async function getAllergies(): Promise<string[]> {
   return mem?.allergies ?? []
 }
 
+/** Vom Coach vorgeschlagenes Ziel übernehmen (ersetzt ein vorhandenes pro Nährstoff). */
+export async function applyGoalSuggestion(s: {
+  nutrient: string
+  type: Goal['type']
+  target: number
+  targetMax?: number
+  unit: string
+}) {
+  const existing = await db.goals.filter((g) => g.nutrient === s.nutrient && !g.deletedAt).first()
+  if (existing) {
+    await db.goals.update(existing.id, { ...s, active: true, createdBy: 'coach', updatedAt: now() })
+  } else {
+    await db.goals.put({ id: uuid(), ...s, active: true, createdBy: 'coach', updatedAt: now() })
+  }
+}
+
+/** Vom Coach vorgeschlagene Challenge als aktiv anlegen. */
+export async function applyChallengeSuggestion(s: { title: string; period: 'day' | 'week' }) {
+  await db.challenges.put({
+    id: uuid(),
+    title: s.title,
+    rule: {},
+    period: s.period,
+    status: 'active',
+    createdBy: 'coach',
+    updatedAt: now(),
+  })
+}
+
 /** Eine Portion eines Lebensmittels für einen Tag/Mahlzeit loggen. */
 export async function logFood(args: {
   food: FoodItem

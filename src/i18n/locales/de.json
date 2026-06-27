@@ -35,7 +35,24 @@
   },
   "coach": {
     "title": "Coach",
-    "placeholder": "Der KI-Coach kommt in Phase 4."
+    "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Proteinziel zu treffen?\"",
+    "inputPh": "Nachricht oder Mikrofon …",
+    "send": "Senden",
+    "listening": "Höre zu …",
+    "thinking": "Coach denkt nach …",
+    "speak": "Vorlesen",
+    "mute": "Stumm",
+    "error": "Coach nicht erreichbar. Ist der OPENROUTER_API_KEY gesetzt?",
+    "suggestTitle": "Vorschläge",
+    "applyGoal": "Ziel übernehmen",
+    "applyChallenge": "Challenge starten",
+    "applyLog": "Eintragen",
+    "applied": "Übernommen ✓",
+    "starters": {
+      "today": "Was soll ich heute noch essen?",
+      "protein": "Wie treffe ich mein Proteinziel?",
+      "week": "Wie war meine Woche?"
+    }
   },
   "awards": {
     "title": "Erfolge",
