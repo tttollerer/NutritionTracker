@@ -38,7 +38,10 @@ gängige Kalorienzähler kaum.
 | Build/Framework | **React + Vite** | Schnellste Dev-Erfahrung, riesiges Ökosystem |
 | PWA | **`vite-plugin-pwa`** (Workbox) | Installierbar, Offline-fähig, „Add to Home Screen", Update-Prompt |
 | UI / Styling | **Tailwind CSS + shadcn/ui** | Schnell moderne, mobile UIs; sieht gut aus |
-| Icons | **lucide-react** | Passt zu shadcn, leichtgewichtig |
+| Icons | **lucide-react** | Große, konsistente Icon-Library — trägt die icon-first UI |
+| Animationen | **Framer Motion** | Mikroanimationen, Transitions, Gesten — flüssige Userführung |
+| Ladezustände | **shadcn Skeleton + Framer Motion** | Skeleton-Screens statt Spinner, überall konsistent |
+| Mehrsprachigkeit | **i18next + react-i18next** | i18n von Anfang an verdrahtet (Texte ausgelagert, Sprache später erweiterbar) |
 | Lokale DB | **Dexie.js** (IndexedDB) | Offline-Speicher direkt im Handy, einfache API |
 | Reaktive Daten | **`dexie-react-hooks` (`useLiveQuery`)** | Idiomatisch für lokale DB, weniger Abhängigkeiten als TanStack Query (das kommt erst mit der Cloud) |
 | Formulare | **react-hook-form + zod** | Validierung, wenig Boilerplate |
@@ -188,10 +191,53 @@ Katalog gespeichert (inkl. üblicher Portion) → beim nächsten Mal vorausgefü
 Modals, Dark Mode, klare Empty States, schnelle manuelle Suche als Fallback, jeder Eintrag leicht
 editier-/löschbar. **Datenschutz sichtbar:** „Deine Fotos bleiben auf dem Handy — KI-Upload nur auf Knopfdruck."
 
-## 8. Roadmap (Phasen)
+## 8. Design-Prinzipien & Interaktion
+
+Leitbild: **modern, poppig, sofort vertraut.** Der Nutzer findet sich ohne Erklärung zurecht, weil
+wir bekannte Best-Practice-Patterns nutzen — und weil die App über Icons und Bewegung führt statt über Text.
+
+**Icon-first & textarm (mehrsprachig-ready)**
+- Vorrang für **aussagekräftige Icons** (lucide), Text nur als knappe Ergänzung/Label.
+- Alle Texte über **i18next** ausgelagert (keine hartkodierten Strings) → spätere Sprachen ohne Umbau.
+- Wo Text nötig ist: kurz, eindeutig; wichtige Aktionen zusätzlich farb-/icon-codiert.
+
+**Große, touch-freundliche Bedienung**
+- Touch-Targets **≥ 48 px**, großzügige Abstände, primäre Aktionen im **Daumenbereich** (unten).
+- Untere Tab-Bar + großer Floating-„+"-Button als zentrale Aktion; **Bottom-Sheets** statt Modals.
+- Einhand-Bedienung als Grundannahme.
+
+**Mikroanimationen zur Userführung** (Framer Motion)
+- Jede Aktion gibt **sofortiges Feedback**: Button-Press (Scale/Tap), Haken-Animation bei Erfolg,
+  sanftes Shake bei Fehler.
+- **Sinnstiftende Transitions**: Screens gleiten/faden so, dass die Navigationsrichtung klar ist;
+  Bottom-Sheets sliden hoch; Listen-Items animieren beim Hinzufügen/Löschen.
+- Fortschritts-Ringe & Balken **füllen sich animiert** → Veränderung wird spürbar.
+- Animationen kurz (~150–300 ms), nie blockierend; `prefers-reduced-motion` respektieren.
+
+**Immer klare Ladezustände**
+- **Skeleton-Screens** statt leerer Bildschirme/Spinner, überall konsistent.
+- KI-Analyse zeigt einen eigenen „Analysiere…"-Zustand mit Animation (kann mehrere Sekunden dauern).
+- Optimistische UI wo möglich (Eintrag erscheint sofort, Berechnung läuft im Hintergrund).
+
+**Modern & poppig**
+- Kräftige Akzentfarbe + freundliche Sekundärfarben, sauberes Farbsystem über Design-Tokens.
+- Abgerundete Ecken, weiche Schatten, großzügige Typografie-Hierarchie.
+- **Dark Mode** gleichwertig gestaltet (nicht nur invertiert).
+
+**Sofort vertraut (bekannte Patterns)**
+- Tab-Bar-Navigation, Pull-to-refresh, Swipe-to-delete, Bottom-Sheet-Auswahl, FAB zum Hinzufügen.
+- Konsistente Platzierung: primäre Aktion immer am selben Ort, „Zurück"/„Schließen" vorhersehbar.
+- Klare Empty States mit einer einzigen, offensichtlichen nächsten Aktion.
+
+**Barrierefreiheit:** ausreichender Kontrast (WCAG AA), skalierbare Schrift, Icons mit
+`aria-label`, fokussierbare Touch-Elemente — kostet wenig, hilft allen.
+
+## 9. Roadmap (Phasen)
 
 **Phase 0 — Setup**
 - Vite + React + TS, Tailwind + shadcn/ui, ESLint/Prettier, Vitest
+- **Design-System: Tokens (Farben/Spacing/Radius), Dark Mode, Framer Motion, Skeleton-Komponenten**
+- **i18next verdrahten** (Texte ausgelagert, DE als Startsprache)
 - `vite-plugin-pwa` (Manifest, Icons, Offline-Cache, Update-Prompt)
 - Dexie-Schema (versioniert) + Seed-Daten + `navigator.storage.persist()`
 
@@ -213,14 +259,14 @@ editier-/löschbar. **Datenschutz sichtbar:** „Deine Fotos bleiben auf dem Han
 **Phase 4 — Cloud-Sync (später)**
 - Supabase (Auth + Postgres), Last-Write-Wins-Sync über `updatedAt`/`deletedAt`, Multi-Device, Backup
 
-## 9. Offene Punkte / später zu entscheiden
+## 10. Offene Punkte / später zu entscheiden
 
 - Genauer Umfang der Mineralstoff-/Vitaminliste (Start: gängige ~10, erweiterbar).
 - Video-Handling: vorerst Einzelframe extrahieren (einfacher & billiger als ganzes Video).
 - USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF, Rohzutaten → USDA).
 - iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera.
 
-## 10. Nächste Schritte
+## 11. Nächste Schritte
 
 1. Diesen Plan abnehmen.
 2. Phase 0 umsetzen (Projekt-Grundgerüst + PWA + versioniertes Dexie-Schema).
