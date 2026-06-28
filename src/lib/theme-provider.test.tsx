@@ -1,11 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  ThemeProvider,
-  resolveMode,
-  readStoredMode,
-  useThemeControls,
-} from './theme-provider'
+import { ThemeProvider } from './theme-provider'
+import { resolveMode, readStoredMode, useThemeControls } from './theme-context'
 
 function mockMatchMedia(dark: boolean) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -65,7 +61,9 @@ describe('readStoredMode', () => {
 describe('ThemeProvider', () => {
   it('setzt data-theme und dark-Klasse (system + OS dunkel)', () => {
     mockMatchMedia(true)
-    renderHook(() => useThemeControls(), { wrapper })
+    act(() => {
+      renderHook(() => useThemeControls(), { wrapper })
+    })
     expect(document.documentElement.dataset.theme).toBe('vital')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
   })

@@ -1,28 +1,14 @@
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { type BrandTheme, type ThemeMode } from './themes'
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from 'react'
-import {
-  DEFAULT_MODE,
-  DEFAULT_VARIANT,
-  isBrandTheme,
-  isThemeMode,
-  type BrandTheme,
-  type ThemeMode,
-} from './themes'
-
-const MODE_KEY = 'nt-theme-mode'
-const VARIANT_KEY = 'nt-theme-variant'
-const LEGACY_KEY = 'nt-theme'
-
-export function resolveMode(mode: ThemeMode, systemDark: boolean): 'light' | 'dark' {
-  return mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
-}
+  MODE_KEY,
+  VARIANT_KEY,
+  ThemeContext,
+  resolveMode,
+  readStoredMode,
+  readStoredVariant,
+  type ThemeControls,
+} from './theme-context'
 
 function systemPrefersDark(): boolean {
   return (
@@ -32,43 +18,11 @@ function systemPrefersDark(): boolean {
   )
 }
 
-export function readStoredMode(): ThemeMode {
-  try {
-    const stored = localStorage.getItem(MODE_KEY)
-    if (isThemeMode(stored)) return stored
-    const legacy = localStorage.getItem(LEGACY_KEY)
-    if (legacy === 'light' || legacy === 'dark') return legacy
-  } catch {
-    /* localStorage blockiert */
-  }
-  return DEFAULT_MODE
-}
-
-export function readStoredVariant(): BrandTheme {
-  try {
-    const stored = localStorage.getItem(VARIANT_KEY)
-    if (isBrandTheme(stored)) return stored
-  } catch {
-    /* localStorage blockiert */
-  }
-  return DEFAULT_VARIANT
-}
-
 function applyToDom(variant: BrandTheme, resolved: 'light' | 'dark') {
   const el = document.documentElement
   el.dataset.theme = variant
   el.classList.toggle('dark', resolved === 'dark')
 }
-
-interface ThemeControls {
-  mode: ThemeMode
-  setMode: (m: ThemeMode) => void
-  variant: BrandTheme
-  setVariant: (v: BrandTheme) => void
-  resolvedMode: 'light' | 'dark'
-}
-
-const ThemeContext = createContext<ThemeControls | null>(null)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(readStoredMode)
@@ -118,10 +72,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-}
-
-export function useThemeControls(): ThemeControls {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useThemeControls must be used within a ThemeProvider')
-  return ctx
 }

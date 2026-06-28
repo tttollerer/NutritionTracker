@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
-import { useThemeControls } from '@/lib/theme-provider'
+import { useThemeControls } from '@/lib/theme-context'
 import { THEMES, type ThemeMode } from '@/lib/themes'
 import { Card } from '@/components/ui/Card'
 

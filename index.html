@@ -28,9 +28,10 @@
     <script>
       ;(function () {
         try {
+          var legacy = localStorage.getItem('nt-theme')
           var m =
             localStorage.getItem('nt-theme-mode') ||
-            (localStorage.getItem('nt-theme') === 'light' ? 'light' : null) ||
+            (legacy === 'light' || legacy === 'dark' ? legacy : null) ||
             'system'
           var v = localStorage.getItem('nt-theme-variant') || 'vital'
           var dark =
