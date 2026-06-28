@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de" class="dark">
+<html lang="de">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -11,6 +11,40 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>NutritionTracker</title>
+    <link
+      rel="preload"
+      href="/fonts/manrope-latin-600-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/manrope-latin-700-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      ;(function () {
+        try {
+          var legacy = localStorage.getItem('nt-theme')
+          var m =
+            localStorage.getItem('nt-theme-mode') ||
+            (legacy === 'light' || legacy === 'dark' ? legacy : null) ||
+            'system'
+          var v = localStorage.getItem('nt-theme-variant') || 'vital'
+          var dark =
+            m === 'dark' ||
+            (m === 'system' &&
+              window.matchMedia &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          var el = document.documentElement
+          el.setAttribute('data-theme', v)
+          el.classList.toggle('dark', !!dark)
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

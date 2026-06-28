@@ -121,10 +121,6 @@
       "first_barcode": "Erster Barcode"
     }
   },
-  "profile": {
-    "title": "Profil & Ziele",
-    "placeholder": "Onboarding & Ziele kommen in Phase 1."
-  },
   "onboarding": {
     "title": "Willkommen 👋",
     "subtitle": "Beantworte ein paar Fragen — daraus berechnen wir deine Tagesziele.",
@@ -199,7 +195,6 @@
     "title": "Profil & Ziele",
     "placeholder": "Onboarding & Ziele kommen in Phase 1.",
     "yourGoals": "Deine Tagesziele",
-    "theme": "Dunkelmodus",
     "backup": "Backup",
     "export": "Exportieren",
     "import": "Importieren",
@@ -215,7 +210,12 @@
     "labValues": "Laborwerte",
     "labValuesHint": "Ferritin, Vitamin D, B12, HbA1c, Blutfette",
     "vitals": "Vitalwerte",
-    "vitalsHint": "Blutdruck & Ruhepuls"
+    "vitalsHint": "Blutdruck & Ruhepuls",
+    "appearance": "Darstellung",
+    "modeLight": "Hell",
+    "modeDark": "Dunkel",
+    "modeSystem": "System",
+    "brandTheme": "Farbwelt"
   },
   "trends": {
     "title": "Verlauf & Messwerte",

@@ -7,6 +7,7 @@ import { deleteLog, getActiveGoalsMap, getAllergies, getSettings } from '@/db/re
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { todayKey } from '@/lib/utils'
 import { MEALS } from '@/lib/meal'
+import { macroColor } from '@/lib/macroColor'
 import { ProgressRing } from '@/components/ProgressRing'
 import { WaterCard } from '@/components/WaterCard'
 import { NutrientPanel } from '@/components/NutrientPanel'
@@ -90,7 +91,7 @@ export function Today() {
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <motion.div
-                  className="h-full rounded-full bg-primary"
+                  className={`h-full rounded-full ${macroColor(m.key)}`}
                   initial={{ width: 0 }}
                   animate={{ width: `${pct * 100}%` }}
                   transition={{ duration: 0.6, ease: 'easeOut' }}
