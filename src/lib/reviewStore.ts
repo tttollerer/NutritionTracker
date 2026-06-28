@@ -11,6 +11,7 @@ export interface ReviewPayload {
   source: 'ai' | 'openfoodfacts'
   barcode?: string
   photo?: string // verkleinertes Foto (Data-URL), optional
+  allergens?: string[] // OFF-Allergen-Tags (bei Barcode-Produkten)
 }
 
 const KEY = 'nt-review'

@@ -6,13 +6,39 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * eingeschränkt) — daher überall mit Feature-Detection + Text-Fallback.
  */
 
+/** Einmalige Sprachausgabe (bricht Laufendes ab). */
 export function speak(text: string, lang = 'de-DE') {
-  if (!('speechSynthesis' in window)) return
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+  if (!('speechSynthesis' in window) || !text.trim()) return
   const u = new SpeechSynthesisUtterance(text)
   u.lang = lang
   window.speechSynthesis.cancel()
   window.speechSynthesis.speak(u)
+}
+
+/** Satz an die laufende Ausgabe anhängen (für gestreamte Antworten). */
+export function speakQueue(text: string, lang = 'de-DE') {
+  if (!('speechSynthesis' in window) || !text.trim()) return
+  const u = new SpeechSynthesisUtterance(text)
+  u.lang = lang
+  window.speechSynthesis.speak(u) // kein cancel → wird eingereiht
+}
+
+export function stopSpeaking() {
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+}
+
+/** Vollständige Sätze ab `from` extrahieren (Satzende . ! ? : ; \n). */
+export function completeSentences(text: string, from: number): { sentences: string[]; consumed: number } {
+  const pending = text.slice(from)
+  const re = /[^.!?:;\n]+[.!?:;\n]+/g
+  const sentences: string[] = []
+  let consumed = from
+  let m: RegExpExecArray | null
+  while ((m = re.exec(pending))) {
+    sentences.push(m[0].trim())
+    consumed = from + re.lastIndex
+  }
+  return { sentences, consumed }
 }
 
 export function speechSupported(): boolean {

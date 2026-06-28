@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
 import { cn } from '@/lib/utils'
-import { sendCoach, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
+import { sendCoachStream, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
 import { loadChat, saveChat } from '@/lib/chatStore'
-import { speak, useSpeechRecognition } from '@/lib/speech'
+import { completeSentences, speakQueue, stopSpeaking, useSpeechRecognition } from '@/lib/speech'
 import { applyChallengeSuggestion, applyGoalSuggestion, createFood, logFood } from '@/db/repo'
 import { defaultMeal } from '@/lib/meal'
 import { todayKey } from '@/lib/utils'
@@ -22,11 +22,13 @@ export function Coach() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const [muted, setMuted] = useState(false)
+  const [streamText, setStreamText] = useState<string | null>(null) // live wachsende Antwort
   const endRef = useRef<HTMLDivElement>(null)
   // Ref auf den aktuellen Verlauf: verhindert, dass eine späte Spracherkennung
   // oder ein schnelles zweites Senden gegen einen veralteten Stand schreibt.
   const messagesRef = useRef(messages)
   const busyRef = useRef(false)
+  const mutedRef = useRef(muted)
 
   const recog = useSpeechRecognition((text) => void send(text))
 
@@ -34,7 +36,10 @@ export function Coach() {
     messagesRef.current = messages
     saveChat(messages)
   }, [messages])
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, busy])
+  useEffect(() => {
+    mutedRef.current = muted
+  }, [muted])
+  useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, busy, streamText])
 
   async function send(text: string) {
     const content = text.trim()
@@ -42,20 +47,37 @@ export function Coach() {
     busyRef.current = true
     setInput('')
     setError(false)
+    stopSpeaking()
     const next: ChatMessage[] = [...messagesRef.current, { role: 'user', content }]
     messagesRef.current = next
     setMessages(next)
     setBusy(true)
+    setStreamText('')
+
+    // Satzweise Sprachausgabe während des Streamens.
+    let spokenLen = 0
+    const onReply = (replySoFar: string) => {
+      setStreamText(replySoFar)
+      if (mutedRef.current) {
+        spokenLen = replySoFar.length // nichts vorlesen, aber Stand mitführen
+        return
+      }
+      const { sentences, consumed } = completeSentences(replySoFar, spokenLen)
+      sentences.forEach((s) => speakQueue(s))
+      spokenLen = consumed
+    }
+
     try {
-      // Verlauf zum Server begrenzen (Kosten/Größe).
-      const res = await sendCoach(next.slice(-20))
+      const res = await sendCoachStream(next.slice(-20), onReply)
+      // verbleibenden Satzrest vorlesen
+      if (!mutedRef.current && res.reply.length > spokenLen) speakQueue(res.reply.slice(spokenLen))
       const withReply: ChatMessage[] = [...next, { role: 'assistant', content: res.reply, suggestions: res.suggestions }]
       messagesRef.current = withReply
       setMessages(withReply)
-      if (!muted) speak(res.reply)
     } catch {
       setError(true)
     } finally {
+      setStreamText(null)
       busyRef.current = false
       setBusy(false)
     }
@@ -103,7 +125,16 @@ export function Coach() {
           </div>
         ))}
 
-        {busy && (
+        {/* Live gestreamte Antwort */}
+        {streamText !== null && streamText.length > 0 && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
+              {streamText}
+              <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-primary align-middle" />
+            </div>
+          </div>
+        )}
+        {busy && (streamText === null || streamText.length === 0) && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 size={16} className="animate-spin" /> {t('coach.thinking')}
           </div>
