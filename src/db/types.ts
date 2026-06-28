@@ -70,6 +70,7 @@ export interface Profile {
   goal: 'lose' | 'maintain' | 'gain'
   persona: Persona
   dietForms: string[] // ['vegan','lowcarb','glutenfree']
+  proteinPerKgOverride?: number // optionaler individueller Protein-Wert (g/kg) statt Persona-Default
   updatedAt: number
 }
 

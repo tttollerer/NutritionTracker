@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bmr, computeTargets, kcalFloor, targetKcal } from './nutrition'
+import { bmr, computeTargets, kcalFloor, proteinPerKg, targetKcal } from './nutrition'
 import type { Profile } from '@/db/types'
 
 const base: Profile = {
@@ -31,6 +31,13 @@ describe('nutrition', () => {
     expect(t.protein).toBe(160) // strength = 2.0 g/kg * 80
     expect(t.carbs).toBeGreaterThan(0)
     expect(t.fat).toBeGreaterThan(0)
+  })
+
+  it('honors an individual protein g/kg override', () => {
+    expect(proteinPerKg(base)).toBe(2.0) // strength-Default
+    expect(proteinPerKg({ ...base, proteinPerKgOverride: 2.4 })).toBe(2.4)
+    const t = computeTargets({ ...base, proteinPerKgOverride: 2.4 })
+    expect(t.protein).toBe(192) // 2.4 * 80
   })
 
   it('caps carbs hard on keto', () => {
