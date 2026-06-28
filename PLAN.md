@@ -436,7 +436,14 @@ Nicht jeder braucht alles — wie Allergien sind manche Funktionen **opt-in** ü
   (nüchtern/vor/nach Mahlzeit), farbcodierter Verlauf, **Warner** bei Über-/Unterzucker.
   Orientierende Richtwerte, **keine medizinische Beratung**.
 - **Zucker-Warner:** strengeres Tages-Zuckerlimit (25 g) für zuckerbewusste/diabetische Nutzer.
-- Weitere Module später ergänzbar (z. B. Blutdruck), ohne die App für alle zu überfrachten.
+- **Verlaufswerte (Körper/Labor/Vitalwerte/Insulin):** generische `measurements`-Tabelle + Katalog
+  (`lib/measurements.ts`). Körperwerte (Gewicht, Körperfett, Umfänge) immer aktiv; Laborwerte
+  (Ferritin, Vitamin D, B12, HbA1c, Blutfette) und Vitalwerte (Blutdruck, Ruhepuls) als opt-in
+  Module; Insulin an das Diabetes-Modul gekoppelt. Pro Wert ein empfohlener Rhythmus → dezente
+  **Fälligkeits-Karte** auf „Heute" (kein Push, einklappbar). Verlauf-Screen mit Sparkline +
+  Wochen-Rate; jüngstes Gewicht + Wochenrate fließen in den Coach-Kontext (adaptive Steuerung
+  statt reiner Formel). Orientierung, **keine medizinische Beratung**.
+- Weitere Module später ergänzbar, ohne die App für alle zu überfrachten.
 
 ### 10.5 Auswirkung im System
 - **Onboarding** fragt Persona, Ernährungsform(en), Allergien & Ziel ab → setzt sinnvolle

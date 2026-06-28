@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import { db } from './index'
-import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Profile, Settings, Unit } from './types'
+import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Measurement, Profile, Settings, Unit } from './types'
 import { computeTargets, kcalFloor } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
 
@@ -155,6 +155,42 @@ export async function deleteGlucose(id: string) {
 export async function recentGlucose(limit = 10): Promise<GlucoseReading[]> {
   const all = await db.glucose.filter((g) => !g.deletedAt).toArray()
   return all.sort((a, b) => b.loggedAt - a.loggedAt).slice(0, limit)
+}
+
+// ---- Verlaufswerte (Körper/Labor/Vitalwerte/Insulin) ----
+
+export async function addMeasurement(type: string, value: number, unit: string, date = todayKey(), note?: string) {
+  const m: Measurement = {
+    id: uuid(),
+    type,
+    value,
+    unit,
+    date,
+    note,
+    loggedAt: now(),
+    updatedAt: now(),
+  }
+  await db.measurements.put(m)
+}
+
+export async function deleteMeasurement(id: string) {
+  await db.measurements.update(id, { deletedAt: now(), updatedAt: now() })
+}
+
+/** Alle (nicht gelöschten) Messwerte eines Typs, aufsteigend nach Datum. */
+export async function measurementsByType(type: string): Promise<Measurement[]> {
+  const all = await db.measurements.where('type').equals(type).filter((m) => !m.deletedAt).toArray()
+  return all.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.loggedAt - b.loggedAt))
+}
+
+/** Letztes Erfassungsdatum je Typ (für die Fälligkeits-Engine). */
+export async function lastMeasurementDates(): Promise<Record<string, string>> {
+  const all = await db.measurements.filter((m) => !m.deletedAt).toArray()
+  const out: Record<string, string> = {}
+  for (const m of all) {
+    if (!out[m.type] || m.date > out[m.type]) out[m.type] = m.date
+  }
+  return out
 }
 
 /** Vom Coach vorgeschlagenes Ziel übernehmen (ersetzt ein vorhandenes pro Nährstoff). */

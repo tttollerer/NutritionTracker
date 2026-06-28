@@ -11,6 +11,7 @@ import { Review } from '@/pages/Review'
 import { Coach } from '@/pages/Coach'
 import { Awards } from '@/pages/Awards'
 import { Profile } from '@/pages/Profile'
+import { Trends } from '@/pages/Trends'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 /** Zeigt das Onboarding, solange noch kein Profil existiert; sonst die App-Shell. */
@@ -49,6 +50,7 @@ const router = createBrowserRouter([
       { path: 'review', element: <Review /> },
       { path: 'coach', element: <Coach /> },
       { path: 'awards', element: <Awards /> },
+      { path: 'trends', element: <Trends /> },
       { path: 'profile', element: <Profile onReset={() => undefined} /> },
     ],
   },

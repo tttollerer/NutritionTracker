@@ -11,6 +11,7 @@ import { ProgressRing } from '@/components/ProgressRing'
 import { WaterCard } from '@/components/WaterCard'
 import { NutrientPanel } from '@/components/NutrientPanel'
 import { GlucoseCard } from '@/components/GlucoseCard'
+import { DueMeasurements } from '@/components/DueMeasurements'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -63,6 +64,8 @@ export function Today() {
   return (
     <div className="space-y-6">
       <PageHeader title={t('today.title')} />
+
+      <DueMeasurements />
 
       <div className="flex flex-col items-center">
         <ProgressRing

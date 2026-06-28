@@ -8,6 +8,7 @@ import type {
   GlucoseReading,
   Goal,
   LogEntry,
+  Measurement,
   Photo,
   Profile,
   Settings,
@@ -32,6 +33,7 @@ export class NutritionDB extends Dexie {
   photos!: Table<Photo, string>
   settings!: Table<Settings, string>
   glucose!: Table<GlucoseReading, string>
+  measurements!: Table<Measurement, string>
 
   constructor() {
     super('nutritiontracker')
@@ -54,6 +56,10 @@ export class NutritionDB extends Dexie {
     this.version(3).stores({
       settings: 'id, updatedAt',
       glucose: 'id, date, loggedAt, deletedAt',
+    })
+    // v4: Verlaufswerte (Körper/Labor/Vitalwerte/Insulin).
+    this.version(4).stores({
+      measurements: 'id, type, date, loggedAt, deletedAt, [type+date]',
     })
   }
 }

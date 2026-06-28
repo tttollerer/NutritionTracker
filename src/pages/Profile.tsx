@@ -1,7 +1,8 @@
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Download, Upload, Moon, RefreshCw, Droplets, Candy } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Download, Upload, Moon, RefreshCw, Droplets, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight } from 'lucide-react'
 import { db } from '@/db'
 import { getActiveGoalsMap, getSettings, updateSettings } from '@/db/repo'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
@@ -63,6 +64,13 @@ export function Profile({ onReset }: { onReset: () => void }) {
       )}
 
       <Card className="divide-y divide-border">
+        <Link to="/trends" className="flex w-full items-center justify-between p-4 text-left">
+          <span className="flex items-center gap-3">
+            <LineChart size={20} className="text-muted-foreground" />
+            {t('profile.trends')}
+          </span>
+          <ChevronRight size={18} className="text-muted-foreground" />
+        </Link>
         <button
           onClick={toggle}
           className="flex w-full items-center justify-between p-4 text-left"
@@ -91,6 +99,20 @@ export function Profile({ onReset }: { onReset: () => void }) {
           hint={t('profile.sugarWarnerHint', { limit: DIABETES_SUGAR_LIMIT_G })}
           checked={!!settings?.sugarWarner}
           onChange={(v) => updateSettings({ sugarWarner: v })}
+        />
+        <Toggle
+          icon={<FlaskConical size={20} />}
+          label={t('profile.labValues')}
+          hint={t('profile.labValuesHint')}
+          checked={!!settings?.labValues}
+          onChange={(v) => updateSettings({ labValues: v })}
+        />
+        <Toggle
+          icon={<HeartPulse size={20} />}
+          label={t('profile.vitals')}
+          hint={t('profile.vitalsHint')}
+          checked={!!settings?.vitals}
+          onChange={(v) => updateSettings({ vitals: v })}
         />
       </Card>
 
