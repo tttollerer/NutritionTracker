@@ -9,9 +9,10 @@ import {
   GROUP_ORDER,
   METRICS,
   clampValue,
+  daysBetween,
   groupEnabled,
   latestValue,
-  trend,
+  METRIC_BY_KEY,
   type MetricDef,
 } from '@/lib/measurements'
 import { todayKey } from '@/lib/utils'
@@ -19,18 +20,33 @@ import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { Sparkline } from '@/components/Sparkline'
+import { Chip } from '@/components/ui/Chip'
+import { TrendChart, type ChartSeries } from '@/components/TrendChart'
+
+const RANGES = [
+  { key: '4w', days: 28 },
+  { key: '3m', days: 90 },
+  { key: '1y', days: 365 },
+  { key: 'all', days: Infinity },
+] as const
+
+const PRIMARY = 'hsl(var(--primary))'
+const ACCENT = '#f59e0b'
 
 export function Trends() {
   const { t } = useTranslation()
   const settings = useLiveQuery(() => getSettings(), [])
   const all = useLiveQuery(() => db.measurements.filter((m) => !m.deletedAt).toArray(), [])
+  const [rangeDays, setRangeDays] = useState<number>(90)
 
   if (!settings || !all) return null
   const today = todayKey()
   const byType: Record<string, Measurement[]> = {}
   for (const m of all) (byType[m.type] ??= []).push(m)
-  for (const k of Object.keys(byType)) byType[k].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.loggedAt - b.loggedAt))
+  const inRange = (pts: Measurement[]) =>
+    pts
+      .filter((p) => daysBetween(p.date, today) >= 0 && daysBetween(p.date, today) <= rangeDays)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.loggedAt - b.loggedAt))
 
   const groups = GROUP_ORDER.filter((g) => groupEnabled(g, settings))
 
@@ -39,13 +55,27 @@ export function Trends() {
       <PageHeader title={t('trends.title')} />
       <p className="text-sm text-muted-foreground">{t('trends.intro')}</p>
 
+      {/* Globaler Zeitraum */}
+      <div className="flex flex-wrap gap-2">
+        {RANGES.map((r) => (
+          <Chip key={r.key} label={t(`trends.range.${r.key}`)} selected={rangeDays === r.days} onClick={() => setRangeDays(r.days)} />
+        ))}
+      </div>
+
       {groups.map((group) => (
         <section key={group} className="space-y-3">
           <h2 className="text-sm font-semibold text-muted-foreground">{t(`trends.groups.${group}`)}</h2>
           <div className="space-y-3">
-            {METRICS.filter((m) => m.group === group).map((def) => (
-              <MetricRow key={def.key} def={def} series={byType[def.key] ?? []} today={today} />
-            ))}
+            {group === 'vitals' ? (
+              <>
+                <BloodPressureCard sys={inRange(byType.systolic ?? [])} dia={inRange(byType.diastolic ?? [])} today={today} />
+                <MetricRow def={METRIC_BY_KEY.restingPulse} series={inRange(byType.restingPulse ?? [])} today={today} />
+              </>
+            ) : (
+              METRICS.filter((m) => m.group === group).map((def) => (
+                <MetricRow key={def.key} def={def} series={inRange(byType[def.key] ?? [])} today={today} />
+              ))
+            )}
           </div>
         </section>
       ))}
@@ -55,24 +85,33 @@ export function Trends() {
   )
 }
 
+/** Statistik aus einer (bereits gefilterten, sortierten) Reihe. */
+function stats(series: Measurement[]) {
+  if (series.length === 0) return null
+  const first = series[0]
+  const last = series[series.length - 1]
+  const days = Math.max(1, daysBetween(first.date, last.date))
+  return { first: first.value, last: last.value, delta: last.value - first.value, ratePerWeek: ((last.value - first.value) / days) * 7 }
+}
+
 function MetricRow({ def, series, today }: { def: MetricDef; series: Measurement[]; today: string }) {
   const { t } = useTranslation()
   const [value, setValue] = useState('')
   const latest = latestValue(series)
-  const tr = trend(series, today)
-  const showRate = def.key === 'weight' && tr && Math.abs(tr.ratePerWeek) >= 0.05
+  const st = stats(series)
+  const fmt = (n: number) => n.toFixed(def.decimals)
 
   async function add() {
     const v = Number(value.replace(',', '.'))
-    if (!v && v !== 0) return
+    if (value === '' || Number.isNaN(v)) return
     await addMeasurement(def.key, clampValue(def, v), def.unit, today)
     setValue('')
   }
 
-  const fmt = (n: number) => n.toFixed(def.decimals)
+  const chartSeries: ChartSeries[] = [{ points: series.map((m) => ({ date: m.date, value: m.value })), color: PRIMARY, label: def.key }]
 
   return (
-    <Card className="space-y-2.5 p-4">
+    <Card className="space-y-3 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-medium">{t(`trends.metrics.${def.key}`, { defaultValue: def.key })}</p>
@@ -85,15 +124,22 @@ function MetricRow({ def, series, today }: { def: MetricDef; series: Measurement
             <p className="text-sm text-muted-foreground">{t('trends.noData')}</p>
           )}
         </div>
-        {tr && series.length >= 2 && (
+        {st && series.length >= 2 && (
           <TrendChip
-            label={showRate ? `${tr.ratePerWeek > 0 ? '+' : ''}${tr.ratePerWeek.toFixed(1)} ${def.unit}/${t('trends.week')}` : `${tr.delta > 0 ? '+' : ''}${fmt(tr.delta)} ${def.unit}`}
-            dir={tr.delta > 0 ? 'up' : tr.delta < 0 ? 'down' : 'flat'}
+            label={def.key === 'weight' && Math.abs(st.ratePerWeek) >= 0.05 ? `${st.ratePerWeek > 0 ? '+' : ''}${st.ratePerWeek.toFixed(1)} ${def.unit}/${t('trends.week')}` : `${st.delta > 0 ? '+' : ''}${fmt(st.delta)} ${def.unit}`}
+            dir={st.delta > 0 ? 'up' : st.delta < 0 ? 'down' : 'flat'}
           />
         )}
       </div>
 
-      {series.length >= 2 && <Sparkline values={series.map((m) => m.value)} />}
+      {series.length >= 2 ? (
+        <>
+          <TrendChart series={chartSeries} decimals={def.decimals} />
+          <StatsRow st={st!} unit={def.unit} decimals={def.decimals} showRate={def.key === 'weight'} />
+        </>
+      ) : (
+        series.length === 1 && <p className="text-xs text-muted-foreground">{t('trends.tooFew')}</p>
+      )}
 
       <div className="flex items-center gap-2">
         <Input
@@ -118,6 +164,89 @@ function MetricRow({ def, series, today }: { def: MetricDef; series: Measurement
         )}
       </div>
     </Card>
+  )
+}
+
+/** Kombinierte Blutdruck-Karte: systolisch + diastolisch in einem Diagramm. */
+function BloodPressureCard({ sys, dia, today }: { sys: Measurement[]; dia: Measurement[]; today: string }) {
+  const { t } = useTranslation()
+  const [s, setS] = useState('')
+  const [d, setD] = useState('')
+  const sysLatest = latestValue(sys)
+  const diaLatest = latestValue(dia)
+
+  async function add() {
+    const sv = Number(s.replace(',', '.'))
+    const dv = Number(d.replace(',', '.'))
+    const tasks: Promise<unknown>[] = []
+    if (s !== '' && !Number.isNaN(sv)) tasks.push(addMeasurement('systolic', clampValue(METRIC_BY_KEY.systolic, sv), 'mmHg', today))
+    if (d !== '' && !Number.isNaN(dv)) tasks.push(addMeasurement('diastolic', clampValue(METRIC_BY_KEY.diastolic, dv), 'mmHg', today))
+    if (tasks.length === 0) return
+    await Promise.all(tasks)
+    setS('')
+    setD('')
+  }
+
+  const chartSeries: ChartSeries[] = []
+  if (sys.length >= 2) chartSeries.push({ points: sys.map((m) => ({ date: m.date, value: m.value })), color: PRIMARY, label: 'systolic' })
+  if (dia.length >= 2) chartSeries.push({ points: dia.map((m) => ({ date: m.date, value: m.value })), color: ACCENT, label: 'diastolic' })
+
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="font-medium">{t('trends.bloodPressure')}</p>
+        {(sysLatest || diaLatest) && (
+          <p className="text-sm">
+            <span className="font-semibold tabular-nums">
+              {sysLatest ? Math.round(sysLatest.value) : '–'}/{diaLatest ? Math.round(diaLatest.value) : '–'}
+            </span>{' '}
+            <span className="text-xs text-muted-foreground">mmHg</span>
+          </p>
+        )}
+      </div>
+
+      {chartSeries.length > 0 ? (
+        <>
+          <TrendChart series={chartSeries} decimals={0} />
+          <div className="flex gap-4 text-xs">
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: PRIMARY }} /> {t('trends.metrics.systolic')}</span>
+            <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full" style={{ background: ACCENT }} /> {t('trends.metrics.diastolic')}</span>
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t('trends.noData')}</p>
+      )}
+
+      <div className="flex items-center gap-2">
+        <Input type="number" inputMode="numeric" value={s} onChange={(e) => setS(e.target.value)} placeholder={t('trends.metrics.systolic')} className="flex-1" />
+        <span className="text-muted-foreground">/</span>
+        <Input type="number" inputMode="numeric" value={d} onChange={(e) => setD(e.target.value)} placeholder={t('trends.metrics.diastolic')} className="flex-1" />
+        <Button className="px-4" onClick={add} disabled={s === '' && d === ''} aria-label={t('trends.add')}>
+          <Plus size={18} />
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
+function StatsRow({ st, unit, decimals, showRate }: { st: NonNullable<ReturnType<typeof stats>>; unit: string; decimals: number; showRate: boolean }) {
+  const { t } = useTranslation()
+  const fmt = (n: number) => n.toFixed(decimals)
+  const cells = [
+    { l: t('trends.start'), v: `${fmt(st.first)} ${unit}` },
+    { l: t('trends.current'), v: `${fmt(st.last)} ${unit}` },
+    { l: t('trends.change'), v: `${st.delta > 0 ? '+' : ''}${fmt(st.delta)} ${unit}` },
+  ]
+  if (showRate) cells.push({ l: t('trends.rate'), v: `${st.ratePerWeek > 0 ? '+' : ''}${st.ratePerWeek.toFixed(1)} ${unit}/${t('trends.week')}` })
+  return (
+    <div className="grid gap-2 rounded-xl bg-muted/40 p-2 text-center" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))` }}>
+      {cells.map((c, i) => (
+        <div key={i}>
+          <span className="block text-[10px] uppercase text-muted-foreground">{c.l}</span>
+          <span className="text-sm font-semibold tabular-nums">{c.v}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 
