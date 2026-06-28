@@ -17,10 +17,6 @@ export async function saveOnboarding(profile: Omit<Profile, 'id' | 'updatedAt'>,
     mkGoal('carbs', 'range', t.carbs, 'g'),
     mkGoal('fat', 'range', t.fat, 'g'),
   ]
-  if (profile.goal !== 'maintain') {
-    // Für ab-/zunehmen einen Korridor um die kcal als Range ergänzen.
-    goals[0].targetMax = profile.goal === 'lose' ? t.kcal : Math.round(t.kcal * 1.1)
-  }
 
   await db.transaction('rw', db.profile, db.goals, db.coachMemory, db.gamification, async () => {
     await db.profile.put(fullProfile)
@@ -52,7 +48,9 @@ export async function saveOnboarding(profile: Omit<Profile, 'id' | 'updatedAt'>,
 
 function mkGoal(nutrient: string, type: Goal['type'], target: number, unit: string): Goal {
   return {
-    id: uuid(),
+    // Deterministische ID pro Nährstoff → erneutes Onboarding überschreibt,
+    // statt doppelte aktive Ziele anzulegen.
+    id: `base-${nutrient}`,
     nutrient,
     type,
     target,
@@ -181,8 +179,11 @@ export async function logFood(args: {
     updatedAt: now(),
   }
   await db.logs.put(entry)
-  // übliche Portion merken (Lernschleife, PLAN.md §6)
-  await db.foods.update(food.id, { defaultPortion: { amount, unit }, updatedAt: now() })
+  // Übliche Portion nur für konkrete Mengen (g/ml) merken — eine 'portion'-Menge
+  // würde sonst beim nächsten Loggen erneut mit der Portionsgröße multipliziert.
+  if (unit !== 'portion') {
+    await db.foods.update(food.id, { defaultPortion: { amount, unit }, updatedAt: now() })
+  }
   return entry
 }
 

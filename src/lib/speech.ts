@@ -52,6 +52,14 @@ export function useSpeechRecognition(onResult: (text: string) => void, lang = 'd
   const start = useCallback(() => {
     const Ctor = getRecognitionCtor()
     if (!Ctor) return
+    // Eventuell laufende Instanz stoppen und Handler lösen, damit kein
+    // verwaister Erkenner mehr `listening` umschaltet.
+    if (recRef.current) {
+      recRef.current.onresult = null
+      recRef.current.onend = null
+      recRef.current.onerror = null
+      recRef.current.stop()
+    }
     const rec = new Ctor()
     rec.lang = lang
     rec.continuous = false

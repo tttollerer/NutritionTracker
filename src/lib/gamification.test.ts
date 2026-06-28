@@ -42,9 +42,16 @@ describe('goalMet', () => {
     expect(goalMet(goal('kcal', 'max', 2000), 1900)).toBe(true)
     expect(goalMet(goal('kcal', 'max', 2000), 2100)).toBe(false)
   })
-  it('range tolerance', () => {
+  it('range tolerance (single target ±15%)', () => {
     expect(goalMet(goals.fat, 60)).toBe(true)
     expect(goalMet(goals.fat, 50)).toBe(false) // unter 85%
+  })
+  it('explicit corridor uses target as hard lower bound', () => {
+    const corridor = goal('protein', 'range', 150, 200)
+    expect(goalMet(corridor, 150)).toBe(true)
+    expect(goalMet(corridor, 200)).toBe(true)
+    expect(goalMet(corridor, 130)).toBe(false) // nicht um 15% aufweichen
+    expect(goalMet(corridor, 210)).toBe(false)
   })
 })
 

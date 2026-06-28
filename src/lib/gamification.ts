@@ -19,8 +19,10 @@ export function goalMet(goal: Goal | undefined, value: number): boolean {
     case 'max':
       return value > 0 && value <= goal.target
     case 'range': {
-      const lo = goal.target * 0.85
-      const hi = (goal.targetMax ?? goal.target * 1.15)
+      // Mit explizitem targetMax ist es ein echter Korridor [target, targetMax].
+      // Ohne (Makro-Ziel mit Einzelwert) eine Toleranzspanne ±15 %.
+      const lo = goal.targetMax != null ? goal.target : goal.target * 0.85
+      const hi = goal.targetMax ?? goal.target * 1.15
       return value >= lo && value <= hi
     }
   }

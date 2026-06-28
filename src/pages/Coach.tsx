@@ -23,27 +23,40 @@ export function Coach() {
   const [error, setError] = useState(false)
   const [muted, setMuted] = useState(false)
   const endRef = useRef<HTMLDivElement>(null)
+  // Ref auf den aktuellen Verlauf: verhindert, dass eine späte Spracherkennung
+  // oder ein schnelles zweites Senden gegen einen veralteten Stand schreibt.
+  const messagesRef = useRef(messages)
+  const busyRef = useRef(false)
 
   const recog = useSpeechRecognition((text) => void send(text))
 
-  useEffect(() => saveChat(messages), [messages])
+  useEffect(() => {
+    messagesRef.current = messages
+    saveChat(messages)
+  }, [messages])
   useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, busy])
 
   async function send(text: string) {
     const content = text.trim()
-    if (!content || busy) return
+    if (!content || busyRef.current) return
+    busyRef.current = true
     setInput('')
     setError(false)
-    const next: ChatMessage[] = [...messages, { role: 'user', content }]
+    const next: ChatMessage[] = [...messagesRef.current, { role: 'user', content }]
+    messagesRef.current = next
     setMessages(next)
     setBusy(true)
     try {
-      const res = await sendCoach(next)
-      setMessages([...next, { role: 'assistant', content: res.reply, suggestions: res.suggestions }])
+      // Verlauf zum Server begrenzen (Kosten/Größe).
+      const res = await sendCoach(next.slice(-20))
+      const withReply: ChatMessage[] = [...next, { role: 'assistant', content: res.reply, suggestions: res.suggestions }]
+      messagesRef.current = withReply
+      setMessages(withReply)
       if (!muted) speak(res.reply)
     } catch {
       setError(true)
     } finally {
+      busyRef.current = false
       setBusy(false)
     }
   }
