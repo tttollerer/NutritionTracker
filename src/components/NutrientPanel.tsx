@@ -18,14 +18,20 @@ interface Props {
   sex?: 'm' | 'f'
   vegan?: boolean
   allergies?: string[]
+  sugarLimit?: number
 }
 
 /** Nährstoff-Defizite, Limit-„Laster" und deterministische Essens-Empfehlungen. */
-export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies }: Props) {
+export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies, sugarLimit }: Props) {
   const { t } = useTranslation()
   const [showAll, setShowAll] = useState(false)
 
-  const day = computeDayNutrition(logs, date, { proteinTarget, sex, vegan })
+  const day = computeDayNutrition(logs, date, {
+    proteinTarget,
+    sex,
+    vegan,
+    limitOverrides: sugarLimit ? { sugar: sugarLimit } : undefined,
+  })
   const deficits = rankDeficits(day)
   const recs = recommendFoods(deficits, { vegan, allergies, limit: 3 })
 

@@ -1,6 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import { db } from './index'
-import type { FoodItem, Goal, LogEntry, Meal, Profile, Unit } from './types'
+import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Profile, Settings, Unit } from './types'
 import { computeTargets } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
 
@@ -107,6 +107,49 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
 export async function getAllergies(): Promise<string[]> {
   const mem = await db.coachMemory.get('me')
   return mem?.allergies ?? []
+}
+
+// ---- Einstellungen / optionale Gesundheits-Module ----
+
+export const DEFAULT_SETTINGS: Settings = {
+  id: 'app',
+  bloodSugar: false,
+  sugarWarner: false,
+  glucoseUnit: 'mg/dl',
+  updatedAt: 0,
+}
+
+export async function getSettings(): Promise<Settings> {
+  return (await db.settings.get('app')) ?? DEFAULT_SETTINGS
+}
+
+export async function updateSettings(patch: Partial<Omit<Settings, 'id'>>) {
+  const cur = await getSettings()
+  await db.settings.put({ ...cur, ...patch, id: 'app', updatedAt: now() })
+}
+
+// ---- Blutzucker (Diabetes-Modul) ----
+
+export async function addGlucose(mgdl: number, context: GlucoseContext, note?: string, date = todayKey()) {
+  const reading: GlucoseReading = {
+    id: uuid(),
+    date,
+    mgdl: Math.round(mgdl),
+    context,
+    note,
+    loggedAt: now(),
+    updatedAt: now(),
+  }
+  await db.glucose.put(reading)
+}
+
+export async function deleteGlucose(id: string) {
+  await db.glucose.update(id, { deletedAt: now(), updatedAt: now() })
+}
+
+export async function recentGlucose(limit = 10): Promise<GlucoseReading[]> {
+  const all = await db.glucose.filter((g) => !g.deletedAt).toArray()
+  return all.sort((a, b) => b.loggedAt - a.loggedAt).slice(0, limit)
 }
 
 /** Vom Coach vorgeschlagenes Ziel übernehmen (ersetzt ein vorhandenes pro Nährstoff). */

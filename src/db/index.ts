@@ -5,10 +5,12 @@ import type {
   CoachMemory,
   FoodItem,
   GamificationState,
+  GlucoseReading,
   Goal,
   LogEntry,
   Photo,
   Profile,
+  Settings,
   WaterLog,
 } from './types'
 
@@ -28,6 +30,8 @@ export class NutritionDB extends Dexie {
   coachMemory!: Table<CoachMemory, string>
   water!: Table<WaterLog, string>
   photos!: Table<Photo, string>
+  settings!: Table<Settings, string>
+  glucose!: Table<GlucoseReading, string>
 
   constructor() {
     super('nutritiontracker')
@@ -45,6 +49,11 @@ export class NutritionDB extends Dexie {
     // v2: Mahlzeitenfotos (lokal).
     this.version(2).stores({
       photos: 'id, createdAt',
+    })
+    // v3: optionale Gesundheits-Module (Einstellungen + Blutzucker).
+    this.version(3).stores({
+      settings: 'id, updatedAt',
+      glucose: 'id, date, loggedAt, deletedAt',
     })
   }
 }

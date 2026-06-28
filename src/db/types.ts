@@ -122,3 +122,26 @@ export interface Photo {
   dataUrl: string
   createdAt: number
 }
+
+/** App-Einstellungen / optionale Gesundheits-Module (wie Allergien: nicht für jeden). */
+export interface Settings {
+  id: 'app'
+  bloodSugar: boolean // Blutzucker-Tracking (Diabetes)
+  sugarWarner: boolean // strengeres Zucker-Limit
+  glucoseUnit: 'mg/dl' | 'mmol/l'
+  updatedAt: number
+}
+
+export type GlucoseContext = 'fasting' | 'before' | 'after' | 'random'
+
+/** Manuell eingetragener Blutzucker-Messwert. */
+export interface GlucoseReading {
+  id: string
+  date: string // 'YYYY-MM-DD'
+  mgdl: number // intern immer in mg/dl gespeichert
+  context: GlucoseContext
+  note?: string
+  loggedAt: number
+  updatedAt: number
+  deletedAt?: number
+}

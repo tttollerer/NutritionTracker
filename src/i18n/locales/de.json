@@ -194,7 +194,36 @@
     "export": "Exportieren",
     "import": "Importieren",
     "edit": "Profil bearbeiten",
-    "reset": "Onboarding erneut"
+    "reset": "Onboarding erneut",
+    "health": "Gesundheits-Module",
+    "bloodSugar": "Blutzucker-Tracking",
+    "bloodSugarHint": "Diabetes: Messwerte eintragen & Warnungen",
+    "sugarWarner": "Zucker-Warner",
+    "sugarWarnerHint": "Strengeres Zucker-Limit ({{limit}} g/Tag)",
+    "glucoseUnit": "Blutzucker-Einheit"
+  },
+  "glucose": {
+    "title": "Blutzucker",
+    "add": "Messwert eintragen",
+    "value": "Wert ({{unit}})",
+    "context": "Kontext",
+    "save": "Eintragen",
+    "empty": "Noch keine Messwerte heute.",
+    "contexts": {
+      "fasting": "Nüchtern",
+      "before": "Vor Mahlzeit",
+      "after": "Nach Mahlzeit",
+      "random": "Spontan"
+    },
+    "levels": {
+      "low": "Unterzucker",
+      "normal": "Im Zielbereich",
+      "elevated": "Erhöht",
+      "high": "Überzucker"
+    },
+    "warnLow": "⚠️ Unterzucker — bitte gegensteuern.",
+    "warnHigh": "⚠️ Überzucker — im Blick behalten.",
+    "disclaimer": "Orientierung, keine medizinische Beratung."
   },
   "capture": {
     "mealTitle": "Essen fotografieren",

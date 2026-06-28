@@ -25,6 +25,8 @@ export interface DeficitOpts {
   proteinTarget?: number
   sex?: 'm' | 'f'
   vegan?: boolean
+  /** Überschreibt Limit-Grenzen (z. B. strengeres Zucker-Limit bei Diabetes). */
+  limitOverrides?: Record<string, number>
 }
 
 /** Mikronährstoff-Summen eines Tages aus den Log-Einträgen. */
@@ -58,7 +60,8 @@ export function computeDayNutrition(logs: LogEntry[], date: string, opts: Defici
 
   const limits: NutrientStatus[] = LIMIT_KEYS.map((key) => {
     const def = NUTRIENT_BY_KEY[key]
-    return status(key, def.unit, 'limit', round2(micros[key] ?? 0), def.ref)
+    const cap = opts.limitOverrides?.[key] ?? def.ref
+    return status(key, def.unit, 'limit', round2(micros[key] ?? 0), cap)
   })
 
   return { benefits, limits }

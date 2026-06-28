@@ -430,7 +430,15 @@ auf jede Gruppe spezialisiert und berät entsprechend.
 - Coach **schließt Allergene grundsätzlich aus** Vorschlägen/Rezepten aus.
 - Klar als Hilfestellung gekennzeichnet, **kein Ersatz für medizinische Beratung**.
 
-### 10.4 Auswirkung im System
+### 10.4 Optionale Gesundheits-Module (aktivierbar)
+Nicht jeder braucht alles — wie Allergien sind manche Funktionen **opt-in** über die Einstellungen:
+- **Blutzucker-Tracking (Diabetes):** manuelle Messwerte (mg/dl oder mmol/l) mit Kontext
+  (nüchtern/vor/nach Mahlzeit), farbcodierter Verlauf, **Warner** bei Über-/Unterzucker.
+  Orientierende Richtwerte, **keine medizinische Beratung**.
+- **Zucker-Warner:** strengeres Tages-Zuckerlimit (25 g) für zuckerbewusste/diabetische Nutzer.
+- Weitere Module später ergänzbar (z. B. Blutdruck), ohne die App für alle zu überfrachten.
+
+### 10.5 Auswirkung im System
 - **Onboarding** fragt Persona, Ernährungsform(en), Allergien & Ziel ab → setzt sinnvolle
   Start-Ziele (editierbar).
 - **Ziel-Vorlagen** füllen `Goal`-Regeln vor (min/max/Korridor je Nährstoff).

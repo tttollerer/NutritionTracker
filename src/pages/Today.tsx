@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { db } from '@/db'
-import { deleteLog, getActiveGoalsMap, getAllergies } from '@/db/repo'
+import { deleteLog, getActiveGoalsMap, getAllergies, getSettings } from '@/db/repo'
+import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { todayKey } from '@/lib/utils'
 import { MEALS } from '@/lib/meal'
 import { ProgressRing } from '@/components/ProgressRing'
 import { WaterCard } from '@/components/WaterCard'
 import { NutrientPanel } from '@/components/NutrientPanel'
+import { GlucoseCard } from '@/components/GlucoseCard'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -26,6 +28,7 @@ export function Today() {
   const profile = useLiveQuery(() => db.profile.get('me'), [])
   const photos = useLiveQuery(() => db.photos.toArray(), [])
   const allergies = useLiveQuery(() => getAllergies(), [])
+  const settings = useLiveQuery(() => getSettings(), [])
 
   if (logs === undefined || foods === undefined || goals === undefined) {
     return (
@@ -102,7 +105,10 @@ export function Today() {
         sex={profile?.sex}
         vegan={profile?.dietForms.includes('vegan')}
         allergies={allergies}
+        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
       />
+
+      {settings?.bloodSugar && <GlucoseCard unit={settings.glucoseUnit} date={date} />}
 
       <WaterCard weightKg={profile?.weightKg} />
 
