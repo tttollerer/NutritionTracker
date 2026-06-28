@@ -103,6 +103,16 @@ export async function buildCoachContext() {
   const wTrend = trend(weightSeries, today)
   const body = wTrend ? { weightKg: wTrend.latest, weeklyRateKg: Math.round(wTrend.ratePerWeek * 100) / 100 } : null
 
+  // Mahlzeitenverteilung + Tageszeit (für Timing-Beratung, z. B. Protein gleichmäßig verteilen).
+  const todayLogs = logs.filter((l) => l.date === today && !l.deletedAt)
+  const meals = (['breakfast', 'lunch', 'dinner', 'snack'] as const)
+    .map((m) => {
+      const items = todayLogs.filter((l) => l.meal === m)
+      return { meal: m, kcal: Math.round(items.reduce((a, l) => a + l.computed.kcal, 0)), protein: Math.round(items.reduce((a, l) => a + l.computed.protein, 0)) }
+    })
+    .filter((x) => x.kcal > 0)
+  const now = { hour: new Date().getHours() }
+
   return {
     profile: profile
       ? { persona: profile.persona, dietForms: profile.dietForms, goal: profile.goal, weightKg: body?.weightKg ?? profile.weightKg }
@@ -114,6 +124,8 @@ export async function buildCoachContext() {
     limitsOver, // überschrittene Limits (Zucker/Salz/Koffein/Alkohol)
     glucose,
     body, // jüngstes Gewicht + Veränderung pro Woche (kg)
+    meals, // heutige Mahlzeiten mit kcal + Protein (Verteilung/Timing)
+    now, // aktuelle Tageszeit (Stunde)
   }
 }
 

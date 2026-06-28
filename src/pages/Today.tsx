@@ -156,10 +156,15 @@ export function Today() {
           {MEALS.map((meal) => {
             const items = logs.filter((l) => l.meal === meal)
             if (items.length === 0) return null
+            const mealKcal = items.reduce((a, l) => a + l.computed.kcal, 0)
+            const mealProtein = items.reduce((a, l) => a + l.computed.protein, 0)
             return (
               <section key={meal} className="space-y-2">
-                <h2 className="text-sm font-semibold text-muted-foreground">
-                  {t(`today.meals.${meal}`)}
+                <h2 className="flex items-baseline justify-between text-sm font-semibold text-muted-foreground">
+                  <span>{t(`today.meals.${meal}`)}</span>
+                  <span className="text-xs font-normal tabular-nums">
+                    {Math.round(mealKcal)} kcal · {Math.round(mealProtein)} g {t('today.macros.protein')}
+                  </span>
                 </h2>
                 <AnimatePresence initial={false}>
                   {items.map((l) => (
