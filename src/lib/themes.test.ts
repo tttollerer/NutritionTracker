@@ -16,6 +16,18 @@ describe('themes registry', () => {
     expect(vital?.swatch.accent).toMatch(/^#[0-9a-fA-F]{6}$/)
   })
 
+  it('hat das classic-Theme (Original-Design) mit vollständigem Swatch', () => {
+    const classic = THEMES.find((t) => t.id === 'classic')
+    expect(classic).toBeDefined()
+    expect(classic?.label).toBeTruthy()
+    expect(classic?.swatch.primary).toMatch(/^#[0-9a-fA-F]{6}$/)
+    expect(classic?.swatch.accent).toMatch(/^#[0-9a-fA-F]{6}$/)
+  })
+
+  it('akzeptiert classic als Brand-Theme', () => {
+    expect(isBrandTheme('classic')).toBe(true)
+  })
+
   it('jedes Theme hat eindeutige id und vollständige Felder', () => {
     const ids = THEMES.map((t) => t.id)
     expect(new Set(ids).size).toBe(ids.length)
