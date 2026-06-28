@@ -227,8 +227,20 @@
     "valuePh": "Wert ({{unit}})",
     "add": "Eintragen",
     "noData": "Noch kein Wert erfasst.",
+    "tooFew": "Mehr Werte nötig für ein Diagramm.",
     "week": "Woche",
     "dueTitle": "Messwerte fällig",
+    "bloodPressure": "Blutdruck",
+    "start": "Start",
+    "current": "Aktuell",
+    "change": "Δ",
+    "rate": "Rate",
+    "range": {
+      "4w": "4 Wochen",
+      "3m": "3 Monate",
+      "1y": "1 Jahr",
+      "all": "Alles"
+    },
     "disclaimer": "Orientierung, keine medizinische Beratung. Laborwerte stammen aus deinem Befund.",
     "groups": {
       "body": "Körperwerte",
