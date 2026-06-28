@@ -9,14 +9,7 @@ const now = () => Date.now()
 /** Profil aus dem Onboarding speichern und daraus die Ziele ableiten. */
 export async function saveOnboarding(profile: Omit<Profile, 'id' | 'updatedAt'>, allergies: string[]) {
   const fullProfile: Profile = { ...profile, id: 'me', updatedAt: now() }
-  const t = computeTargets(fullProfile)
-
-  const goals: Goal[] = [
-    mkGoal('kcal', profile.goal === 'lose' ? 'max' : profile.goal === 'gain' ? 'min' : 'range', t.kcal, 'kcal'),
-    mkGoal('protein', 'min', t.protein, 'g'),
-    mkGoal('carbs', 'range', t.carbs, 'g'),
-    mkGoal('fat', 'range', t.fat, 'g'),
-  ]
+  const goals = baseGoals(fullProfile)
 
   await db.transaction('rw', db.profile, db.goals, db.coachMemory, db.gamification, async () => {
     await db.profile.put(fullProfile)
@@ -43,12 +36,41 @@ export async function saveOnboarding(profile: Omit<Profile, 'id' | 'updatedAt'>,
     }
   })
 
-  return { profile: fullProfile, targets: t }
+  return { profile: fullProfile, targets: computeTargets(fullProfile) }
+}
+
+/** Profil bearbeiten und die Basis-Ziele neu berechnen (ohne Logs/Verlauf zu verlieren). */
+export async function updateProfile(patch: Partial<Omit<Profile, 'id'>>) {
+  const current = await db.profile.get('me')
+  if (!current) return
+  const updated: Profile = { ...current, ...patch, id: 'me', updatedAt: now() }
+  const goals = baseGoals(updated)
+  await db.transaction('rw', db.profile, db.goals, async () => {
+    await db.profile.put(updated)
+    // Nur die vom System gesetzten Basis-Ziele neu berechnen; Coach-/Nutzer-Ziele bleiben.
+    await db.goals.bulkPut(goals)
+  })
+  // Gewichtsänderung als Messpunkt festhalten, damit der Verlauf konsistent bleibt.
+  if (patch.weightKg != null && patch.weightKg !== current.weightKg) {
+    await addMeasurement('weight', patch.weightKg, 'kg')
+  }
+  return { profile: updated, targets: computeTargets(updated) }
+}
+
+/** Die vier vom System abgeleiteten Basis-Ziele (deterministische IDs). */
+function baseGoals(p: Profile): Goal[] {
+  const t = computeTargets(p)
+  return [
+    mkGoal('kcal', p.goal === 'lose' ? 'max' : p.goal === 'gain' ? 'min' : 'range', t.kcal, 'kcal'),
+    mkGoal('protein', 'min', t.protein, 'g'),
+    mkGoal('carbs', 'range', t.carbs, 'g'),
+    mkGoal('fat', 'range', t.fat, 'g'),
+  ]
 }
 
 function mkGoal(nutrient: string, type: Goal['type'], target: number, unit: string): Goal {
   return {
-    // Deterministische ID pro Nährstoff → erneutes Onboarding überschreibt,
+    // Deterministische ID pro Nährstoff → Neuberechnung überschreibt,
     // statt doppelte aktive Ziele anzulegen.
     id: `base-${nutrient}`,
     nutrient,

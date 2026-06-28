@@ -27,6 +27,11 @@ const PROTEIN_PER_KG: Record<Persona, number> = {
   general: 1.6,
 }
 
+/** Effektiver Protein-Wert (g/kg): individueller Override schlägt den Persona-Default. */
+export function proteinPerKg(p: Pick<Profile, 'persona' | 'proteinPerKgOverride'>): number {
+  return p.proteinPerKgOverride && p.proteinPerKgOverride > 0 ? p.proteinPerKgOverride : PROTEIN_PER_KG[p.persona]
+}
+
 /** Fettanteil an den Gesamtkalorien je Persona. */
 const FAT_PCT: Record<Persona, number> = {
   strength: 0.25,
@@ -74,7 +79,7 @@ export function targetKcal(p: Profile): number {
 /** Vollständige Makro-Ziele aus dem Profil. */
 export function computeTargets(p: Profile): MacroTargets {
   const kcal = targetKcal(p)
-  const protein = Math.round(PROTEIN_PER_KG[p.persona] * p.weightKg)
+  const protein = Math.round(proteinPerKg(p) * p.weightKg)
 
   let fatPct = FAT_PCT[p.persona]
   let carbs: number

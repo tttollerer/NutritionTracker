@@ -1,13 +1,14 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { Download, Upload, RefreshCw, Droplets, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight } from 'lucide-react'
+import { Download, Upload, RefreshCw, Droplets, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil } from 'lucide-react'
 import { db } from '@/db'
 import { getActiveGoalsMap, getSettings, updateSettings } from '@/db/repo'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { ThemeSettings } from '@/components/ThemeSettings'
+import { EditProfile } from '@/components/EditProfile'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -18,6 +19,7 @@ export function Profile({ onReset }: { onReset: () => void }) {
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
   const settings = useLiveQuery(() => getSettings(), [])
   const fileRef = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState(false)
 
   async function onExport() {
     downloadBackup(await exportBackup())
@@ -60,6 +62,14 @@ export function Profile({ onReset }: { onReset: () => void }) {
               ))}
           </ul>
         </Card>
+      )}
+
+      {editing ? (
+        <EditProfile onClose={() => setEditing(false)} />
+      ) : (
+        <Button variant="secondary" className="w-full" onClick={() => setEditing(true)}>
+          <Pencil size={18} /> {t('profile.edit')}
+        </Button>
       )}
 
       <Card className="divide-y divide-border">
