@@ -1,7 +1,7 @@
 # NutritionTracker — Projektplan
 
 > Mobile-first PWA zum Tracken von Kalorien, Makros & Mineralstoffen — mit KI-gestützter
-> Schätzung der Nährwerte aus Fotos/Videos vom Essen oder aus abfotografierten Nährwerttabellen.
+> Schätzung der Nährwerte aus Fotos vom Essen oder aus abfotografierten Nährwerttabellen.
 
 Status: **Planung** · Branch: `claude/nutrition-tracker-pwa-plan-xfeqbj` · Stand: 2026-06-27
 
@@ -12,7 +12,7 @@ Status: **Planung** · Branch: `claude/nutrition-tracker-pwa-plan-xfeqbj` · Sta
 Eine schnelle, schön aussehende Handy-App (PWA, installierbar), mit der man Essen erfasst und
 seine tägliche Nährstoffzufuhr verfolgt. Das Erfassen soll möglichst wenig Tipparbeit kosten:
 
-1. **Foto/Video vom Essen** → KI **erkennt** Lebensmittel + schätzt Menge.
+1. **Foto vom Essen** → KI **erkennt** Lebensmittel + schätzt Menge.
 2. **Foto der Nährwerttabelle** → KI liest die Werte aus (OCR/Vision).
 3. **Menge angeben** — per Text, per Preset (¼/½/1/1,5/2 · S/M/L) oder per Foto schätzen lassen.
 4. Ergebnis landet im Tracking: Kalorien, Makros (Eiweiß/Fett/Kohlenhydrate), Mineralstoffe & Vitamine.
@@ -50,7 +50,6 @@ seine tägliche Nährstoffzufuhr verfolgt. Das Erfassen soll möglichst wenig Ti
 | Feier-Effekte | **canvas-confetti** | Konfetti bei Zielerreichung/Badge-Unlock |
 | Sprache (MVP) | **Web Speech API** (`SpeechRecognition` + `SpeechSynthesis`) | On-device STT/TTS fürs Coach-Gespräch, kostenlos & privat |
 | Sprache (Fallback) | **Server-STT/TTS via Netlify Function** | Qualität/Browser-Kompatibilität, wenn Web Speech API fehlt |
-| Live-Kamera + KI | **getUserMedia + Frame-Snapshots** (MVP); später **multimodale Realtime-API** (z. B. Gemini Live) | „Die KI sieht, was ich sehe" — Essen/Kühlschrank/Speisekarte live |
 | Bild-Verkleinerung | **Canvas (client-seitig)** | Fotos vor KI-Upload auf ~1024 px / JPEG q0.7 → schneller, billiger, weniger Datenvolumen |
 | Barcode-Scan | **`@zxing/browser`** | Barcode → Produktsuche, on-device |
 | KI-Proxy | **Netlify Function** | Versteckt den OpenRouter-API-Key (nie im Client!), mit Rate-Limit & Tagesbudget |
@@ -206,14 +205,12 @@ kommt als eigene kleine Tabelle (`WaterLog`) dazu.
 **Endpoint:** `POST /.netlify/functions/analyze`
 
 **Modi:**
-- `mode: 'meal'` — Foto/Video-Frame vom Essen → **erkannte Lebensmittel + geschätzte Mengen** (keine Nährwerte aus der KI; die kommen aus der DB).
+- `mode: 'meal'` — Foto vom Essen → **erkannte Lebensmittel + geschätzte Mengen** (keine Nährwerte aus der KI; die kommen aus der DB).
 - `mode: 'label'` — Foto einer Nährwerttabelle → Werte auslesen (per 100 g + Portionsgröße). Hier liefert die KI Zahlen direkt (OCR).
 - `mode: 'portion'` — Foto zur reinen Mengenschätzung eines bekannten Lebensmittels.
 - `mode: 'coach'` — Dialog mit Kontext (aggregierte Zusammenfassung + Gesprächsverlauf + `CoachMemory`).
   **Optional mit Bild(ern)** (geloggtes/aufgenommenes Foto) für Foto-Feedback. Gibt Beratung sowie
   Ziel-/Challenge-/Log-Vorschläge als strukturiertes JSON zurück (brauchen Nutzer-Bestätigung).
-- `mode: 'live'` — Live-Kamera-Gespräch: Einzel-Frames + Sprachfrage in Echtzeit (Ausbaustufe:
-  multimodale Realtime-API, s. 9.5).
 
 **Client-Vorverarbeitung:** Bild auf ~1024 px / JPEG q0.7 verkleinern, dann als Base64 senden.
 
@@ -250,8 +247,8 @@ Katalog gespeichert (inkl. üblicher Portion) → beim nächsten Mal vorausgefü
 4. **Nährstoff-Detail** — Mikronährstoffe des Tages, **Defizite hervorgehoben** („zu wenig: Eisen, Vit. D").
 5. **Verlauf** — Tage/Wochen, Trends (Recharts), Wochen-Insights („Protein-Ziel 5/7 Tagen").
 6. **Erfolge & Coach** — Badges/Level/Streaks, **virtueller Begleiter**, aktive Quests/Challenges,
-   freischaltbare Belohnungen; **KI-Coach** als Chat **und Sprachgespräch**, mit Foto-Feedback und
-   **Live-Kamera-Modus** (Ziel-/Challenge-/Log-Vorschläge mit Bestätigung).
+   freischaltbare Belohnungen; **KI-Coach** als Chat **und Sprachgespräch**, mit Foto-Feedback
+   (Ziel-/Challenge-/Log-Vorschläge mit Bestätigung).
 7. **Profil & Ziele** — Onboarding mit **Persona-, Ernährungsform- & Allergie-Auswahl**, daraus
    **Ziel-Vorlagen** + **automatische Zielberechnung** (Mifflin-St-Jeor), regelbasierte Ziele
    (min/max/Korridor pro Nährstoff), Einheiten, **Backup-Export/Import**, Dark Mode, (später) Login/Sync.
@@ -399,27 +396,9 @@ hörbar**. Ablauf:
 - **Datenschutz:** Mikrofon nur auf aktiven Tap; bei Server-STT klar kommuniziert, dass Audio
   kurzzeitig verarbeitet wird; on-device-Modus als datensparsame Voreinstellung wo verfügbar.
 
-### 9.5 Live-Kamera-Gespräch mit der KI
-Der Coach kann **live durch die Kamera sehen** und man unterhält sich dabei in Echtzeit — z. B. die
-Kamera auf den Teller, den Kühlschrank oder eine Speisekarte halten und fragen „Was davon hat am
-meisten Protein?" oder „Schätz mir das mal".
-
-```
-📷 Live-Kamera (Frames)  +  🎙️ Sprache  →  multimodale KI  →  🔊 gesprochene Antwort (+ Transkript)
-```
-
-- **MVP (snapshot-basiert):** Während des Sprachgesprächs werden bei Bedarf **Einzel-Frames**
-  aus dem Kamerastream gegriffen (client-seitig verkleinert) und mit der Frage an das Vision-Modell
-  geschickt. Günstig, funktioniert über die bestehende `analyze`/`coach`-Pipeline.
-- **Ausbaustufe (echtes Live/Realtime):** Streaming-fähige **multimodale Realtime-API** (z. B.
-  Gemini Live), die Audio + Video kontinuierlich verarbeitet → flüssiges „die KI sieht, was ich
-  sehe"-Erlebnis. Höhere Kosten/Komplexität, daher spätere Stufe.
-- **Anwendungsfälle:** Mahlzeit live schätzen lassen, Kühlschrank-Check „was kann ich Gesundes
-  kochen?", Speisekarte im Restaurant scannen und beraten lassen.
-- **UI:** Kamera-Vollbild mit Mikrofon-Button, Live-Transkript-Overlay, Frame-„Snapshot"-Indikator,
-  jederzeit stoppen.
-- **Datenschutz:** Kamera nur im aktiven Live-Modus; Frames werden nur auf Tap/aktive Frage gesendet;
-  nichts wird ohne Zutun dauerhaft gespeichert.
+> **Hinweis:** Ein Live-Kamera-/Videomodus ist bewusst **nicht** vorgesehen. KI-Bilderkennung
+> läuft ausschließlich über **Fotos** (Foto/Tabelle/Barcode, §6). Das spart Kosten/Komplexität;
+> das Sprachgespräch mit dem Coach (§9.4) bleibt davon unberührt.
 
 ## 10. Zielgruppen & Ernährungsprofile
 
@@ -497,16 +476,12 @@ auf jede Gruppe spezialisiert und berät entsprechend.
 - **Sprachgespräch:** Web Speech API (STT/TTS), gestreamte Antworten, optional Freihand-Modus;
   Server-STT/TTS als Fallback
 
-**Phase 4b — Live-Kamera-Gespräch**
-- Snapshot-basiert über bestehende Pipeline (MVP); später multimodale Realtime-API (Gemini Live)
-
 **Phase 5 — Cloud-Sync (später)**
 - Supabase (Auth + Postgres), Last-Write-Wins-Sync über `updatedAt`/`deletedAt`, Multi-Device, Backup
 
 ## 12. Offene Punkte / später zu entscheiden
 
 - Genauer Umfang der Mineralstoff-/Vitaminliste (Start: gängige ~10, erweiterbar).
-- Video-Handling: vorerst Einzelframe extrahieren (einfacher & billiger als ganzes Video).
 - USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF, Rohzutaten → USDA).
 - iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera.
 - Barcode-Scan nutzt aktuell die native `BarcodeDetector`-API (+ manuelle Eingabe als Fallback);
