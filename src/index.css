@@ -1,67 +1,10 @@
+@import './styles/themes.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Design-Tokens — Light & Dark. Werte sind HSL-Tripel (für hsl(var(--token))). */
 @layer base {
-  :root {
-    --background: 140 30% 99%;
-    --foreground: 150 15% 12%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 150 15% 12%;
-
-    --primary: 142 71% 45%; /* frisches Grün */
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 150 20% 94%;
-    --secondary-foreground: 150 15% 20%;
-
-    --muted: 150 16% 95%;
-    --muted-foreground: 150 8% 42%;
-
-    --accent: 24 95% 56%; /* poppiges Orange als Sekundärakzent */
-    --accent-foreground: 0 0% 100%;
-
-    --success: 142 71% 42%;
-    --warning: 38 92% 50%;
-    --destructive: 0 80% 58%;
-
-    --border: 150 14% 90%;
-    --input: 150 14% 88%;
-    --ring: 142 71% 45%;
-
-    --radius: 1rem;
-  }
-
-  .dark {
-    --background: 150 18% 6%;
-    --foreground: 150 10% 94%;
-
-    --card: 150 14% 10%;
-    --card-foreground: 150 10% 94%;
-
-    --primary: 142 70% 48%;
-    --primary-foreground: 150 18% 6%;
-
-    --secondary: 150 12% 16%;
-    --secondary-foreground: 150 10% 90%;
-
-    --muted: 150 10% 15%;
-    --muted-foreground: 150 8% 60%;
-
-    --accent: 24 90% 58%;
-    --accent-foreground: 150 18% 6%;
-
-    --success: 142 64% 50%;
-    --warning: 38 90% 55%;
-    --destructive: 0 75% 60%;
-
-    --border: 150 10% 20%;
-    --input: 150 10% 22%;
-    --ring: 142 70% 48%;
-  }
-
   * {
     @apply border-border;
   }
@@ -74,7 +17,6 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    /* Safe-Area für Notch/Home-Indicator */
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
     overscroll-behavior-y: none;
   }
