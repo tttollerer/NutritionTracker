@@ -20,60 +20,21 @@ const RequestSchema = z.object({
   memory: z.record(z.unknown()).optional(),
 })
 
-const GoalSuggestion = z.object({
-  nutrient: z.string(),
-  type: z.enum(['min', 'max', 'range']),
-  target: z.number(),
-  targetMax: z.number().optional(),
-  unit: z.string(),
-  reason: z.string().optional(),
-})
-const ChallengeSuggestion = z.object({ title: z.string(), period: z.enum(['day', 'week']) })
-const LogSuggestion = z.object({
-  name: z.string(),
-  amount: z.number(),
-  unit: z.enum(['g', 'ml', 'portion']),
-  per100: z.object({
-    kcal: z.number(),
-    protein: z.number(),
-    carbs: z.number(),
-    fat: z.number(),
-  }),
-})
-const Result = z.object({
-  reply: z.string(),
-  suggestions: z
-    .object({
-      goals: z.array(GoalSuggestion).optional(),
-      challenges: z.array(ChallengeSuggestion).optional(),
-      logs: z.array(LogSuggestion).optional(),
-    })
-    .optional(),
-})
-
 function systemPrompt(context: unknown, memory: unknown): string {
   return [
     'Du bist ein erfahrener, motivierender Ernährungscoach in einer Tracking-App. Antworte auf Deutsch, freundlich und konkret, in wenigen Sätzen.',
     'Du kennst dich mit Zielgruppen aus: Kraftsport/Bodybuilding, Ausdauer, Ab-/Zunehmen, sowie Ernährungsformen wie vegan, vegetarisch, Low Carb/Keto, High Protein.',
     'Beziehe Profil, Ziele und die heutigen/wöchentlichen Werte ein. Schlage bei Bedarf passende Ziele, Challenges oder Log-Einträge vor — diese werden dem Nutzer nur als Vorschlag angezeigt und von ihm bestätigt.',
+    'Der Kontext enthält `deficits` (was heute je Nährstoff noch bis zum Ziel fehlt, inkl. Mikronährstoffe wie Eisen/B12/Calcium) und `limitsOver` (überschrittene Limits wie Zucker/Salz/Koffein/Alkohol). Nutze diese konkret: nenne die größten Defizite und empfiehl passende Lebensmittel, warne bei überschrittenen Limits.',
+    'Enthält der Kontext `glucose` (Blutzucker), gehe bei sehr hohen/niedrigen Werten vorsichtig und unterstützend darauf ein — ohne medizinische Diagnose.',
     'Berücksichtige hinterlegte Allergien/Unverträglichkeiten strikt und schlage niemals Lebensmittel vor, die diese enthalten.',
     'Gib keine medizinische Beratung. Bei sehr niedrigen Kalorienzielen oder Anzeichen für gestörtes Essverhalten reagiere vorsichtig und unterstützend und verweise ggf. auf Fachleute.',
     `KONTEXT (aggregiert): ${JSON.stringify(context ?? {})}`,
     `GEDÄCHTNIS: ${JSON.stringify(memory ?? {})}`,
-    'Antworte AUSSCHLIESSLICH mit JSON: {"reply": string, "suggestions"?: {"goals"?: [{"nutrient":string,"type":"min"|"max"|"range","target":number,"targetMax"?:number,"unit":string,"reason"?:string}], "challenges"?: [{"title":string,"period":"day"|"week"}], "logs"?: [{"name":string,"amount":number,"unit":"g"|"ml"|"portion","per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}}]}}. Lass suggestions weg, wenn es nichts vorzuschlagen gibt.',
+    'AUSGABEFORMAT: Antworte ZUERST mit deiner Beratung als normaler, gut vorlesbarer Text (kurze Sätze, kein Markdown, kein JSON).',
+    'Wenn du Vorschläge hast, hänge DANACH in einer neuen Zeile exakt `###SUGGESTIONS###` an, gefolgt von genau einer Zeile JSON: {"goals"?: [{"nutrient":string,"type":"min"|"max"|"range","target":number,"targetMax"?:number,"unit":string,"reason"?:string}], "challenges"?: [{"title":string,"period":"day"|"week"}], "logs"?: [{"name":string,"amount":number,"unit":"g"|"ml"|"portion","per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}}]}.',
+    'Ohne Vorschläge lässt du Trenner und JSON komplett weg. Gib das Schema/JSON niemals im Beratungstext aus.',
   ].join('\n')
-}
-
-function extractJson(content: string): unknown {
-  const t = content.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
-  try {
-    return JSON.parse(t)
-  } catch {
-    const s = t.indexOf('{')
-    const e = t.lastIndexOf('}')
-    if (s >= 0 && e > s) return JSON.parse(t.slice(s, e + 1))
-    throw new Error('Antwort enthielt kein gültiges JSON')
-  }
 }
 
 export default async (req: Request): Promise<Response> => {
@@ -97,27 +58,62 @@ export default async (req: Request): Promise<Response> => {
     ...parsed.messages,
   ]
 
+  let upstream: Response
   try {
-    let lastErr: unknown
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, response_format: { type: 'json_object' }, messages }),
-        })
-        if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 200)}`)
-        const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
-        const content = data.choices?.[0]?.message?.content ?? ''
-        return json(Result.parse(extractJson(content)), 200)
-      } catch (e) {
-        lastErr = e
-      }
-    }
-    return json({ error: String(lastErr) }, 502)
+    upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, stream: true, messages }),
+    })
   } catch (e) {
     return json({ error: String(e) }, 502)
   }
+  if (!upstream.ok || !upstream.body) {
+    return json({ error: `OpenRouter ${upstream.status}: ${(await upstream.text()).slice(0, 200)}` }, 502)
+  }
+
+  // OpenRouter-SSE in reinen Text-Token-Stream umwandeln und an den Client durchreichen.
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = upstream.body!.getReader()
+      const decoder = new TextDecoder()
+      const encoder = new TextEncoder()
+      let buf = ''
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += decoder.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop() ?? ''
+          for (const line of lines) {
+            const l = line.trim()
+            if (!l.startsWith('data:')) continue
+            const data = l.slice(5).trim()
+            if (data === '[DONE]') {
+              controller.close()
+              return
+            }
+            try {
+              const piece = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] }
+              const delta = piece.choices?.[0]?.delta?.content
+              if (delta) controller.enqueue(encoder.encode(delta))
+            } catch {
+              /* Teil-Chunk / Keep-Alive ignorieren */
+            }
+          }
+        }
+      } catch (e) {
+        controller.enqueue(encoder.encode(`\n[Fehler: ${String(e)}]`))
+      }
+      controller.close()
+    },
+  })
+
+  return new Response(stream, {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' },
+  })
 }
 
 function json(body: unknown, status: number): Response {

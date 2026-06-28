@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Trash2, Check } from 'lucide-react'
 import type { AiItem } from '@/lib/ai'
 import { getReview, clearReview } from '@/lib/reviewStore'
+import { matchAllergens } from '@/lib/allergens'
 import { createFood, getAllergies, logFood, savePhoto } from '@/db/repo'
 import { todayKey } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
@@ -39,9 +40,10 @@ export function Review() {
     setItems((prev) => prev.filter((_, idx) => idx !== i))
   }
 
+  // Echter Abgleich: OFF-Allergen-Tags des Produkts (Primärquelle) +
+  // Namens-Keywords als Fallback gegen die hinterlegten Allergien.
   function allergyHit(name: string): string[] {
-    const lower = name.toLowerCase()
-    return allergies.filter((a) => lower.includes(a.toLowerCase()))
+    return matchAllergens({ allergens: payload?.allergens, name }, allergies)
   }
 
   async function confirm() {
@@ -102,8 +104,8 @@ export function Review() {
               )}
 
               {hits.length > 0 && (
-                <p className="rounded-lg bg-warning/15 px-3 py-2 text-xs text-warning">
-                  ⚠️ {t('review.allergyWarn', { list: hits.join(', ') })}
+                <p className="rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-xs font-medium text-destructive">
+                  ⚠️ {t('review.allergyWarn', { list: hits.map((h) => t(`onboarding.allergens.${h}`, { defaultValue: h })).join(', ') })}
                 </p>
               )}
 

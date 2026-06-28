@@ -99,6 +99,7 @@ export function Barcode() {
         meal,
         source: 'openfoodfacts',
         barcode: code.trim(),
+        allergens: product.allergens,
       })
       navigate('/review')
     } catch (e) {
