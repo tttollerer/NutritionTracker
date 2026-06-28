@@ -1,0 +1,97 @@
+/* Theme-Tokens — Brand-Variant × Mode.
+   Solids als HSL-Tripel (H S% L%) für hsl(var(--token)).
+   Komposite (grad/glow/soft/shadows) als rohe Werte. */
+
+[data-theme='vital'] {
+  /* shadcn-kompatibel (auf StyleGuide-Werte gemappt) */
+  --background: 220 20% 97%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 160 84% 39%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 27% 96%;
+  --secondary-foreground: 216 15% 35%;
+  --muted: 220 27% 96%;
+  --muted-foreground: 216 15% 35%;
+  --accent: 189 94% 43%;
+  --accent-foreground: 0 0% 100%;
+  --success: 142 76% 36%;
+  --warning: 32 95% 44%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 22% 92%;
+  --input: 218 22% 85%;
+  --ring: 160 84% 39%;
+  --radius: 1rem;
+
+  /* StyleGuide-Solids (HSL-Tripel) */
+  --canvas: 220 23% 92%;
+  --surface-2: 220 27% 96%;
+  --surface-3: 216 25% 92%;
+  --border-strong: 218 22% 85%;
+  --text-3: 214 15% 64%;
+  --primary-fill: 161 94% 30%;
+  --ring-track: 217 25% 94%;
+  --skeleton-base: 214 23% 94%;
+  --skeleton-hi: 220 33% 98%;
+  --protein: 350 89% 60%;
+  --carbs: 38 92% 50%;
+  --fat: 258 90% 66%;
+
+  /* StyleGuide-Komposite (rohe Werte) */
+  --primary-soft: #e6f8f0;
+  --grad: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  --glow: rgba(16, 185, 129, 0.3);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 6px 18px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 22px 48px rgba(16, 24, 40, 0.16);
+  --shadow-glow: 0 12px 30px rgba(16, 185, 129, 0.3);
+
+  color-scheme: light;
+}
+
+[data-theme='vital'].dark {
+  --background: 220 38% 6%;
+  --foreground: 210 40% 96%;
+  --card: 218 29% 11%;
+  --card-foreground: 210 40% 96%;
+  --primary: 158 64% 52%;
+  --primary-foreground: 220 47% 4%;
+  --secondary: 216 26% 15%;
+  --secondary-foreground: 215 16% 71%;
+  --muted: 216 26% 15%;
+  --muted-foreground: 215 16% 71%;
+  --accent: 188 86% 53%;
+  --accent-foreground: 220 47% 4%;
+  --success: 158 64% 52%;
+  --warning: 43 96% 56%;
+  --destructive: 0 91% 71%;
+  --destructive-foreground: 220 47% 4%;
+  --border: 214 21% 20%;
+  --input: 212 18% 28%;
+  --ring: 158 64% 52%;
+
+  --canvas: 220 47% 4%;
+  --surface-2: 216 26% 15%;
+  --surface-3: 215 24% 20%;
+  --border-strong: 212 18% 28%;
+  --text-3: 216 14% 48%;
+  --primary-fill: 161 94% 30%;
+  --ring-track: 214 25% 18%;
+  --skeleton-base: 216 28% 14%;
+  --skeleton-hi: 215 24% 20%;
+  --protein: 351 95% 71%;
+  --carbs: 43 96% 56%;
+  --fat: 255 92% 76%;
+
+  --primary-soft: rgba(52, 211, 153, 0.14);
+  --grad: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+  --glow: rgba(16, 185, 129, 0.42);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 26px 54px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 12px 30px rgba(16, 185, 129, 0.42);
+
+  color-scheme: dark;
+}

@@ -119,10 +119,6 @@
       "first_barcode": "Erster Barcode"
     }
   },
-  "profile": {
-    "title": "Profil & Ziele",
-    "placeholder": "Onboarding & Ziele kommen in Phase 1."
-  },
   "onboarding": {
     "title": "Willkommen 👋",
     "subtitle": "Beantworte ein paar Fragen — daraus berechnen wir deine Tagesziele.",
@@ -189,7 +185,6 @@
     "title": "Profil & Ziele",
     "placeholder": "Onboarding & Ziele kommen in Phase 1.",
     "yourGoals": "Deine Tagesziele",
-    "theme": "Dunkelmodus",
     "backup": "Backup",
     "export": "Exportieren",
     "import": "Importieren",
@@ -200,7 +195,12 @@
     "bloodSugarHint": "Diabetes: Messwerte eintragen & Warnungen",
     "sugarWarner": "Zucker-Warner",
     "sugarWarnerHint": "Strengeres Zucker-Limit ({{limit}} g/Tag)",
-    "glucoseUnit": "Blutzucker-Einheit"
+    "glucoseUnit": "Blutzucker-Einheit",
+    "appearance": "Darstellung",
+    "modeLight": "Hell",
+    "modeDark": "Dunkel",
+    "modeSystem": "System",
+    "brandTheme": "Farbwelt"
   },
   "glucose": {
     "title": "Blutzucker",

@@ -1,12 +1,12 @@
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Download, Upload, Moon, RefreshCw, Droplets, Candy } from 'lucide-react'
+import { Download, Upload, RefreshCw, Droplets, Candy } from 'lucide-react'
 import { db } from '@/db'
 import { getActiveGoalsMap, getSettings, updateSettings } from '@/db/repo'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
-import { useTheme } from '@/lib/theme'
+import { ThemeSettings } from '@/components/ThemeSettings'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -14,7 +14,6 @@ import { Toggle } from '@/components/ui/Toggle'
 
 export function Profile({ onReset }: { onReset: () => void }) {
   const { t } = useTranslation()
-  const { theme, toggle } = useTheme()
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
   const settings = useLiveQuery(() => getSettings(), [])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -62,18 +61,7 @@ export function Profile({ onReset }: { onReset: () => void }) {
         </Card>
       )}
 
-      <Card className="divide-y divide-border">
-        <button
-          onClick={toggle}
-          className="flex w-full items-center justify-between p-4 text-left"
-        >
-          <span className="flex items-center gap-3">
-            <Moon size={20} className="text-muted-foreground" />
-            {t('profile.theme')}
-          </span>
-          <span className="text-sm text-muted-foreground">{theme === 'dark' ? 'An' : 'Aus'}</span>
-        </button>
-      </Card>
+      <ThemeSettings />
 
       {/* Optionale Gesundheits-Module */}
       <Card className="divide-y divide-border">

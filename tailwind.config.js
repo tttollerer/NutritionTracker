@@ -13,6 +13,7 @@ export default {
         primary: {
           DEFAULT: 'hsl(var(--primary))',
           foreground: 'hsl(var(--primary-foreground))',
+          fill: 'hsl(var(--primary-fill))',
         },
         secondary: {
           DEFAULT: 'hsl(var(--secondary))',
@@ -30,9 +31,24 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
         success: 'hsl(var(--success))',
         warning: 'hsl(var(--warning))',
-        destructive: 'hsl(var(--destructive))',
+        canvas: 'hsl(var(--canvas))',
+        'surface-2': 'hsl(var(--surface-2))',
+        'surface-3': 'hsl(var(--surface-3))',
+        'border-strong': 'hsl(var(--border-strong))',
+        'text-3': 'hsl(var(--text-3))',
+        'ring-track': 'hsl(var(--ring-track))',
+        'skeleton-base': 'hsl(var(--skeleton-base))',
+        'skeleton-hi': 'hsl(var(--skeleton-hi))',
+        protein: 'hsl(var(--protein))',
+        carbs: 'hsl(var(--carbs))',
+        fat: 'hsl(var(--fat))',
+        'primary-soft': 'var(--primary-soft)',
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -40,7 +56,17 @@ export default {
         sm: 'calc(var(--radius) - 8px)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Manrope', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+      },
+      boxShadow: {
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
+        glow: 'var(--shadow-glow)',
+      },
+      backgroundImage: {
+        'brand-gradient': 'var(--grad)',
       },
     },
   },
