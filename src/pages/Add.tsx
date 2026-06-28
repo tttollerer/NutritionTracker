@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { Camera, ScanText, Barcode, Check, ImagePlus, X } from 'lucide-react'
-import { createFood, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
+import { createFood, getAllergies, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
+import { checkAllergens } from '@/lib/allergens'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
@@ -21,6 +22,8 @@ export function Add() {
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
   const recents = useLiveQuery(() => recentFoods(), [])
+  const allergies = useLiveQuery(() => getAllergies(), []) ?? []
+  const [ack, setAck] = useState(false)
 
   // Manuelles Formular
   const [name, setName] = useState('')
@@ -63,8 +66,14 @@ export function Add() {
     navigate('/')
   }
 
+  // Namens-basierte Allergen-Warnung für manuell erfasste Lebensmittel.
+  const manualHits = checkAllergens({ name }, allergies).contains
+  const allergenNames = (keys: string[]) =>
+    keys.map((h) => t(`onboarding.allergens.${h}`, { defaultValue: h })).join(', ')
+
   async function saveManual() {
     if (!name.trim() || !kcal) return
+    if (manualHits.length > 0 && !ack) return
     const food = await createFood({
       name,
       per,
@@ -134,6 +143,22 @@ export function Add() {
         <Field label={t('entry.name')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('entry.namePh')} />
         </Field>
+        {manualHits.length > 0 && (
+          <div className="space-y-2">
+            <p className="rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-xs font-medium text-destructive">
+              ⚠️ {t('review.allergyWarn', { list: allergenNames(manualHits) })}
+            </p>
+            <label className="flex items-start gap-2 text-xs text-destructive">
+              <input
+                type="checkbox"
+                checked={ack}
+                onChange={(e) => setAck(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[hsl(var(--destructive))]"
+              />
+              <span>{t('review.allergyAck')}</span>
+            </label>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('entry.per')}>
             <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
@@ -192,7 +217,7 @@ export function Add() {
         )}
         <input ref={photoRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
 
-        <Button className="w-full" onClick={saveManual} disabled={!name.trim() || !kcal}>
+        <Button className="w-full" onClick={saveManual} disabled={!name.trim() || !kcal || (manualHits.length > 0 && !ack)}>
           {t('entry.save')}
         </Button>
       </Card>

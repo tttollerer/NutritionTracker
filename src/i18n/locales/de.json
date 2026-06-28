@@ -80,6 +80,8 @@
     "thinking": "Coach denkt nach …",
     "speak": "Vorlesen",
     "mute": "Stumm",
+    "mic": "Mikrofon",
+    "disclaimer": "Orientierung, keine medizinische Beratung. Bei Beschwerden bitte Fachleute fragen.",
     "error": "Coach nicht erreichbar. Ist der OPENROUTER_API_KEY gesetzt?",
     "suggestTitle": "Vorschläge",
     "applyGoal": "Ziel übernehmen",
@@ -140,6 +142,7 @@
     "dietForms": "Ernährungsform",
     "allergies": "Allergien",
     "submit": "Ziele berechnen & loslegen",
+    "disclaimer": "NutriScan dient der Orientierung und ersetzt keine ärztliche oder ernährungsmedizinische Beratung.",
     "personas": {
       "strength": "Kraft/Muskelaufbau",
       "endurance": "Ausdauer",
@@ -157,12 +160,19 @@
     },
     "allergens": {
       "gluten": "Gluten",
-      "lactose": "Laktose",
-      "nuts": "Nüsse",
+      "crustaceans": "Krebstiere",
+      "eggs": "Eier",
+      "fish": "Fisch",
       "peanuts": "Erdnüsse",
       "soy": "Soja",
-      "eggs": "Eier",
-      "fish": "Fisch"
+      "lactose": "Milch/Laktose",
+      "nuts": "Schalenfrüchte",
+      "celery": "Sellerie",
+      "mustard": "Senf",
+      "sesame": "Sesam",
+      "sulphites": "Sulfite",
+      "lupin": "Lupinen",
+      "molluscs": "Weichtiere"
     }
   },
   "entry": {
@@ -196,11 +206,50 @@
     "sugarWarner": "Zucker-Warner",
     "sugarWarnerHint": "Strengeres Zucker-Limit ({{limit}} g/Tag)",
     "glucoseUnit": "Blutzucker-Einheit",
+    "trends": "Verlauf & Messwerte",
+    "labValues": "Laborwerte",
+    "labValuesHint": "Ferritin, Vitamin D, B12, HbA1c, Blutfette",
+    "vitals": "Vitalwerte",
+    "vitalsHint": "Blutdruck & Ruhepuls",
     "appearance": "Darstellung",
     "modeLight": "Hell",
     "modeDark": "Dunkel",
     "modeSystem": "System",
     "brandTheme": "Farbwelt"
+  },
+  "trends": {
+    "title": "Verlauf & Messwerte",
+    "intro": "Trage deine Werte regelmäßig ein — daraus erkennen wir und der Coach deinen Fortschritt.",
+    "valuePh": "Wert ({{unit}})",
+    "add": "Eintragen",
+    "noData": "Noch kein Wert erfasst.",
+    "week": "Woche",
+    "dueTitle": "Messwerte fällig",
+    "disclaimer": "Orientierung, keine medizinische Beratung. Laborwerte stammen aus deinem Befund.",
+    "groups": {
+      "body": "Körperwerte",
+      "labs": "Laborwerte",
+      "vitals": "Vitalwerte",
+      "diabetes": "Diabetes"
+    },
+    "metrics": {
+      "weight": "Gewicht",
+      "bodyFat": "Körperfett",
+      "waist": "Taille",
+      "hip": "Hüfte",
+      "arm": "Oberarm",
+      "ferritin": "Ferritin",
+      "vitaminD": "Vitamin D",
+      "b12": "Vitamin B12",
+      "hba1c": "HbA1c (Langzeitzucker)",
+      "ldl": "LDL-Cholesterin",
+      "hdl": "HDL-Cholesterin",
+      "triglycerides": "Triglyceride",
+      "systolic": "Blutdruck systolisch",
+      "diastolic": "Blutdruck diastolisch",
+      "restingPulse": "Ruhepuls",
+      "insulin": "Insulin"
+    }
   },
   "glucose": {
     "title": "Blutzucker",
@@ -239,7 +288,10 @@
     "manualBarcode": "Barcode eingeben",
     "scan": "Scannen",
     "notFound": "Produkt nicht gefunden",
-    "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein."
+    "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein.",
+    "consentTitle": "Foto an KI senden?",
+    "consentBody": "Zum Erkennen wird das Bild einmalig an unseren KI-Dienst (OpenRouter) übertragen und dort nicht dauerhaft gespeichert. Es wird kein Bild ohne dein Zutun gesendet.",
+    "consentAccept": "Verstanden & fortfahren"
   },
   "review": {
     "title": "Ergebnis prüfen",
@@ -248,7 +300,9 @@
     "estimate": "KI-Schätzung — bitte prüfen.",
     "confirm": "Übernehmen",
     "perInfo": "Werte je 100 {{unit}}",
-    "allergyWarn": "Enthält ggf. ein hinterlegtes Allergen: {{list}}"
+    "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
+    "allergyTraces": "Kann Spuren enthalten: {{list}}",
+    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
   },
   "common": {
     "loading": "Lädt …",

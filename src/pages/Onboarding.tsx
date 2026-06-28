@@ -126,6 +126,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       <Button className="w-full" onClick={submit} disabled={saving}>
         {t('onboarding.submit')}
       </Button>
+      <p className="text-center text-[11px] text-muted-foreground">{t('onboarding.disclaimer')}</p>
     </div>
   )
 }

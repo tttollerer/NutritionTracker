@@ -100,6 +100,7 @@ export function Barcode() {
         source: 'openfoodfacts',
         barcode: code.trim(),
         allergens: product.allergens,
+        traces: product.traces,
       })
       navigate('/review')
     } catch (e) {

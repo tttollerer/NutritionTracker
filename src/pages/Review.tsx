@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Trash2, Check } from 'lucide-react'
 import type { AiItem } from '@/lib/ai'
 import { getReview, clearReview } from '@/lib/reviewStore'
-import { matchAllergens } from '@/lib/allergens'
+import { checkAllergens } from '@/lib/allergens'
 import { createFood, getAllergies, logFood, savePhoto } from '@/db/repo'
 import { todayKey } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
@@ -21,6 +21,7 @@ export function Review() {
   const navigate = useNavigate()
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
+  const [ack, setAck] = useState(false)
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
 
   useEffect(() => {
@@ -40,13 +41,16 @@ export function Review() {
     setItems((prev) => prev.filter((_, idx) => idx !== i))
   }
 
-  // Echter Abgleich: OFF-Allergen-Tags des Produkts (Primärquelle) +
+  // Echter Abgleich: OFF-Allergen-/Spuren-Tags des Produkts (Primärquelle) +
   // Namens-Keywords als Fallback gegen die hinterlegten Allergien.
-  function allergyHit(name: string): string[] {
-    return matchAllergens({ allergens: payload?.allergens, name }, allergies)
+  function allergyHit(name: string) {
+    return checkAllergens({ allergens: payload?.allergens, traces: payload?.traces, name }, allergies)
   }
+  // Harte Treffer („enthält") erfordern eine bewusste Bestätigung vor dem Übernehmen.
+  const hasContains = items.some((it) => allergyHit(it.name).contains.length > 0)
 
   async function confirm() {
+    if (hasContains && !ack) return
     const date = todayKey()
     // Mahlzeitenfoto einmal speichern, ID an alle Einträge hängen.
     const photoBlobId = payload!.photo ? await savePhoto(payload!.photo) : undefined
@@ -59,6 +63,8 @@ export function Review() {
         protein: it.per100.protein,
         carbs: it.per100.carbs,
         fat: it.per100.fat,
+        allergens: payload!.allergens,
+        traces: payload!.traces,
         source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
         barcode: payload!.barcode,
       })
@@ -79,7 +85,9 @@ export function Review() {
         </p>
       ) : (
         items.map((it, i) => {
-          const hits = allergyHit(it.name)
+          const { contains, traces } = allergyHit(it.name)
+          const allergenNames = (keys: string[]) =>
+            keys.map((h) => t(`onboarding.allergens.${h}`, { defaultValue: h })).join(', ')
           return (
             <Card key={i} className="space-y-3 p-4">
               <div className="flex items-start gap-2">
@@ -103,9 +111,14 @@ export function Review() {
                 </div>
               )}
 
-              {hits.length > 0 && (
+              {contains.length > 0 && (
                 <p className="rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-xs font-medium text-destructive">
-                  ⚠️ {t('review.allergyWarn', { list: hits.map((h) => t(`onboarding.allergens.${h}`, { defaultValue: h })).join(', ') })}
+                  ⚠️ {t('review.allergyWarn', { list: allergenNames(contains) })}
+                </p>
+              )}
+              {traces.length > 0 && (
+                <p className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-xs font-medium text-warning">
+                  ⚠️ {t('review.allergyTraces', { list: allergenNames(traces) })}
                 </p>
               )}
 
@@ -162,9 +175,22 @@ export function Review() {
       )}
 
       {items.length > 0 && (
-        <Button className="w-full" onClick={confirm}>
-          <Check size={20} /> {t('review.confirm')}
-        </Button>
+        <div className="space-y-3">
+          {hasContains && (
+            <label className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <input
+                type="checkbox"
+                checked={ack}
+                onChange={(e) => setAck(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-[hsl(var(--destructive))]"
+              />
+              <span>{t('review.allergyAck')}</span>
+            </label>
+          )}
+          <Button className="w-full" onClick={confirm} disabled={hasContains && !ack}>
+            <Check size={20} /> {t('review.confirm')}
+          </Button>
+        </div>
       )}
     </div>
   )

@@ -12,6 +12,7 @@ export interface ReviewPayload {
   barcode?: string
   photo?: string // verkleinertes Foto (Data-URL), optional
   allergens?: string[] // OFF-Allergen-Tags (bei Barcode-Produkten)
+  traces?: string[] // OFF-Spuren-Tags („kann Spuren enthalten")
 }
 
 const KEY = 'nt-review'

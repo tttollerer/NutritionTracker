@@ -20,6 +20,8 @@ export interface FoodItem {
   fiber?: number
   sugar?: number
   micros?: Micros
+  allergens?: string[] // OFF-Allergen-Tags (enthält) — für Warnungen über alle Log-Pfade
+  traces?: string[] // OFF-Spuren-Tags („kann Spuren enthalten")
   defaultPortion?: { amount: number; unit: Unit }
   createdAt: number
   updatedAt: number
@@ -129,7 +131,26 @@ export interface Settings {
   bloodSugar: boolean // Blutzucker-Tracking (Diabetes)
   sugarWarner: boolean // strengeres Zucker-Limit
   glucoseUnit: 'mg/dl' | 'mmol/l'
+  labValues?: boolean // opt-in: Laborwerte (Ferritin, Vitamin D, B12, HbA1c, Blutfette)
+  vitals?: boolean // opt-in: Vitalwerte (Blutdruck, Ruhepuls)
+  photoConsent?: boolean // einmalige Einwilligung: Fotos an KI-Dienst senden
   updatedAt: number
+}
+
+/**
+ * Verlaufswert (Körper/Labor/Vitalwerte/Insulin). Generisch gehalten, damit neue
+ * Messgrößen ohne Schema-Umbau ergänzbar sind. `type` referenziert MetricDef.key.
+ */
+export interface Measurement {
+  id: string
+  type: string
+  value: number
+  unit: string
+  date: string // 'YYYY-MM-DD'
+  note?: string
+  loggedAt: number
+  updatedAt: number
+  deletedAt?: number
 }
 
 export type GlucoseContext = 'fasting' | 'before' | 'after' | 'random'

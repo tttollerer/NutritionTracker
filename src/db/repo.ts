@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import { db } from './index'
-import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Profile, Settings, Unit } from './types'
-import { computeTargets } from '@/lib/nutrition'
+import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Measurement, Profile, Settings, Unit } from './types'
+import { computeTargets, kcalFloor } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
 
 const now = () => Date.now()
@@ -79,6 +79,8 @@ export interface NewFoodInput {
   carbs: number
   fat: number
   micros?: Record<string, number>
+  allergens?: string[]
+  traces?: string[]
   source?: FoodItem['source']
   barcode?: string
 }
@@ -96,6 +98,8 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
     carbs: input.carbs,
     fat: input.fat,
     micros: input.micros && Object.keys(input.micros).length ? input.micros : undefined,
+    allergens: input.allergens?.length ? input.allergens : undefined,
+    traces: input.traces?.length ? input.traces : undefined,
     createdAt: now(),
     updatedAt: now(),
   }
@@ -116,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bloodSugar: false,
   sugarWarner: false,
   glucoseUnit: 'mg/dl',
+  photoConsent: false,
   updatedAt: 0,
 }
 
@@ -152,6 +157,42 @@ export async function recentGlucose(limit = 10): Promise<GlucoseReading[]> {
   return all.sort((a, b) => b.loggedAt - a.loggedAt).slice(0, limit)
 }
 
+// ---- Verlaufswerte (Körper/Labor/Vitalwerte/Insulin) ----
+
+export async function addMeasurement(type: string, value: number, unit: string, date = todayKey(), note?: string) {
+  const m: Measurement = {
+    id: uuid(),
+    type,
+    value,
+    unit,
+    date,
+    note,
+    loggedAt: now(),
+    updatedAt: now(),
+  }
+  await db.measurements.put(m)
+}
+
+export async function deleteMeasurement(id: string) {
+  await db.measurements.update(id, { deletedAt: now(), updatedAt: now() })
+}
+
+/** Alle (nicht gelöschten) Messwerte eines Typs, aufsteigend nach Datum. */
+export async function measurementsByType(type: string): Promise<Measurement[]> {
+  const all = await db.measurements.where('type').equals(type).filter((m) => !m.deletedAt).toArray()
+  return all.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.loggedAt - b.loggedAt))
+}
+
+/** Letztes Erfassungsdatum je Typ (für die Fälligkeits-Engine). */
+export async function lastMeasurementDates(): Promise<Record<string, string>> {
+  const all = await db.measurements.filter((m) => !m.deletedAt).toArray()
+  const out: Record<string, string> = {}
+  for (const m of all) {
+    if (!out[m.type] || m.date > out[m.type]) out[m.type] = m.date
+  }
+  return out
+}
+
 /** Vom Coach vorgeschlagenes Ziel übernehmen (ersetzt ein vorhandenes pro Nährstoff). */
 export async function applyGoalSuggestion(s: {
   nutrient: string
@@ -160,6 +201,16 @@ export async function applyGoalSuggestion(s: {
   targetMax?: number
   unit: string
 }) {
+  // Sicherheit: ein vom Coach vorgeschlagenes kcal-Ziel darf nie unter den
+  // physiologischen Floor fallen (Schutz vor gefährlich niedrigen Zielen).
+  if (s.nutrient === 'kcal') {
+    const profile = await db.profile.get('me')
+    if (profile) {
+      const floor = kcalFloor(profile)
+      if (s.target < floor) s = { ...s, target: floor }
+      if (s.targetMax != null && s.targetMax < floor) s = { ...s, targetMax: floor }
+    }
+  }
   const existing = await db.goals.filter((g) => g.nutrient === s.nutrient && !g.deletedAt).first()
   if (existing) {
     await db.goals.update(existing.id, { ...s, active: true, createdBy: 'coach', updatedAt: now() })

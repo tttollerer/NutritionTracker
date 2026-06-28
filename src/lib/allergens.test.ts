@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchAllergens } from './allergens'
+import { checkAllergens, matchAllergens } from './allergens'
 import { completeSentences } from './speech'
 
 describe('matchAllergens', () => {
@@ -16,6 +16,26 @@ describe('matchAllergens', () => {
 
   it('returns nothing when the user has no allergies', () => {
     expect(matchAllergens({ allergens: ['en:milk'] }, [])).toEqual([])
+  })
+
+  it('covers the new EU allergens (celery, sesame, sulphites)', () => {
+    expect(matchAllergens({ allergens: ['en:celery'] }, ['celery'])).toEqual(['celery'])
+    expect(matchAllergens({ name: 'Tahini Paste' }, ['sesame'])).toEqual(['sesame'])
+    expect(matchAllergens({ allergens: ['en:sulphur-dioxide-and-sulphites'] }, ['sulphites'])).toEqual(['sulphites'])
+  })
+})
+
+describe('checkAllergens (Spuren vs. enthält)', () => {
+  it('separates contains from traces', () => {
+    const r = checkAllergens({ allergens: ['en:milk'], traces: ['en:nuts'] }, ['lactose', 'nuts'])
+    expect(r.contains).toEqual(['lactose'])
+    expect(r.traces).toEqual(['nuts'])
+  })
+
+  it('a direct hit is never also reported as a trace', () => {
+    const r = checkAllergens({ allergens: ['en:peanuts'], traces: ['en:peanuts'] }, ['peanuts'])
+    expect(r.contains).toEqual(['peanuts'])
+    expect(r.traces).toEqual([])
   })
 })
 

@@ -3,6 +3,7 @@ import { db } from '@/db'
 import { getActiveGoalsMap } from '@/db/repo'
 import { sumsByDate } from './gamification'
 import { computeDayNutrition, rankDeficits } from './deficit'
+import { trend } from './measurements'
 import { todayKey } from './utils'
 
 /** Coach-Antwort-Schema (deckungsgleich mit der Netlify-Function). */
@@ -97,9 +98,14 @@ export async function buildCoachContext() {
     if (last) glucose = { lastMgdl: last.mgdl, context: last.context }
   }
 
+  // Körper-Verlauf: jüngstes Gewicht + Wochenrate (für adaptive Steuerung statt Formel).
+  const weightSeries = await db.measurements.where('type').equals('weight').filter((m) => !m.deletedAt).toArray()
+  const wTrend = trend(weightSeries, today)
+  const body = wTrend ? { weightKg: wTrend.latest, weeklyRateKg: Math.round(wTrend.ratePerWeek * 100) / 100 } : null
+
   return {
     profile: profile
-      ? { persona: profile.persona, dietForms: profile.dietForms, goal: profile.goal, weightKg: profile.weightKg }
+      ? { persona: profile.persona, dietForms: profile.dietForms, goal: profile.goal, weightKg: body?.weightKg ?? profile.weightKg }
       : null,
     goals,
     today: todaySums,
@@ -107,6 +113,7 @@ export async function buildCoachContext() {
     deficits, // "noch X bis Ziel" je Nährstoff
     limitsOver, // überschrittene Limits (Zucker/Salz/Koffein/Alkohol)
     glucose,
+    body, // jüngstes Gewicht + Veränderung pro Woche (kg)
   }
 }
 

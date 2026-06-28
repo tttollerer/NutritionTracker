@@ -8,6 +8,7 @@ import { microsFromOff } from './nutrients'
 export interface OffProduct {
   food: NewFoodInput & { barcode: string }
   allergens: string[]
+  traces: string[]
 }
 
 interface OffRaw {
@@ -16,6 +17,7 @@ interface OffRaw {
     product_name?: string
     nutriments?: Record<string, number | undefined>
     allergens_tags?: string[]
+    traces_tags?: string[]
     serving_quantity?: number
   }
 }
@@ -34,6 +36,8 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
   const n = p.nutriments ?? {}
   const kcal = n['energy-kcal_100g']
   if (p.product_name == null && kcal == null) return null
+  const allergens = (p.allergens_tags ?? []).map((a) => a.replace(/^en:/, ''))
+  const traces = (p.traces_tags ?? []).map((a) => a.replace(/^en:/, ''))
   return {
     food: {
       name: p.product_name?.trim() || 'Unbekanntes Produkt',
@@ -43,10 +47,13 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
       carbs: round1(n['carbohydrates_100g'] ?? 0),
       fat: round1(n['fat_100g'] ?? 0),
       micros: microsFromOff(n),
+      allergens,
+      traces,
       source: 'openfoodfacts',
       barcode,
     },
-    allergens: (p.allergens_tags ?? []).map((a) => a.replace(/^en:/, '')),
+    allergens,
+    traces,
   }
 }
 

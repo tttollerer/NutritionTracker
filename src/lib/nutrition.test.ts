@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bmr, computeTargets, targetKcal } from './nutrition'
+import { bmr, computeTargets, kcalFloor, targetKcal } from './nutrition'
 import type { Profile } from '@/db/types'
 
 const base: Profile = {
@@ -36,5 +36,14 @@ describe('nutrition', () => {
   it('caps carbs hard on keto', () => {
     const t = computeTargets({ ...base, dietForms: ['keto'] })
     expect(t.carbs).toBe(30)
+  })
+
+  it('never sets a kcal target below the safety floor', () => {
+    // Kleine Frau mit aggressivem Defizit: das rohe Ziel läge gefährlich niedrig.
+    const small: Profile = { ...base, sex: 'f', heightCm: 160, weightKg: 55, activity: 'low', goal: 'lose' }
+    const floor = kcalFloor(small)
+    expect(targetKcal(small)).toBeGreaterThanOrEqual(floor)
+    // Floor liegt nie unter dem Grundumsatz.
+    expect(floor).toBeGreaterThanOrEqual(bmr(small))
   })
 })

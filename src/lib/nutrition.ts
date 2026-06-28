@@ -49,10 +49,26 @@ export function bmr(p: Pick<Profile, 'sex' | 'age' | 'heightCm' | 'weightKg'>): 
   return base + (p.sex === 'm' ? 5 : -161)
 }
 
-/** Tagesbedarf (kcal) inkl. Aktivität und Ziel-Anpassung. */
+/**
+ * Sicherheits-Untergrenze für das Kalorienziel (Schutz vor gefährlich niedrigen
+ * Zielen, P0). Ein Defizit darf weder unter den Grundumsatz noch unter einen
+ * geschlechtsabhängigen Absolutwert (m 1500 / f 1200 kcal) fallen, und höchstens
+ * ~20 % des Tagesbedarfs betragen. Der Absolutwert wird nie über den Erhaltungs-
+ * bedarf gehoben (kleine Personen).
+ */
+export function kcalFloor(p: Pick<Profile, 'sex' | 'age' | 'heightCm' | 'weightKg' | 'activity'>): number {
+  const base = bmr(p)
+  const tdee = base * ACTIVITY_FACTOR[p.activity]
+  const absolute = p.sex === 'm' ? 1500 : 1200
+  return Math.round(Math.max(base, tdee * 0.8, Math.min(tdee, absolute)))
+}
+
+/** Tagesbedarf (kcal) inkl. Aktivität, Ziel-Anpassung und Sicherheits-Floor. */
 export function targetKcal(p: Profile): number {
   const tdee = bmr(p) * ACTIVITY_FACTOR[p.activity]
-  return Math.round((tdee + GOAL_KCAL_DELTA[p.goal]) / 10) * 10
+  const raw = tdee + GOAL_KCAL_DELTA[p.goal]
+  // Auf 10 runden, aber nie unter den Floor (Floor nach oben auf 10 gerundet).
+  return Math.max(Math.round(raw / 10) * 10, Math.ceil(kcalFloor(p) / 10) * 10)
 }
 
 /** Vollständige Makro-Ziele aus dem Profil. */
@@ -90,4 +106,20 @@ export const PERSONA_KEYS: Persona[] = [
 
 export const DIET_FORMS = ['vegan', 'vegetarian', 'lowcarb', 'keto', 'highprotein', 'glutenfree']
 
-export const COMMON_ALLERGENS = ['gluten', 'lactose', 'nuts', 'peanuts', 'soy', 'eggs', 'fish']
+/** Die 14 EU-kennzeichnungspflichtigen Allergene (LMIV Anhang II). */
+export const COMMON_ALLERGENS = [
+  'gluten',
+  'crustaceans',
+  'eggs',
+  'fish',
+  'peanuts',
+  'soy',
+  'lactose',
+  'nuts',
+  'celery',
+  'mustard',
+  'sesame',
+  'sulphites',
+  'lupin',
+  'molluscs',
+]

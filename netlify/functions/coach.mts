@@ -27,6 +27,7 @@ function systemPrompt(context: unknown, memory: unknown): string {
     'Beziehe Profil, Ziele und die heutigen/wöchentlichen Werte ein. Schlage bei Bedarf passende Ziele, Challenges oder Log-Einträge vor — diese werden dem Nutzer nur als Vorschlag angezeigt und von ihm bestätigt.',
     'Der Kontext enthält `deficits` (was heute je Nährstoff noch bis zum Ziel fehlt, inkl. Mikronährstoffe wie Eisen/B12/Calcium) und `limitsOver` (überschrittene Limits wie Zucker/Salz/Koffein/Alkohol). Nutze diese konkret: nenne die größten Defizite und empfiehl passende Lebensmittel, warne bei überschrittenen Limits.',
     'Enthält der Kontext `glucose` (Blutzucker), gehe bei sehr hohen/niedrigen Werten vorsichtig und unterstützend darauf ein — ohne medizinische Diagnose.',
+    'Enthält der Kontext `body` (jüngstes Gewicht + `weeklyRateKg` = Veränderung pro Woche), steuere an der REALEN Veränderung statt an der Formel: passt die Wochenrate nicht zum Ziel (z. B. Abnehmen, aber Rate ~0 über Wochen), erkläre das und schlage eine moderate Anpassung vor. Eine gesunde Rate liegt grob bei 0,3–0,7 kg/Woche.',
     'Berücksichtige hinterlegte Allergien/Unverträglichkeiten strikt und schlage niemals Lebensmittel vor, die diese enthalten.',
     'Gib keine medizinische Beratung. Bei sehr niedrigen Kalorienzielen oder Anzeichen für gestörtes Essverhalten reagiere vorsichtig und unterstützend und verweise ggf. auf Fachleute.',
     `KONTEXT (aggregiert): ${JSON.stringify(context ?? {})}`,
