@@ -56,7 +56,7 @@ export default {
         sm: 'calc(var(--radius) - 8px)',
       },
       fontFamily: {
-        sans: ['Manrope', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-sans, Manrope, system-ui, sans-serif)'],
         mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       boxShadow: {

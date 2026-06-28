@@ -1,5 +1,5 @@
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type BrandTheme = 'vital'
+export type BrandTheme = 'vital' | 'classic'
 
 export interface ThemeMeta {
   id: BrandTheme
@@ -9,6 +9,7 @@ export interface ThemeMeta {
 
 export const THEMES: ThemeMeta[] = [
   { id: 'vital', label: 'Vital', swatch: { primary: '#10b981', accent: '#06b6d4' } },
+  { id: 'classic', label: 'Klassisch', swatch: { primary: '#16a34a', accent: '#f97316' } },
 ]
 
 export const DEFAULT_MODE: ThemeMode = 'system'
