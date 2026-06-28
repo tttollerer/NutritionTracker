@@ -13,6 +13,7 @@ import { WaterCard } from '@/components/WaterCard'
 import { NutrientPanel } from '@/components/NutrientPanel'
 import { GlucoseCard } from '@/components/GlucoseCard'
 import { DueMeasurements } from '@/components/DueMeasurements'
+import { NudgeCard } from '@/components/NudgeCard'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -67,6 +68,16 @@ export function Today() {
       <PageHeader title={t('today.title')} />
 
       <DueMeasurements />
+
+      <NudgeCard
+        logs={logs}
+        date={date}
+        proteinTarget={goals.protein?.target}
+        sex={profile?.sex}
+        vegan={profile?.dietForms.includes('vegan')}
+        allergies={allergies}
+        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
+      />
 
       <div className="flex flex-col items-center">
         <ProgressRing
