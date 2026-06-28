@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import { db } from './index'
 import type { FoodItem, Goal, LogEntry, Meal, Profile, Unit } from './types'
 import { computeTargets } from '@/lib/nutrition'
+import { todayKey } from '@/lib/utils'
 
 const now = () => Date.now()
 
@@ -137,6 +138,17 @@ export async function applyChallengeSuggestion(s: { title: string; period: 'day'
   })
 }
 
+/** Verkleinertes Foto lokal speichern, gibt die Foto-ID zurück. */
+export async function savePhoto(dataUrl: string): Promise<string> {
+  const id = uuid()
+  await db.photos.put({ id, dataUrl, createdAt: now() })
+  return id
+}
+
+export async function getPhoto(id: string) {
+  return db.photos.get(id)
+}
+
 /** Eine Portion eines Lebensmittels für einen Tag/Mahlzeit loggen. */
 export async function logFood(args: {
   food: FoodItem
@@ -144,8 +156,9 @@ export async function logFood(args: {
   meal: Meal
   amount: number
   unit: Unit
+  photoBlobId?: string
 }): Promise<LogEntry> {
-  const { food, date, meal, amount, unit } = args
+  const { food, date, meal, amount, unit, photoBlobId } = args
   // Referenzwerte gelten je 100 g/ml; 'portion' nutzt defaultPortion oder 100er-Basis.
   const grams = unit === 'portion' ? (food.defaultPortion?.amount ?? 100) * amount : amount
   const factor = grams / 100
@@ -164,6 +177,7 @@ export async function logFood(args: {
       carbs: round1(food.carbs * factor),
       fat: round1(food.fat * factor),
     },
+    photoBlobId,
     updatedAt: now(),
   }
   await db.logs.put(entry)
@@ -185,4 +199,22 @@ export async function recentFoods(limit = 8): Promise<FoodItem[]> {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10
+}
+
+// ---- Wasser-Tracking (PLAN.md §9 Komfort) ----
+
+/** Empfohlene Tagesmenge Wasser (ml): ~35 ml/kg, sonst 2000 ml. */
+export function waterGoalMl(weightKg?: number): number {
+  return weightKg ? Math.round((weightKg * 35) / 50) * 50 : 2000
+}
+
+export async function addWater(ml: number, date = todayKey()) {
+  await db.water.put({ id: uuid(), date, ml, loggedAt: now() })
+}
+
+/** Letzten Wasser-Eintrag des Tages zurücknehmen (Undo). */
+export async function undoLastWater(date = todayKey()) {
+  const entries = await db.water.where('date').equals(date).toArray()
+  const last = entries.sort((a, b) => b.loggedAt - a.loggedAt)[0]
+  if (last) await db.water.delete(last.id)
 }

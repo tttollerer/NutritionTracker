@@ -34,7 +34,8 @@ export function Capture() {
     try {
       const base64 = await downscaleImage(file)
       const result = await analyzeImage(mode, base64, hint)
-      setReview({ items: result.items, meal, source: 'ai' })
+      // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
+      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? base64 : undefined })
       navigate('/review')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, Barcode, Check } from 'lucide-react'
-import { createFood, logFood, recentFoods } from '@/db/repo'
+import { Camera, ScanText, Barcode, Check, ImagePlus, X } from 'lucide-react'
+import { createFood, logFood, recentFoods, savePhoto } from '@/db/repo'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
+import { downscaleImage } from '@/lib/image'
 import { todayKey } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -28,6 +29,14 @@ export function Add() {
   const [carbs, setCarbs] = useState('')
   const [fat, setFat] = useState('')
   const [amount, setAmount] = useState('100')
+  const [photo, setPhoto] = useState<string | null>(null)
+  const photoRef = useRef<HTMLInputElement>(null)
+
+  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (file) setPhoto(await downscaleImage(file))
+  }
 
   const captureOptions = [
     { icon: Camera, key: 'photo', to: `/capture?mode=meal&meal=${meal}` },
@@ -56,7 +65,8 @@ export function Add() {
       carbs: Number(carbs) || 0,
       fat: Number(fat) || 0,
     })
-    await logFood({ food, date: todayKey(), meal, amount: Number(amount) || 100, unit: per })
+    const photoBlobId = photo ? await savePhoto(photo) : undefined
+    await logFood({ food, date: todayKey(), meal, amount: Number(amount) || 100, unit: per, photoBlobId })
     navigate('/')
   }
 
@@ -139,6 +149,29 @@ export function Add() {
         <Field label={`${t('entry.amount')} (${per})`}>
           <Input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
+
+        {/* Optionales Mahlzeitenfoto */}
+        {photo ? (
+          <div className="relative w-fit">
+            <img src={photo} alt="" className="h-20 w-20 rounded-xl object-cover" />
+            <button
+              onClick={() => setPhoto(null)}
+              aria-label={t('common.delete')}
+              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-white"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => photoRef.current?.click()}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-input py-2.5 text-sm text-muted-foreground"
+          >
+            <ImagePlus size={18} /> {t('entry.photo')}
+          </button>
+        )}
+        <input ref={photoRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
+
         <Button className="w-full" onClick={saveManual} disabled={!name.trim() || !kcal}>
           {t('entry.save')}
         </Button>

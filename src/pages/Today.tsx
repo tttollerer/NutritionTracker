@@ -7,6 +7,7 @@ import { deleteLog, getActiveGoalsMap } from '@/db/repo'
 import { todayKey } from '@/lib/utils'
 import { MEALS } from '@/lib/meal'
 import { ProgressRing } from '@/components/ProgressRing'
+import { WaterCard } from '@/components/WaterCard'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -21,6 +22,8 @@ export function Today() {
   )
   const foods = useLiveQuery(() => db.foods.toArray(), [])
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
+  const profile = useLiveQuery(() => db.profile.get('me'), [])
+  const photos = useLiveQuery(() => db.photos.toArray(), [])
 
   if (logs === undefined || foods === undefined || goals === undefined) {
     return (
@@ -33,6 +36,7 @@ export function Today() {
   }
 
   const foodName = (id: string) => foods.find((f) => f.id === id)?.name ?? '—'
+  const photoUrl = (id?: string) => (id ? photos?.find((p) => p.id === id)?.dataUrl : undefined)
 
   const sum = logs.reduce(
     (a, l) => ({
@@ -89,6 +93,8 @@ export function Today() {
         })}
       </Card>
 
+      <WaterCard weightKg={profile?.weightKg} />
+
       {logs.length === 0 ? (
         <p className="rounded-2xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">
           {t('today.empty')}
@@ -111,12 +117,21 @@ export function Today() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="flex items-center justify-between rounded-xl border border-border bg-card p-3"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3"
                     >
-                      <span>
-                        <span className="font-medium">{foodName(l.foodId)}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {l.amount} {l.unit} · {Math.round(l.computed.kcal)} kcal
+                      <span className="flex min-w-0 items-center gap-3">
+                        {photoUrl(l.photoBlobId) && (
+                          <img
+                            src={photoUrl(l.photoBlobId)}
+                            alt=""
+                            className="h-11 w-11 shrink-0 rounded-lg object-cover"
+                          />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">{foodName(l.foodId)}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {l.amount} {l.unit} · {Math.round(l.computed.kcal)} kcal
+                          </span>
                         </span>
                       </span>
                       <button

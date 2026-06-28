@@ -115,3 +115,10 @@ export interface WaterLog {
   ml: number
   loggedAt: number
 }
+
+/** Lokal gespeichertes Mahlzeitenfoto (verkleinertes JPEG als Data-URL). */
+export interface Photo {
+  id: string
+  dataUrl: string
+  createdAt: number
+}

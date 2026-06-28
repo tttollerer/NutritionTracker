@@ -7,6 +7,7 @@ import type {
   GamificationState,
   Goal,
   LogEntry,
+  Photo,
   Profile,
   WaterLog,
 } from './types'
@@ -26,6 +27,7 @@ export class NutritionDB extends Dexie {
   gamification!: Table<GamificationState, string>
   coachMemory!: Table<CoachMemory, string>
   water!: Table<WaterLog, string>
+  photos!: Table<Photo, string>
 
   constructor() {
     super('nutritiontracker')
@@ -39,6 +41,10 @@ export class NutritionDB extends Dexie {
       gamification: 'id, updatedAt',
       coachMemory: 'id, updatedAt',
       water: 'id, date, loggedAt',
+    })
+    // v2: Mahlzeitenfotos (lokal).
+    this.version(2).stores({
+      photos: 'id, createdAt',
     })
   }
 }

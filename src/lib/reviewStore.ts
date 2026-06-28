@@ -10,6 +10,7 @@ export interface ReviewPayload {
   meal: Meal
   source: 'ai' | 'openfoodfacts'
   barcode?: string
+  photo?: string // verkleinertes Foto (Data-URL), optional
 }
 
 const KEY = 'nt-review'

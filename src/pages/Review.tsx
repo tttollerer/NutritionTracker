@@ -5,7 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Trash2, Check } from 'lucide-react'
 import type { AiItem } from '@/lib/ai'
 import { getReview, clearReview } from '@/lib/reviewStore'
-import { createFood, getAllergies, logFood } from '@/db/repo'
+import { createFood, getAllergies, logFood, savePhoto } from '@/db/repo'
 import { todayKey } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
@@ -46,6 +46,8 @@ export function Review() {
 
   async function confirm() {
     const date = todayKey()
+    // Mahlzeitenfoto einmal speichern, ID an alle Einträge hängen.
+    const photoBlobId = payload!.photo ? await savePhoto(payload!.photo) : undefined
     for (const it of items) {
       const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
       const food = await createFood({
@@ -58,7 +60,7 @@ export function Review() {
         source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
         barcode: payload!.barcode,
       })
-      await logFood({ food, date, meal: payload!.meal, amount: it.amount || 100, unit: it.unit })
+      await logFood({ food, date, meal: payload!.meal, amount: it.amount || 100, unit: it.unit, photoBlobId })
     }
     clearReview()
     navigate('/')

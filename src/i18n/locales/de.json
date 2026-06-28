@@ -23,6 +23,11 @@
       "protein": "Eiweiß",
       "carbs": "Kohlenhydrate",
       "fat": "Fett"
+    },
+    "water": {
+      "title": "Wasser",
+      "amount": "{{current}} / {{goal}} ml",
+      "undo": "Letztes rückgängig"
     }
   },
   "add": {
@@ -143,6 +148,7 @@
     "amount": "Menge",
     "meal": "Mahlzeit",
     "recent": "Zuletzt benutzt",
+    "photo": "Foto hinzufügen",
     "save": "Hinzufügen",
     "allergyWarning": "Achtung: enthält ggf. ein hinterlegtes Allergen."
   },

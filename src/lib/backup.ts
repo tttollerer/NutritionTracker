@@ -14,6 +14,7 @@ export async function exportBackup(): Promise<Blob> {
     gamification: await db.gamification.toArray(),
     coachMemory: await db.coachMemory.toArray(),
     water: await db.water.toArray(),
+    photos: await db.photos.toArray(),
   }
   return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
 }
@@ -23,7 +24,7 @@ export async function importBackup(json: string): Promise<void> {
   const data = JSON.parse(json)
   await db.transaction(
     'rw',
-    [db.foods, db.logs, db.goals, db.profile, db.achievements, db.challenges, db.gamification, db.coachMemory, db.water],
+    [db.foods, db.logs, db.goals, db.profile, db.achievements, db.challenges, db.gamification, db.coachMemory, db.water, db.photos],
     async () => {
       await Promise.all([
         db.foods.clear(),
@@ -35,6 +36,7 @@ export async function importBackup(json: string): Promise<void> {
         db.gamification.clear(),
         db.coachMemory.clear(),
         db.water.clear(),
+        db.photos.clear(),
       ])
       if (data.foods) await db.foods.bulkPut(data.foods)
       if (data.logs) await db.logs.bulkPut(data.logs)
@@ -45,6 +47,7 @@ export async function importBackup(json: string): Promise<void> {
       if (data.gamification) await db.gamification.bulkPut(data.gamification)
       if (data.coachMemory) await db.coachMemory.bulkPut(data.coachMemory)
       if (data.water) await db.water.bulkPut(data.water)
+      if (data.photos) await db.photos.bulkPut(data.photos)
     },
   )
 }
