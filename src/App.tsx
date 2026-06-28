@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { ThemeProvider } from '@/lib/theme-provider'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db'
 import { Layout } from '@/components/Layout'
@@ -55,5 +56,9 @@ const router = createBrowserRouter([
 ])
 
 export function App() {
-  return <RouterProvider router={router} />
+  return (
+    <ThemeProvider>
+      <RouterProvider router={router} />
+    </ThemeProvider>
+  )
 }
