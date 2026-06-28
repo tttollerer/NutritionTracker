@@ -21,8 +21,15 @@ const RequestSchema = z.object({
 })
 
 function systemPrompt(context: unknown, memory: unknown): string {
+  // White-Label: Coach-Name/-Persönlichkeit pro Mandant über Server-ENV.
+  const coachName = process.env.COACH_NAME?.trim()
+  const coachPersona = process.env.COACH_PERSONA?.trim()
+  const intro = coachName
+    ? `Du bist ${coachName}, ein erfahrener, motivierender Ernährungscoach in einer Tracking-App. Antworte auf Deutsch, freundlich und konkret, in wenigen Sätzen.`
+    : 'Du bist ein erfahrener, motivierender Ernährungscoach in einer Tracking-App. Antworte auf Deutsch, freundlich und konkret, in wenigen Sätzen.'
   return [
-    'Du bist ein erfahrener, motivierender Ernährungscoach in einer Tracking-App. Antworte auf Deutsch, freundlich und konkret, in wenigen Sätzen.',
+    intro,
+    ...(coachPersona ? [`Deine Persönlichkeit/Tonalität: ${coachPersona}`] : []),
     'Du kennst dich mit Zielgruppen aus: Kraftsport/Bodybuilding, Ausdauer, Ab-/Zunehmen, sowie Ernährungsformen wie vegan, vegetarisch, Low Carb/Keto, High Protein.',
     'Beziehe Profil, Ziele und die heutigen/wöchentlichen Werte ein. Schlage bei Bedarf passende Ziele, Challenges oder Log-Einträge vor — diese werden dem Nutzer nur als Vorschlag angezeigt und von ihm bestätigt.',
     'Der Kontext enthält `deficits` (was heute je Nährstoff noch bis zum Ziel fehlt, inkl. Mikronährstoffe wie Eisen/B12/Calcium) und `limitsOver` (überschrittene Limits wie Zucker/Salz/Koffein/Alkohol). Nutze diese konkret: nenne die größten Defizite und empfiehl passende Lebensmittel, warne bei überschrittenen Limits.',

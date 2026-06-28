@@ -4,6 +4,7 @@ dev-dist
 *.local
 .env
 .env.*
+!.env.example
 .DS_Store
 coverage
 .vite
