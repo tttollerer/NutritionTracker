@@ -1,0 +1,259 @@
+{
+  "app": {
+    "name": "NutritionTracker"
+  },
+  "nav": {
+    "today": "Heute",
+    "add": "Erfassen",
+    "coach": "Coach",
+    "awards": "Erfolge",
+    "profile": "Profil"
+  },
+  "today": {
+    "title": "Heute",
+    "kcalLeft": "{{count}} kcal übrig",
+    "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
+    "meals": {
+      "breakfast": "Frühstück",
+      "lunch": "Mittag",
+      "dinner": "Abend",
+      "snack": "Snack"
+    },
+    "macros": {
+      "protein": "Eiweiß",
+      "carbs": "Kohlenhydrate",
+      "fat": "Fett"
+    },
+    "water": {
+      "title": "Wasser",
+      "amount": "{{current}} / {{goal}} ml",
+      "undo": "Letztes rückgängig"
+    }
+  },
+  "nutrients": {
+    "title": "Nährstoffe heute",
+    "limitsTitle": "Im Blick (Limits)",
+    "remaining": "noch {{amount}} {{unit}}",
+    "reached": "Ziel erreicht ✓",
+    "over": "{{amount}} {{unit}} drüber",
+    "ofLimit": "{{current}} / {{limit}} {{unit}}",
+    "recommendTitle": "Was noch essen?",
+    "recommendNone": "Alle Tagesziele erreicht – stark! 💪",
+    "covers": "deckt",
+    "names": {
+      "protein": "Eiweiß",
+      "fiber": "Ballaststoffe",
+      "iron": "Eisen",
+      "calcium": "Calcium",
+      "magnesium": "Magnesium",
+      "zinc": "Zink",
+      "potassium": "Kalium",
+      "vitaminC": "Vitamin C",
+      "vitaminD": "Vitamin D",
+      "vitaminB12": "Vitamin B12",
+      "omega3": "Omega-3",
+      "sugar": "Zucker",
+      "satFat": "Gesätt. Fett",
+      "sodium": "Natrium",
+      "caffeine": "Koffein",
+      "alcohol": "Alkohol"
+    }
+  },
+  "catalog": {
+    "common": "Häufige Lebensmittel",
+    "vices": "Genuss & Laster"
+  },
+  "add": {
+    "title": "Erfassen",
+    "photo": "Essen fotografieren",
+    "label": "Tabelle scannen",
+    "barcode": "Barcode",
+    "manual": "Manuell",
+    "soon": "Kommt in einer späteren Phase."
+  },
+  "coach": {
+    "title": "Coach",
+    "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Proteinziel zu treffen?\"",
+    "inputPh": "Nachricht oder Mikrofon …",
+    "send": "Senden",
+    "listening": "Höre zu …",
+    "thinking": "Coach denkt nach …",
+    "speak": "Vorlesen",
+    "mute": "Stumm",
+    "error": "Coach nicht erreichbar. Ist der OPENROUTER_API_KEY gesetzt?",
+    "suggestTitle": "Vorschläge",
+    "applyGoal": "Ziel übernehmen",
+    "applyChallenge": "Challenge starten",
+    "applyLog": "Eintragen",
+    "applied": "Übernommen ✓",
+    "starters": {
+      "today": "Was soll ich heute noch essen?",
+      "protein": "Wie treffe ich mein Proteinziel?",
+      "week": "Wie war meine Woche?"
+    }
+  },
+  "awards": {
+    "title": "Erfolge",
+    "level": "Level {{level}}",
+    "points": "{{points}} Punkte",
+    "toNext": "noch {{count}} bis Level {{level}}",
+    "streak": "{{count}} Tage Streak",
+    "streakNone": "Heute starten!",
+    "freeze": "{{count}} Joker",
+    "companionTitle": "Dein Begleiter",
+    "companionMood": {
+      "happy": "Bestens gelaunt!",
+      "ok": "Heute schon geloggt.",
+      "sad": "Logge etwas, um mich zu wecken."
+    },
+    "badges": "Abzeichen",
+    "badgeNames": {
+      "first_log": "Erster Eintrag",
+      "logged_7d": "7 Tage dabei",
+      "logged_30d": "30 Tage dabei",
+      "streak_3": "3-Tage-Streak",
+      "streak_7": "7-Tage-Streak",
+      "streak_30": "30-Tage-Streak",
+      "perfect_day": "Perfekter Tag",
+      "first_ai_scan": "Erster KI-Scan",
+      "first_barcode": "Erster Barcode"
+    }
+  },
+  "profile": {
+    "title": "Profil & Ziele",
+    "placeholder": "Onboarding & Ziele kommen in Phase 1."
+  },
+  "onboarding": {
+    "title": "Willkommen 👋",
+    "subtitle": "Beantworte ein paar Fragen — daraus berechnen wir deine Tagesziele.",
+    "sex": "Geschlecht",
+    "male": "Männlich",
+    "female": "Weiblich",
+    "age": "Alter",
+    "height": "Größe (cm)",
+    "weight": "Gewicht (kg)",
+    "activity": "Aktivität",
+    "activityLow": "Wenig",
+    "activityMedium": "Mittel",
+    "activityHigh": "Hoch",
+    "goal": "Ziel",
+    "goalLose": "Abnehmen",
+    "goalMaintain": "Halten",
+    "goalGain": "Zunehmen",
+    "persona": "Schwerpunkt",
+    "dietForms": "Ernährungsform",
+    "allergies": "Allergien",
+    "submit": "Ziele berechnen & loslegen",
+    "personas": {
+      "strength": "Kraft/Muskelaufbau",
+      "endurance": "Ausdauer",
+      "weightloss": "Abnehmen",
+      "weightgain": "Zunehmen",
+      "general": "Allgemein"
+    },
+    "diets": {
+      "vegan": "Vegan",
+      "vegetarian": "Vegetarisch",
+      "lowcarb": "Low Carb",
+      "keto": "Keto",
+      "highprotein": "High Protein",
+      "glutenfree": "Glutenfrei"
+    },
+    "allergens": {
+      "gluten": "Gluten",
+      "lactose": "Laktose",
+      "nuts": "Nüsse",
+      "peanuts": "Erdnüsse",
+      "soy": "Soja",
+      "eggs": "Eier",
+      "fish": "Fisch"
+    }
+  },
+  "entry": {
+    "title": "Manuell erfassen",
+    "name": "Name",
+    "namePh": "z. B. Haferflocken",
+    "per": "Bezug",
+    "kcal": "kcal / 100",
+    "protein": "Eiweiß (g)",
+    "carbs": "Kohlenh. (g)",
+    "fat": "Fett (g)",
+    "amount": "Menge",
+    "meal": "Mahlzeit",
+    "recent": "Zuletzt benutzt",
+    "photo": "Foto hinzufügen",
+    "save": "Hinzufügen",
+    "allergyWarning": "Achtung: enthält ggf. ein hinterlegtes Allergen."
+  },
+  "profile": {
+    "title": "Profil & Ziele",
+    "placeholder": "Onboarding & Ziele kommen in Phase 1.",
+    "yourGoals": "Deine Tagesziele",
+    "theme": "Dunkelmodus",
+    "backup": "Backup",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "edit": "Profil bearbeiten",
+    "reset": "Onboarding erneut",
+    "health": "Gesundheits-Module",
+    "bloodSugar": "Blutzucker-Tracking",
+    "bloodSugarHint": "Diabetes: Messwerte eintragen & Warnungen",
+    "sugarWarner": "Zucker-Warner",
+    "sugarWarnerHint": "Strengeres Zucker-Limit ({{limit}} g/Tag)",
+    "glucoseUnit": "Blutzucker-Einheit"
+  },
+  "glucose": {
+    "title": "Blutzucker",
+    "add": "Messwert eintragen",
+    "value": "Wert ({{unit}})",
+    "context": "Kontext",
+    "save": "Eintragen",
+    "empty": "Noch keine Messwerte heute.",
+    "contexts": {
+      "fasting": "Nüchtern",
+      "before": "Vor Mahlzeit",
+      "after": "Nach Mahlzeit",
+      "random": "Spontan"
+    },
+    "levels": {
+      "low": "Unterzucker",
+      "normal": "Im Zielbereich",
+      "elevated": "Erhöht",
+      "high": "Überzucker"
+    },
+    "warnLow": "⚠️ Unterzucker — bitte gegensteuern.",
+    "warnHigh": "⚠️ Überzucker — im Blick behalten.",
+    "disclaimer": "Orientierung, keine medizinische Beratung."
+  },
+  "capture": {
+    "mealTitle": "Essen fotografieren",
+    "labelTitle": "Tabelle scannen",
+    "barcodeTitle": "Barcode scannen",
+    "take": "Foto aufnehmen",
+    "choose": "Aus Galerie wählen",
+    "analyzing": "Analysiere …",
+    "error": "Analyse fehlgeschlagen",
+    "retry": "Erneut versuchen",
+    "hintMeal": "Halte das ganze Essen ins Bild.",
+    "hintLabel": "Fotografiere die Nährwerttabelle scharf und gerade.",
+    "manualBarcode": "Barcode eingeben",
+    "scan": "Scannen",
+    "notFound": "Produkt nicht gefunden",
+    "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein."
+  },
+  "review": {
+    "title": "Ergebnis prüfen",
+    "empty": "Keine Ergebnisse. Bitte erneut versuchen.",
+    "confidence": "Sicherheit",
+    "estimate": "KI-Schätzung — bitte prüfen.",
+    "confirm": "Übernehmen",
+    "perInfo": "Werte je 100 {{unit}}",
+    "allergyWarn": "Enthält ggf. ein hinterlegtes Allergen: {{list}}"
+  },
+  "common": {
+    "loading": "Lädt …",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "back": "Zurück"
+  }
+}

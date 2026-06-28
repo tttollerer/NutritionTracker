@@ -1,0 +1,42 @@
+import { describe, expect, it } from 'vitest'
+import { mapProduct } from './openfoodfacts'
+import { AiResult } from './ai'
+
+describe('mapProduct', () => {
+  it('maps OFF nutriments to a food per 100 g', () => {
+    const r = mapProduct('40111', {
+      product_name: 'Nutella',
+      nutriments: {
+        'energy-kcal_100g': 539,
+        proteins_100g: 6.3,
+        carbohydrates_100g: 57.5,
+        fat_100g: 30.9,
+      },
+      allergens_tags: ['en:milk', 'en:nuts'],
+    })
+    expect(r).not.toBeNull()
+    expect(r!.food.name).toBe('Nutella')
+    expect(r!.food.kcal).toBe(539)
+    expect(r!.food.barcode).toBe('40111')
+    expect(r!.allergens).toEqual(['milk', 'nuts'])
+  })
+
+  it('returns null when there is no name and no energy', () => {
+    expect(mapProduct('x', { nutriments: {} })).toBeNull()
+  })
+})
+
+describe('AiResult schema', () => {
+  it('accepts a valid result', () => {
+    const r = AiResult.parse({
+      items: [{ name: 'Apfel', amount: 150, unit: 'g', confidence: 0.8, per100: { kcal: 52, protein: 0.3, carbs: 14, fat: 0.2 } }],
+    })
+    expect(r.items).toHaveLength(1)
+  })
+
+  it('rejects an invalid unit', () => {
+    expect(() =>
+      AiResult.parse({ items: [{ name: 'X', amount: 1, unit: 'kg', per100: { kcal: 1, protein: 1, carbs: 1, fat: 1 } }] }),
+    ).toThrow()
+  })
+})
