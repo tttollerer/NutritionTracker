@@ -12,6 +12,8 @@
   "today": {
     "title": "Heute",
     "kcalLeft": "{{count}} kcal übrig",
+    "kcalToGoal": "noch {{count}} kcal bis Ziel",
+    "kcalReached": "Ziel erreicht 💪",
     "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
     "meals": {
       "breakfast": "Frühstück",

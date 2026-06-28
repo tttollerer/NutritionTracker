@@ -57,11 +57,21 @@ export function Today() {
   )
 
   const kcalGoal = goals.kcal?.target ?? 2200
+  const weightKg = profile?.weightKg
   const macros = [
     { key: 'protein', value: sum.protein, target: goals.protein?.target },
     { key: 'carbs', value: sum.carbs, target: goals.carbs?.target },
     { key: 'fat', value: sum.fat, target: goals.fat?.target },
   ] as const
+
+  // Zielabhängiges kcal-Framing: beim Zunehmen ist „mehr" gewollt → „noch bis Ziel".
+  const kcalDiff = Math.round(kcalGoal - sum.kcal)
+  const kcalSublabel =
+    profile?.goal === 'gain'
+      ? kcalDiff > 0
+        ? t('today.kcalToGoal', { count: kcalDiff })
+        : t('today.kcalReached')
+      : t('today.kcalLeft', { count: Math.max(0, kcalDiff) })
 
   return (
     <div className="space-y-6">
@@ -84,27 +94,37 @@ export function Today() {
           value={sum.kcal}
           max={kcalGoal}
           label={String(Math.round(sum.kcal))}
-          sublabel={t('today.kcalLeft', { count: Math.max(0, Math.round(kcalGoal - sum.kcal)) })}
+          sublabel={kcalSublabel}
         />
       </div>
 
       <Card className="space-y-3 p-4">
         {macros.map((m) => {
-          const pct = m.target ? Math.min(m.value / m.target, 1) : 0
+          const pct = m.target ? m.value / m.target : 0
+          const isProtein = m.key === 'protein'
+          // Protein ist ein Mindest-Ziel: Übererfüllung ist erwünscht → grün + „+X g".
+          const reached = isProtein && m.target != null && m.value >= m.target
+          const over = m.target ? Math.max(0, m.value - m.target) : 0
           return (
             <div key={m.key} className="space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{t(`today.macros.${m.key}`)}</span>
+              <div className="flex items-baseline justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {t(`today.macros.${m.key}`)}
+                  {isProtein && weightKg ? (
+                    <span className="ml-1 text-xs text-muted-foreground/70">· {(m.value / weightKg).toFixed(1)} g/kg</span>
+                  ) : null}
+                </span>
                 <span className="tabular-nums">
                   {Math.round(m.value)}
                   {m.target ? ` / ${m.target}` : ''} g
+                  {reached && over >= 1 && <span className="ml-1 font-medium text-success">+{Math.round(over)}</span>}
                 </span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
                 <motion.div
-                  className={`h-full rounded-full ${macroColor(m.key)}`}
+                  className={`h-full rounded-full ${reached ? 'bg-success' : macroColor(m.key)}`}
                   initial={{ width: 0 }}
-                  animate={{ width: `${pct * 100}%` }}
+                  animate={{ width: `${Math.min(pct, 1) * 100}%` }}
                   transition={{ duration: 0.6, ease: 'easeOut' }}
                 />
               </div>
