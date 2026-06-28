@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { Camera, ScanText, Barcode, Check, ImagePlus, X } from 'lucide-react'
-import { createFood, logFood, recentFoods, savePhoto } from '@/db/repo'
+import { createFood, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
+import { FOOD_CATALOG } from '@/lib/foodCatalog'
 import { downscaleImage } from '@/lib/image'
 import { todayKey } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
@@ -43,6 +44,13 @@ export function Add() {
     { icon: ScanText, key: 'label', to: `/capture?mode=label&meal=${meal}` },
     { icon: Barcode, key: 'barcode', to: `/barcode?meal=${meal}` },
   ] as const
+
+  async function logCatalog(id: string) {
+    const c = FOOD_CATALOG.find((f) => f.id === id)
+    if (!c) return
+    await quickLogCatalog(c, meal)
+    navigate('/')
+  }
 
   async function quickLog(food: FoodItem) {
     await logFood({
@@ -107,6 +115,18 @@ export function Add() {
           </div>
         </section>
       )}
+
+      {/* Katalog-Schnellzugriff: häufige Lebensmittel + Laster */}
+      <CatalogQuickAdd
+        title={t('catalog.common')}
+        foods={FOOD_CATALOG.filter((f) => !f.vice)}
+        onPick={(id) => void logCatalog(id)}
+      />
+      <CatalogQuickAdd
+        title={t('catalog.vices')}
+        foods={FOOD_CATALOG.filter((f) => f.vice)}
+        onPick={(id) => void logCatalog(id)}
+      />
 
       {/* Manuelles Erfassen */}
       <Card className="space-y-3 p-4">
@@ -192,5 +212,26 @@ export function Add() {
         ))}
       </div>
     </div>
+  )
+}
+
+function CatalogQuickAdd({
+  title,
+  foods,
+  onPick,
+}: {
+  title: string
+  foods: { id: string; name: string }[]
+  onPick: (id: string) => void
+}) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+      <div className="flex flex-wrap gap-2">
+        {foods.map((f) => (
+          <Chip key={f.id} label={f.name} selected={false} onClick={() => onPick(f.id)} />
+        ))}
+      </div>
+    </section>
   )
 }

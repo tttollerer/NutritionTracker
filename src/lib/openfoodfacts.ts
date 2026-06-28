@@ -1,4 +1,5 @@
 import type { NewFoodInput } from '@/db/repo'
+import { microsFromOff } from './nutrients'
 
 /**
  * Open-Food-Facts-Lookup per Barcode (PLAN.md §3). Kein API-Key nötig, daher
@@ -41,6 +42,7 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
       protein: round1(n['proteins_100g'] ?? 0),
       carbs: round1(n['carbohydrates_100g'] ?? 0),
       fat: round1(n['fat_100g'] ?? 0),
+      micros: microsFromOff(n),
       source: 'openfoodfacts',
       barcode,
     },

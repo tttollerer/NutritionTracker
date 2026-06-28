@@ -30,6 +30,39 @@
       "undo": "Letztes rückgängig"
     }
   },
+  "nutrients": {
+    "title": "Nährstoffe heute",
+    "limitsTitle": "Im Blick (Limits)",
+    "remaining": "noch {{amount}} {{unit}}",
+    "reached": "Ziel erreicht ✓",
+    "over": "{{amount}} {{unit}} drüber",
+    "ofLimit": "{{current}} / {{limit}} {{unit}}",
+    "recommendTitle": "Was noch essen?",
+    "recommendNone": "Alle Tagesziele erreicht – stark! 💪",
+    "covers": "deckt",
+    "names": {
+      "protein": "Eiweiß",
+      "fiber": "Ballaststoffe",
+      "iron": "Eisen",
+      "calcium": "Calcium",
+      "magnesium": "Magnesium",
+      "zinc": "Zink",
+      "potassium": "Kalium",
+      "vitaminC": "Vitamin C",
+      "vitaminD": "Vitamin D",
+      "vitaminB12": "Vitamin B12",
+      "omega3": "Omega-3",
+      "sugar": "Zucker",
+      "satFat": "Gesätt. Fett",
+      "sodium": "Natrium",
+      "caffeine": "Koffein",
+      "alcohol": "Alkohol"
+    }
+  },
+  "catalog": {
+    "common": "Häufige Lebensmittel",
+    "vices": "Genuss & Laster"
+  },
   "add": {
     "title": "Erfassen",
     "photo": "Essen fotografieren",

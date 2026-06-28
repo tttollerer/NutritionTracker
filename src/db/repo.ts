@@ -78,6 +78,7 @@ export interface NewFoodInput {
   protein: number
   carbs: number
   fat: number
+  micros?: Record<string, number>
   source?: FoodItem['source']
   barcode?: string
 }
@@ -94,6 +95,7 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
     protein: input.protein,
     carbs: input.carbs,
     fat: input.fat,
+    micros: input.micros && Object.keys(input.micros).length ? input.micros : undefined,
     createdAt: now(),
     updatedAt: now(),
   }
@@ -136,6 +138,33 @@ export async function applyChallengeSuggestion(s: { title: string; period: 'day'
   })
 }
 
+/** Ein Lebensmittel aus dem kuratierten Katalog mit üblicher Portion loggen. */
+export async function quickLogCatalog(
+  c: {
+    name: string
+    per: 'g' | 'ml'
+    kcal: number
+    protein: number
+    carbs: number
+    fat: number
+    micros: Record<string, number>
+    serving: number
+  },
+  meal: Meal,
+  date = todayKey(),
+) {
+  const food = await createFood({
+    name: c.name,
+    per: c.per,
+    kcal: c.kcal,
+    protein: c.protein,
+    carbs: c.carbs,
+    fat: c.fat,
+    micros: c.micros,
+  })
+  await logFood({ food, date, meal, amount: c.serving, unit: c.per })
+}
+
 /** Verkleinertes Foto lokal speichern, gibt die Foto-ID zurück. */
 export async function savePhoto(dataUrl: string): Promise<string> {
   const id = uuid()
@@ -174,6 +203,7 @@ export async function logFood(args: {
       protein: round1(food.protein * factor),
       carbs: round1(food.carbs * factor),
       fat: round1(food.fat * factor),
+      micros: scaleMicros(food.micros, factor),
     },
     photoBlobId,
     updatedAt: now(),
@@ -200,6 +230,17 @@ export async function recentFoods(limit = 8): Promise<FoodItem[]> {
 
 function round1(n: number) {
   return Math.round(n * 10) / 10
+}
+
+/** Mikronährstoffe (je 100 g) auf die gegessene Menge skalieren. */
+function scaleMicros(
+  micros: Record<string, number> | undefined,
+  factor: number,
+): Record<string, number> | undefined {
+  if (!micros) return undefined
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(micros)) out[k] = Math.round(v * factor * 100) / 100
+  return out
 }
 
 // ---- Wasser-Tracking (PLAN.md §9 Komfort) ----

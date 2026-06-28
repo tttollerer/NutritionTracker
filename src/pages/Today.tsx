@@ -3,11 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { db } from '@/db'
-import { deleteLog, getActiveGoalsMap } from '@/db/repo'
+import { deleteLog, getActiveGoalsMap, getAllergies } from '@/db/repo'
 import { todayKey } from '@/lib/utils'
 import { MEALS } from '@/lib/meal'
 import { ProgressRing } from '@/components/ProgressRing'
 import { WaterCard } from '@/components/WaterCard'
+import { NutrientPanel } from '@/components/NutrientPanel'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -24,6 +25,7 @@ export function Today() {
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
   const profile = useLiveQuery(() => db.profile.get('me'), [])
   const photos = useLiveQuery(() => db.photos.toArray(), [])
+  const allergies = useLiveQuery(() => getAllergies(), [])
 
   if (logs === undefined || foods === undefined || goals === undefined) {
     return (
@@ -92,6 +94,15 @@ export function Today() {
           )
         })}
       </Card>
+
+      <NutrientPanel
+        logs={logs}
+        date={date}
+        proteinTarget={goals.protein?.target}
+        sex={profile?.sex}
+        vegan={profile?.dietForms.includes('vegan')}
+        allergies={allergies}
+      />
 
       <WaterCard weightKg={profile?.weightKg} />
 
