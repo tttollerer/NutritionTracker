@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import { db } from './index'
 import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Profile, Settings, Unit } from './types'
-import { computeTargets } from '@/lib/nutrition'
+import { computeTargets, kcalFloor } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
 
 const now = () => Date.now()
@@ -79,6 +79,8 @@ export interface NewFoodInput {
   carbs: number
   fat: number
   micros?: Record<string, number>
+  allergens?: string[]
+  traces?: string[]
   source?: FoodItem['source']
   barcode?: string
 }
@@ -96,6 +98,8 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
     carbs: input.carbs,
     fat: input.fat,
     micros: input.micros && Object.keys(input.micros).length ? input.micros : undefined,
+    allergens: input.allergens?.length ? input.allergens : undefined,
+    traces: input.traces?.length ? input.traces : undefined,
     createdAt: now(),
     updatedAt: now(),
   }
@@ -116,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
   bloodSugar: false,
   sugarWarner: false,
   glucoseUnit: 'mg/dl',
+  photoConsent: false,
   updatedAt: 0,
 }
 
@@ -160,6 +165,16 @@ export async function applyGoalSuggestion(s: {
   targetMax?: number
   unit: string
 }) {
+  // Sicherheit: ein vom Coach vorgeschlagenes kcal-Ziel darf nie unter den
+  // physiologischen Floor fallen (Schutz vor gefährlich niedrigen Zielen).
+  if (s.nutrient === 'kcal') {
+    const profile = await db.profile.get('me')
+    if (profile) {
+      const floor = kcalFloor(profile)
+      if (s.target < floor) s = { ...s, target: floor }
+      if (s.targetMax != null && s.targetMax < floor) s = { ...s, targetMax: floor }
+    }
+  }
   const existing = await db.goals.filter((g) => g.nutrient === s.nutrient && !g.deletedAt).first()
   if (existing) {
     await db.goals.update(existing.id, { ...s, active: true, createdBy: 'coach', updatedAt: now() })

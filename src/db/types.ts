@@ -20,6 +20,8 @@ export interface FoodItem {
   fiber?: number
   sugar?: number
   micros?: Micros
+  allergens?: string[] // OFF-Allergen-Tags (enthält) — für Warnungen über alle Log-Pfade
+  traces?: string[] // OFF-Spuren-Tags („kann Spuren enthalten")
   defaultPortion?: { amount: number; unit: Unit }
   createdAt: number
   updatedAt: number
@@ -129,6 +131,7 @@ export interface Settings {
   bloodSugar: boolean // Blutzucker-Tracking (Diabetes)
   sugarWarner: boolean // strengeres Zucker-Limit
   glucoseUnit: 'mg/dl' | 'mmol/l'
+  photoConsent?: boolean // einmalige Einwilligung: Fotos an KI-Dienst senden
   updatedAt: number
 }
 

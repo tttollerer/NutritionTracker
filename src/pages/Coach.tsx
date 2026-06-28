@@ -155,7 +155,7 @@ export function Coach() {
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => (recog.listening ? recog.stop() : recog.start())}
-            aria-label="Mikrofon"
+            aria-label={t('coach.mic')}
             className={cn(
               'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
               recog.listening ? 'bg-destructive text-white' : 'bg-secondary text-foreground',
@@ -168,6 +168,7 @@ export function Coach() {
           <Send size={18} />
         </Button>
       </div>
+      <p className="pt-1.5 text-center text-[10px] text-muted-foreground">{t('coach.disclaimer')}</p>
     </div>
   )
 }
