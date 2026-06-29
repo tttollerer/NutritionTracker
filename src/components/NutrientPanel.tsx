@@ -6,8 +6,9 @@ import type { LogEntry } from '@/db/types'
 import { computeDayNutrition, rankDeficits } from '@/lib/deficit'
 import { recommendFoods } from '@/lib/recommend'
 import { CATALOG_BY_ID } from '@/lib/foodCatalog'
-import { quickLogCatalog } from '@/db/repo'
+import { deleteLog, quickLogCatalog } from '@/db/repo'
 import { defaultMeal } from '@/lib/meal'
+import { useOverlays } from '@/lib/overlays-context'
 import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 
@@ -24,7 +25,13 @@ interface Props {
 /** Nährstoff-Defizite, Limit-„Laster" und deterministische Essens-Empfehlungen. */
 export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies, sugarLimit }: Props) {
   const { t } = useTranslation()
+  const { showUndo } = useOverlays()
   const [showAll, setShowAll] = useState(false)
+
+  async function logRec(id: string, name: string) {
+    const entry = await quickLogCatalog(CATALOG_BY_ID[id], defaultMeal(), date)
+    showUndo(t('capture.added', { name }), () => deleteLog(entry.id))
+  }
 
   const day = computeDayNutrition(logs, date, {
     proteinTarget,
@@ -105,7 +112,7 @@ export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies
             <motion.button
               key={food.id}
               whileTap={{ scale: 0.98 }}
-              onClick={() => quickLogCatalog(CATALOG_BY_ID[food.id], defaultMeal(), date)}
+              onClick={() => logRec(food.id, food.name)}
               className="flex w-full items-center justify-between gap-3 rounded-xl border border-border bg-background p-3 text-left"
             >
               <span className="min-w-0">

@@ -303,8 +303,13 @@
     "mealTitle": "Essen fotografieren",
     "labelTitle": "Tabelle scannen",
     "barcodeTitle": "Barcode scannen",
-    "take": "Foto aufnehmen",
+    "take": "Essen fotografieren",
     "choose": "Aus Galerie wählen",
+    "sheetTitle": "Erfassen",
+    "sheetPhotoHint": "Mahlzeit per Kamera erkennen",
+    "ctaTitle": "Essen erfassen",
+    "ctaHint": "Foto, Barcode oder manuell – in 2 Tipps",
+    "added": "{{name}} hinzugefügt",
     "analyzing": "Analysiere …",
     "error": "Analyse fehlgeschlagen",
     "retry": "Erneut versuchen",
@@ -333,6 +338,7 @@
     "loading": "Lädt …",
     "cancel": "Abbrechen",
     "delete": "Löschen",
+    "undo": "Rückgängig",
     "back": "Zurück"
   }
 }

@@ -278,7 +278,7 @@ export async function quickLogCatalog(
     fat: c.fat,
     micros: c.micros,
   })
-  await logFood({ food, date, meal, amount: c.serving, unit: c.per })
+  return logFood({ food, date, meal, amount: c.serving, unit: c.per })
 }
 
 /** Verkleinertes Foto lokal speichern, gibt die Foto-ID zurück. */
