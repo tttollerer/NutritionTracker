@@ -3,14 +3,17 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, Image as ImageIcon, Loader2, ChevronLeft, ShieldCheck } from 'lucide-react'
+import { Camera, Image as ImageIcon, Loader2, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
 import { analyzeImage, type AnalyzeMode } from '@/lib/ai'
 import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
 import { getSettings, updateSettings } from '@/db/repo'
+import { useSpeechRecognition } from '@/lib/speech'
 import type { Meal } from '@/db/types'
 import { defaultMeal } from '@/lib/meal'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { cn } from '@/lib/utils'
 
 export function Capture() {
   const { t } = useTranslation()
@@ -23,28 +26,50 @@ export function Capture() {
   const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [preview, setPreview] = useState<string | null>(null) // verkleinertes Bild, noch nicht gesendet
+  const [hint, setHint] = useState('')
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
 
+  // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
+  const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
+
   const title = mode === 'label' ? t('capture.labelTitle') : t('capture.mealTitle')
-  const hint = mode === 'label' ? t('capture.hintLabel') : t('capture.hintMeal')
+  const uiHint = mode === 'label' ? t('capture.hintLabel') : t('capture.hintMeal')
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     setError(null)
+    try {
+      // Verkleinern + Vorschau zeigen — noch NICHT an die KI senden.
+      setPreview(await downscaleImage(file))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function analyze() {
+    if (!preview) return
+    setError(null)
     setBusy(true)
     try {
-      const base64 = await downscaleImage(file)
-      const result = await analyzeImage(mode, base64, hint)
+      const result = await analyzeImage(mode, preview, hint.trim() || undefined)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
-      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? base64 : undefined })
+      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined })
       navigate('/review')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
+  }
+
+  function retake() {
+    setPreview(null)
+    setHint('')
+    setError(null)
+    if (recog.listening) recog.stop()
   }
 
   return (
@@ -63,9 +88,51 @@ export function Capture() {
           </motion.span>
           <p className="text-sm text-muted-foreground">{t('capture.analyzing')}</p>
         </div>
+      ) : preview ? (
+        /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */
+        <div className="space-y-4">
+          <img src={preview} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
+
+          {error && (
+            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
+              <p className="font-medium text-destructive">{t('capture.error')}</p>
+              <p className="mt-1 break-words text-xs text-muted-foreground">{error}</p>
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-muted-foreground">{t('capture.describe')}</label>
+            <div className="flex items-center gap-2">
+              <Input value={hint} onChange={(e) => setHint(e.target.value)} placeholder={t('capture.describePh')} className="flex-1" />
+              {recog.available && (
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => (recog.listening ? recog.stop() : recog.start())}
+                  aria-label={t('coach.mic')}
+                  className={cn(
+                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+                    recog.listening ? 'bg-destructive text-white' : 'bg-secondary text-foreground',
+                  )}
+                >
+                  <Mic size={20} />
+                </motion.button>
+              )}
+            </div>
+            {recog.listening && <p className="mt-1 text-xs text-primary">{t('coach.listening')}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="secondary" onClick={retake}>
+              <RotateCcw size={18} /> {t('capture.retake')}
+            </Button>
+            <Button onClick={analyze}>
+              <Sparkles size={18} /> {t('capture.analyze')}
+            </Button>
+          </div>
+        </div>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">{hint}</p>
+          <p className="text-sm text-muted-foreground">{uiHint}</p>
           {error && (
             <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
               <p className="font-medium text-destructive">{t('capture.error')}</p>
