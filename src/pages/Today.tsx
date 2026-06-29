@@ -14,6 +14,7 @@ import { NutrientPanel } from '@/components/NutrientPanel'
 import { GlucoseCard } from '@/components/GlucoseCard'
 import { DueMeasurements } from '@/components/DueMeasurements'
 import { NudgeCard } from '@/components/NudgeCard'
+import { CaptureCta } from '@/components/CaptureCta'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -76,6 +77,8 @@ export function Today() {
   return (
     <div className="space-y-6">
       <PageHeader title={t('today.title')} />
+
+      <CaptureCta />
 
       <DueMeasurements />
 

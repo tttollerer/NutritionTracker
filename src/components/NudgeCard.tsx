@@ -7,8 +7,9 @@ import { computeDayNutrition, rankDeficits } from '@/lib/deficit'
 import { recommendFoods } from '@/lib/recommend'
 import { buildNudge, type NudgeTone } from '@/lib/nudge'
 import { CATALOG_BY_ID } from '@/lib/foodCatalog'
-import { quickLogCatalog } from '@/db/repo'
+import { deleteLog, quickLogCatalog } from '@/db/repo'
 import { defaultMeal } from '@/lib/meal'
+import { useOverlays } from '@/lib/overlays-context'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -32,6 +33,7 @@ const TONE: Record<NudgeTone, { icon: typeof Lightbulb; box: string; iconCls: st
 /** Dezenter, proaktiver Hinweis auf „Heute" — datenbasiert, ohne LLM, einklappbar. */
 export function NudgeCard({ logs, date, proteinTarget, sex, vegan, allergies, sugarLimit, hour }: Props) {
   const { t } = useTranslation()
+  const { showUndo } = useOverlays()
   const [dismissed, setDismissed] = useState(false)
 
   const day = computeDayNutrition(logs, date, {
@@ -70,9 +72,11 @@ export function NudgeCard({ logs, date, proteinTarget, sex, vegan, allergies, su
           <p className="text-sm">{message}</p>
           {nudge.foodId && CATALOG_BY_ID[nudge.foodId] && (
             <button
-              onClick={() => {
-                void quickLogCatalog(CATALOG_BY_ID[nudge.foodId!], defaultMeal(), date)
+              onClick={async () => {
+                const name = nudge.foodName ?? ''
+                const entry = await quickLogCatalog(CATALOG_BY_ID[nudge.foodId!], defaultMeal(), date)
                 setDismissed(true)
+                showUndo(t('capture.added', { name }), () => deleteLog(entry.id))
               }}
               className="flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
             >

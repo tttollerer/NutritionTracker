@@ -4,8 +4,9 @@ import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { Camera, ScanText, Barcode, Check, ImagePlus, X } from 'lucide-react'
-import { createFood, getAllergies, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
+import { createFood, deleteLog, getAllergies, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
 import { checkAllergens } from '@/lib/allergens'
+import { useOverlays } from '@/lib/overlays-context'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
@@ -20,6 +21,7 @@ import { Chip } from '@/components/ui/Chip'
 export function Add() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { showUndo } = useOverlays()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
   const recents = useLiveQuery(() => recentFoods(), [])
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
@@ -51,18 +53,20 @@ export function Add() {
   async function logCatalog(id: string) {
     const c = FOOD_CATALOG.find((f) => f.id === id)
     if (!c) return
-    await quickLogCatalog(c, meal)
+    const entry = await quickLogCatalog(c, meal)
+    showUndo(t('capture.added', { name: c.name }), () => deleteLog(entry.id))
     navigate('/')
   }
 
   async function quickLog(food: FoodItem) {
-    await logFood({
+    const entry = await logFood({
       food,
       date: todayKey(),
       meal,
       amount: food.defaultPortion?.amount ?? 100,
       unit: food.defaultPortion?.unit ?? (food.per as 'g' | 'ml'),
     })
+    showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
     navigate('/')
   }
 
