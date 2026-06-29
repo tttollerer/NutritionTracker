@@ -11,6 +11,7 @@ export const AiItem = z.object({
     protein: z.number().nonnegative(),
     carbs: z.number().nonnegative(),
     fat: z.number().nonnegative(),
+    micros: z.record(z.number().nonnegative()).optional(),
   }),
 })
 export const AiResult = z.object({ items: z.array(AiItem), notes: z.string().optional() })

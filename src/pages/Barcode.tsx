@@ -93,6 +93,7 @@ export function Barcode() {
               protein: product.food.protein,
               carbs: product.food.carbs,
               fat: product.food.fat,
+              micros: product.food.micros,
             },
           },
         ],

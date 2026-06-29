@@ -21,6 +21,8 @@ const Item = z.object({
     protein: z.number().nonnegative(),
     carbs: z.number().nonnegative(),
     fat: z.number().nonnegative(),
+    // Optionale Mikronährstoff-Schätzung je 100 g/ml (Schlüssel = Nährstoff-Katalog).
+    micros: z.record(z.number().nonnegative()).optional(),
   }),
 })
 const Result = z.object({ items: z.array(Item), notes: z.string().optional() })
@@ -39,8 +41,14 @@ const SYSTEM: Record<string, string> = {
     'Lies die abfotografierte Nährwerttabelle exakt aus. Gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100).',
 }
 
+// Mikronährstoff-Schlüssel + Einheiten (deckungsgleich mit src/lib/nutrients.ts).
+const MICRO_INSTRUCTION =
+  'Schätze in per100 zusätzlich ein Objekt "micros" mit den Mikronährstoffen je 100 g/ml, die du sinnvoll einschätzen kannst (unbekannte weglassen). Erlaubte Schlüssel und Einheiten: fiber (g), sugar (g), satFat (g), sodium (mg), iron (mg), calcium (mg), magnesium (mg), zinc (mg), potassium (mg), vitaminC (mg), vitaminD (µg), vitaminB12 (µg), omega3 (g). Werte sind Schätzungen für typische Lebensmittel dieser Art.'
+
 const JSON_INSTRUCTION =
-  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}}],"notes":string?}. Keine Erklärungen, kein Markdown.'
+  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?}. ' +
+  MICRO_INSTRUCTION +
+  ' Keine Erklärungen, kein Markdown.'
 
 async function callOpenRouter(model: string, key: string, system: string, imageBase64: string, hint?: string) {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`

@@ -63,6 +63,7 @@ export function Review() {
         protein: it.per100.protein,
         carbs: it.per100.carbs,
         fat: it.per100.fat,
+        micros: it.per100.micros,
         allergens: payload!.allergens,
         traces: payload!.traces,
         source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
