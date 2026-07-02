@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Trash2, Check } from 'lucide-react'
+import { Trash2, Check, ChevronDown } from 'lucide-react'
 import type { AiItem } from '@/lib/ai'
 import { getReview, clearReview } from '@/lib/reviewStore'
 import { checkAllergens } from '@/lib/allergens'
+import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
 import { createFood, getAllergies, logFood, savePhoto } from '@/db/repo'
 import { todayKey } from '@/lib/utils'
 import { PageHeader } from '@/components/PageHeader'
@@ -36,6 +37,13 @@ export function Review() {
   }
   function patchPer(i: number, p: Partial<AiItem['per100']>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, per100: { ...it.per100, ...p } } : it)))
+  }
+  function patchMicro(i: number, key: string, value: number) {
+    setItems((prev) =>
+      prev.map((it, idx) =>
+        idx === i ? { ...it, per100: { ...it.per100, micros: { ...(it.per100.micros ?? {}), [key]: value } } } : it,
+      ),
+    )
   }
   function remove(i: number) {
     setItems((prev) => prev.filter((_, idx) => idx !== i))
@@ -170,6 +178,11 @@ export function Review() {
                   ))}
                 </div>
               </div>
+
+              {/* Mikronährstoffe (geschätzt) — sichtbar & korrigierbar */}
+              {it.per100.micros && (
+                <ItemMicros micros={it.per100.micros} onChange={(k, v) => patchMicro(i, k, v)} />
+              )}
             </Card>
           )
         })
@@ -191,6 +204,41 @@ export function Review() {
           <Button className="w-full" onClick={confirm} disabled={hasContains && !ack}>
             <Check size={20} /> {t('review.confirm')}
           </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Geschätzte Mikronährstoffe je 100 g/ml — einklappbar und vor dem Übernehmen korrigierbar. */
+function ItemMicros({ micros, onChange }: { micros: Record<string, number>; onChange: (key: string, value: number) => void }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  // Nur bekannte Katalog-Nährstoffe anzeigen (in Katalog-Reihenfolge).
+  const keys = Object.keys(NUTRIENT_BY_KEY).filter((k) => k in micros)
+  if (keys.length === 0) return null
+  return (
+    <div className="border-t border-border pt-3">
+      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+        <ChevronDown size={14} className={open ? 'rotate-180' : ''} />
+        {t('review.microsTitle', { count: keys.length })}
+      </button>
+      {open && (
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {keys.map((k) => (
+            <label key={k} className="space-y-1">
+              <span className="block text-center text-[10px] text-muted-foreground">
+                {t(`nutrients.names.${k}`, { defaultValue: k })} ({NUTRIENT_BY_KEY[k].unit})
+              </span>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={micros[k]}
+                onChange={(e) => onChange(k, Number(e.target.value))}
+                className="px-1 text-center text-sm"
+              />
+            </label>
+          ))}
         </div>
       )}
     </div>

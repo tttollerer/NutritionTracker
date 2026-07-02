@@ -334,6 +334,7 @@
     "estimate": "KI-Schätzung — bitte prüfen.",
     "confirm": "Übernehmen",
     "perInfo": "Werte je 100 {{unit}}",
+    "microsTitle": "Mikronährstoffe – geschätzt ({{count}})",
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
     "allergyTraces": "Kann Spuren enthalten: {{list}}",
     "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
