@@ -7,6 +7,7 @@ import { Camera, Image as ImageIcon, Loader2, ChevronLeft, ShieldCheck, Mic, Spa
 import { analyzeImage, type AnalyzeMode } from '@/lib/ai'
 import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
+import { peekPendingImage, clearPendingImage } from '@/lib/captureHandoff'
 import { getSettings, updateSettings } from '@/db/repo'
 import { useSpeechRecognition } from '@/lib/speech'
 import type { Meal } from '@/db/types'
@@ -26,7 +27,9 @@ export function Capture() {
   const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(null) // verkleinertes Bild, noch nicht gesendet
+  // Direkt aus dem Quick-Sheet übergebenes Bild sofort als Vorschau übernehmen
+  // (peek statt take — die Seiten-Transition mountet diese Seite kurz doppelt).
+  const [preview, setPreview] = useState<string | null>(() => peekPendingImage())
   const [hint, setHint] = useState('')
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
 
@@ -50,13 +53,14 @@ export function Capture() {
   }
 
   async function analyze() {
-    if (!preview) return
+    if (!preview || consent !== true) return
     setError(null)
     setBusy(true)
     try {
       const result = await analyzeImage(mode, preview, hint.trim() || undefined)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
       setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined })
+      clearPendingImage()
       navigate('/review')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -66,6 +70,7 @@ export function Capture() {
   }
 
   function retake() {
+    clearPendingImage()
     setPreview(null)
     setHint('')
     setError(null)
@@ -75,7 +80,7 @@ export function Capture() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)} aria-label={t('common.back')} className="text-muted-foreground">
+        <button onClick={() => { clearPendingImage(); navigate(-1) }} aria-label={t('common.back')} className="text-muted-foreground">
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold">{title}</h1>
@@ -121,11 +126,24 @@ export function Capture() {
             {recog.listening && <p className="mt-1 text-xs text-primary">{t('coach.listening')}</p>}
           </div>
 
+          {/* Einmalige Foto-Datenschutz-Einwilligung vor dem ersten KI-Upload */}
+          {consent === false && (
+            <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+              <p className="flex items-center gap-2 font-medium">
+                <ShieldCheck size={18} className="text-primary" /> {t('capture.consentTitle')}
+              </p>
+              <p className="text-sm text-muted-foreground">{t('capture.consentBody')}</p>
+              <Button className="w-full" onClick={() => void updateSettings({ photoConsent: true })}>
+                {t('capture.consentAccept')}
+              </Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <Button variant="secondary" onClick={retake}>
               <RotateCcw size={18} /> {t('capture.retake')}
             </Button>
-            <Button onClick={analyze}>
+            <Button onClick={analyze} disabled={consent !== true}>
               <Sparkles size={18} /> {t('capture.analyze')}
             </Button>
           </div>
