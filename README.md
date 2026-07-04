@@ -4,6 +4,7 @@ Mobile-first PWA zum Tracken von Kalorien, Makros, Mineralstoffen & Vitaminen �
 KI-gestützter Schätzung aus Fotos, einem KI-Ernährungscoach und Gamification.
 
 > Detaillierter Projektplan: siehe [PLAN.md](./PLAN.md).
+> Agent-Team für den Projektabschluss: siehe [docs/AGENT_TEAM.md](./docs/AGENT_TEAM.md).
 
 ## Tech-Stack (Phase 0)
 
