@@ -47,8 +47,19 @@ export async function updateProfile(patch: Partial<Omit<Profile, 'id'>>) {
   const goals = baseGoals(updated)
   await db.transaction('rw', db.profile, db.goals, async () => {
     await db.profile.put(updated)
-    // Nur die vom System gesetzten Basis-Ziele neu berechnen; Coach-/Nutzer-Ziele bleiben.
-    await db.goals.bulkPut(goals)
+    // Basis-Ziele neu berechnen — aber Coach-Anpassungen nicht überschreiben.
+    // Regel (einfachste robuste): Nährstoffe, für die ein aktives Ziel mit
+    // createdBy 'coach' existiert, werden ausgelassen. `createdBy` ist der einzige
+    // persistierte Änderungs-Marker: applyGoalSuggestion setzt beim Anpassen immer
+    // 'coach' (auch wenn es das Basis-Ziel in-place editiert), und manuelle
+    // Ziel-Änderungen laufen ausschließlich über dieses updateProfile selbst,
+    // das die Basis-Ziele bewusst neu ableitet.
+    const coachNutrients = new Set(
+      (await db.goals.filter((g) => !g.deletedAt && g.createdBy === 'coach').toArray()).map(
+        (g) => g.nutrient,
+      ),
+    )
+    await db.goals.bulkPut(goals.filter((g) => !coachNutrients.has(g.nutrient)))
   })
   // Gewichtsänderung als Messpunkt festhalten, damit der Verlauf konsistent bleibt.
   if (patch.weightKg != null && patch.weightKg !== current.weightKg) {
@@ -324,9 +335,6 @@ export async function logFood(args: {
   photoBlobId?: string
 }): Promise<LogEntry> {
   const { food, date, meal, amount, unit, photoBlobId } = args
-  // Referenzwerte gelten je 100 g/ml; 'portion' nutzt defaultPortion oder 100er-Basis.
-  const grams = unit === 'portion' ? (food.defaultPortion?.amount ?? 100) * amount : amount
-  const factor = grams / 100
 
   const entry: LogEntry = {
     id: uuid(),
@@ -336,13 +344,7 @@ export async function logFood(args: {
     loggedAt: now(),
     amount,
     unit,
-    computed: {
-      kcal: Math.round(food.kcal * factor),
-      protein: round1(food.protein * factor),
-      carbs: round1(food.carbs * factor),
-      fat: round1(food.fat * factor),
-      micros: scaleMicros(food.micros, factor),
-    },
+    computed: computeLogValues(food, amount, unit),
     photoBlobId,
     updatedAt: now(),
   }
@@ -355,9 +357,62 @@ export async function logFood(args: {
   return entry
 }
 
+/**
+ * computed-Snapshot eines Log-Eintrags aus den Referenzwerten (je 100 g/ml)
+ * des Lebensmittels berechnen; 'portion' nutzt defaultPortion oder 100er-Basis.
+ * Gemeinsame Basis für logFood und updateLog.
+ */
+function computeLogValues(food: FoodItem, amount: number, unit: Unit): LogEntry['computed'] {
+  const grams = unit === 'portion' ? (food.defaultPortion?.amount ?? 100) * amount : amount
+  const factor = grams / 100
+  return {
+    kcal: Math.round(food.kcal * factor),
+    protein: round1(food.protein * factor),
+    carbs: round1(food.carbs * factor),
+    fat: round1(food.fat * factor),
+    micros: scaleMicros(food.micros, factor),
+  }
+}
+
+/**
+ * Menge und/oder Mahlzeit eines Log-Eintrags ändern; der computed-Snapshot wird
+ * aus dem zugehörigen FoodItem neu berechnet. Gibt den aktualisierten Eintrag
+ * zurück (undefined, wenn der Eintrag fehlt oder gelöscht ist).
+ */
+export async function updateLog(
+  id: string,
+  patch: { amount?: number; unit?: Unit; meal?: Meal },
+): Promise<LogEntry | undefined> {
+  return db.transaction('rw', db.logs, db.foods, async () => {
+    const entry = await db.logs.get(id)
+    if (!entry || entry.deletedAt) return undefined
+    const food = await db.foods.get(entry.foodId)
+    const amount = patch.amount ?? entry.amount
+    const unit = patch.unit ?? entry.unit
+    const updated: LogEntry = {
+      ...entry,
+      amount,
+      unit,
+      meal: patch.meal ?? entry.meal,
+      // Ohne Food (sollte nicht vorkommen) bleibt der alte Snapshot stehen,
+      // statt Werte aus der Luft zu greifen.
+      computed: food ? computeLogValues(food, amount, unit) : entry.computed,
+      updatedAt: now(),
+    }
+    await db.logs.put(updated)
+    return updated
+  })
+}
+
 /** Soft-Delete eines Log-Eintrags (sync-freundlich). */
 export async function deleteLog(id: string) {
   await db.logs.update(id, { deletedAt: now(), updatedAt: now() })
+}
+
+/** Soft-Delete rückgängig machen (Undo-Snackbar). */
+export async function restoreLog(id: string) {
+  // Dexie entfernt Properties, die im update() auf undefined gesetzt werden.
+  await db.logs.update(id, { deletedAt: undefined, updatedAt: now() })
 }
 
 /** Zuletzt benutzte Lebensmittel (für Schnell-Wiederholung). */
