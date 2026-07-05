@@ -7,6 +7,7 @@ import {
   isAbortError,
   parseCoachRequest,
 } from './lib/coachShared'
+import { createGuard } from './lib/guard'
 
 /**
  * KI-Ernährungscoach (PLAN.md §9.3, API_CONTRACT.md §3, v1.1). Textbasiert,
@@ -18,13 +19,17 @@ import {
  * Fehler: immer Envelope { error, code } (Vertrag §1); Stream-Abbrüche als
  * `event: error`-Block im 200er-Stream (Vertrag §3). Upstream-Rohtexte gehen
  * nur in console.error, nie in Antworten.
+ * Schutzschichten (Origin, Body-Limit, Rate-Limit, Tagesbudget): lib/guard.ts.
  *
- * Secrets (nur in Netlify-Env): OPENROUTER_API_KEY, optional OPENROUTER_MODEL.
+ * Secrets (nur in Netlify-Env): OPENROUTER_API_KEY, optional OPENROUTER_MODEL,
+ * ALLOWED_ORIGIN, DAILY_BUDGET.
  */
 
 const DEFAULT_MODEL = 'google/gemini-2.0-flash-001'
 const MAX_BODY_BYTES = 256 * 1024 // Vertrag §1: coach ≤ 256 KB (inkl. optionalem, klein skaliertem Foto)
 const UPSTREAM_TIMEOUT_MS = 20_000
+
+const guard = createGuard({ name: 'coach', maxBodyBytes: MAX_BODY_BYTES })
 
 function systemPrompt(context: unknown, memory: unknown, hasImage: boolean): string {
   // White-Label: Coach-Name/-Persönlichkeit pro Mandant über Server-ENV.
@@ -61,6 +66,11 @@ export default async (req: Request): Promise<Response> => {
   // 405 behält den Status, trägt aber den INVALID_REQUEST-Envelope (Vertrag §1¹).
   if (req.method !== 'POST') return errorResponse('INVALID_REQUEST', 405)
 
+  // Schutzschicht 1–3 (Paket 3): Origin (403) → Content-Length (413) →
+  // Rate-Limit (429), alles bevor der Body eingelesen wird.
+  const blocked = guard.before(req)
+  if (blocked) return blocked
+
   const key = process.env.OPENROUTER_API_KEY
   if (!key) {
     // Vertrag §1²: 500 + UPSTREAM_ERROR, keine ENV-Namen im Body.
@@ -69,10 +79,15 @@ export default async (req: Request): Promise<Response> => {
   }
 
   const raw = await req.text()
+  // Content-Length kann fehlen/lügen: Stringlänge VOR jedem Parse prüfen.
   if (raw.length > MAX_BODY_BYTES) return errorResponse('PAYLOAD_TOO_LARGE')
 
   const parsed = parseCoachRequest(raw)
   if (!parsed.ok) return errorResponse('INVALID_REQUEST')
+
+  // Schutzschicht 4: Tagesbudget erst verbuchen, wenn der Request gültig ist.
+  const exhausted = guard.consumeBudget()
+  if (exhausted) return exhausted
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
   const messages = buildUpstreamMessages(

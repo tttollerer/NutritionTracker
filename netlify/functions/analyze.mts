@@ -1,37 +1,30 @@
-import { z } from 'zod'
+import { AnalyzeResultSchema } from '../../src/lib/apiContract'
+import { analyzeErrorResponse, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
+import { isAbortError } from './lib/coachShared'
+import { createGuard } from './lib/guard'
 
 /**
- * OpenRouter-Proxy (PLAN.md §6). Versteckt den API-Key serverseitig, baut den
- * modus-spezifischen Prompt, erzwingt strukturiertes JSON und validiert es mit
- * zod, bevor es zum Client geht. Modell per ENV austauschbar.
+ * OpenRouter-Proxy für die Bildanalyse (PLAN.md §6, API_CONTRACT.md §1/§2,
+ * v1.1). Versteckt den API-Key serverseitig, baut den modus-spezifischen
+ * Prompt, erzwingt strukturiertes JSON und validiert es mit zod, bevor es zum
+ * Client geht. Modell per ENV austauschbar.
  *
- * Secrets (nur in Netlify-Env): OPENROUTER_API_KEY, optional OPENROUTER_MODEL.
+ * Fehler: immer Envelope { error, code } (Vertrag §1). Upstream-Rohtexte
+ * (OpenRouter-Body, String(e)) gehen nur in console.error, nie in Antworten.
+ * Schutzschichten (Origin, Body-Limit, Rate-Limit, Tagesbudget): lib/guard.ts.
+ *
+ * Secrets (nur in Netlify-Env): OPENROUTER_API_KEY, optional OPENROUTER_MODEL,
+ * ALLOWED_ORIGIN, DAILY_BUDGET.
  */
 
-const MAX_BODY_BYTES = 8 * 1024 * 1024 // ~8 MB (verkleinertes Bild ist klein)
+// Vertrag §1 (Paket 3): 6 MB statt 8 MB — bleibt unter dem 6-MB-Sync-Limit
+// von Netlify Functions; das client-seitig auf ~1024 px verkleinerte JPEG
+// liegt ohnehin weit darunter.
+const MAX_BODY_BYTES = 6 * 1024 * 1024
 const DEFAULT_MODEL = 'google/gemini-2.0-flash-001'
+const UPSTREAM_TIMEOUT_MS = 20_000
 
-const Item = z.object({
-  name: z.string().min(1),
-  amount: z.number().nonnegative(),
-  unit: z.enum(['g', 'ml', 'portion']),
-  confidence: z.number().min(0).max(1).optional(),
-  per100: z.object({
-    kcal: z.number().nonnegative(),
-    protein: z.number().nonnegative(),
-    carbs: z.number().nonnegative(),
-    fat: z.number().nonnegative(),
-    // Optionale Mikronährstoff-Schätzung je 100 g/ml (Schlüssel = Nährstoff-Katalog).
-    micros: z.record(z.number().nonnegative()).optional(),
-  }),
-})
-const Result = z.object({ items: z.array(Item), notes: z.string().optional() })
-
-const RequestSchema = z.object({
-  mode: z.enum(['meal', 'label', 'portion']),
-  imageBase64: z.string().min(1),
-  hint: z.string().max(280).optional(),
-})
+const guard = createGuard({ name: 'analyze', maxBodyBytes: MAX_BODY_BYTES })
 
 const SYSTEM: Record<string, string> = {
   meal: 'Du bist ein Ernährungs-Erkennungssystem. Erkenne die Lebensmittel auf dem Foto und schätze die gegessene Menge. Gib für jedes Lebensmittel realistische Nährwerte je 100 g/ml an. Mengen sind Schätzungen — setze confidence entsprechend.',
@@ -72,70 +65,70 @@ async function callOpenRouter(model: string, key: string, system: string, imageB
         },
       ],
     }),
+    // Paket 3: hängender Upstream wird abgebrochen → UPSTREAM_TIMEOUT (504).
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 300)}`)
+    // Rohtext NUR ins Server-Log (Vertrag §1) — der Client sieht den Envelope.
+    const text = await res.text().catch(() => '')
+    console.error(`analyze: OpenRouter ${res.status}: ${text.slice(0, 300)}`)
+    throw new Error(`OpenRouter-Status ${res.status}`)
   }
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
   return data.choices?.[0]?.message?.content ?? ''
 }
 
-function extractJson(content: string): unknown {
-  const trimmed = content.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    const start = trimmed.indexOf('{')
-    const end = trimmed.lastIndexOf('}')
-    if (start >= 0 && end > start) return JSON.parse(trimmed.slice(start, end + 1))
-    throw new Error('Antwort enthielt kein gültiges JSON')
-  }
-}
-
 export default async (req: Request): Promise<Response> => {
-  if (req.method !== 'POST') {
-    return json({ error: 'Method not allowed' }, 405)
-  }
+  // 405 behält den Status, trägt aber den INVALID_REQUEST-Envelope (Vertrag §1¹).
+  if (req.method !== 'POST') return analyzeErrorResponse('INVALID_REQUEST', 405)
+
+  // Schutzschicht 1–3: Origin (403) → Content-Length (413) → Rate-Limit (429),
+  // alles bevor der Body überhaupt eingelesen wird.
+  const blocked = guard.before(req)
+  if (blocked) return blocked
+
   const key = process.env.OPENROUTER_API_KEY
-  if (!key) return json({ error: 'OPENROUTER_API_KEY nicht gesetzt' }, 500)
+  if (!key) {
+    // Vertrag §1²: 500 + UPSTREAM_ERROR, keine ENV-Namen im Body.
+    console.error('analyze: OPENROUTER_API_KEY nicht gesetzt')
+    return analyzeErrorResponse('UPSTREAM_ERROR', 500)
+  }
 
   const raw = await req.text()
-  if (raw.length > MAX_BODY_BYTES) return json({ error: 'Bild zu groß' }, 413)
+  // Content-Length kann fehlen/lügen: Stringlänge VOR jedem Parse prüfen.
+  const tooLarge = guard.bodyCheck(raw)
+  if (tooLarge) return tooLarge
 
-  let parsed: z.infer<typeof RequestSchema>
-  try {
-    parsed = RequestSchema.parse(JSON.parse(raw))
-  } catch {
-    return json({ error: 'Ungültige Anfrage' }, 400)
-  }
+  const parsed = parseAnalyzeRequest(raw)
+  if (!parsed.ok) return analyzeErrorResponse('INVALID_REQUEST')
+
+  // Schutzschicht 4: Tagesbudget erst verbuchen, wenn der Request gültig ist
+  // (ein Request = eine Budget-Einheit, auch mit internem Retry).
+  const exhausted = guard.consumeBudget()
+  if (exhausted) return exhausted
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
-  const system = SYSTEM[parsed.mode]
+  const system = SYSTEM[parsed.data.mode]
 
-  try {
-    // Ein Retry, falls das Modell mal kein sauberes JSON liefert.
-    let lastErr: unknown
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const content = await callOpenRouter(model, key, system, parsed.imageBase64, parsed.hint)
-        const result = Result.parse(extractJson(content))
-        return json(result, 200)
-      } catch (e) {
-        lastErr = e
-      }
+  // Ein Retry, falls das Modell mal kein sauberes JSON liefert; nach einem
+  // Timeout wird NICHT erneut versucht (sonst wartet der Client bis zu 40 s).
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const content = await callOpenRouter(model, key, system, parsed.data.imageBase64, parsed.data.hint)
+      const result = AnalyzeResultSchema.parse(extractJson(content))
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    } catch (e) {
+      lastErr = e
+      if (isAbortError(e)) break
     }
-    return json({ error: String(lastErr) }, 502)
-  } catch (e) {
-    return json({ error: String(e) }, 502)
   }
-}
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+  // String(lastErr) nur ins Log — der Client bekommt ausschließlich den Envelope.
+  console.error('analyze: Upstream fehlgeschlagen:', lastErr)
+  return analyzeErrorResponse(isAbortError(lastErr) ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR')
 }
 
 export const config = { path: '/api/analyze' }

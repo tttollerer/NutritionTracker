@@ -163,4 +163,35 @@ describe('coach.mts (Function-Verhalten, Vertrag v1.1)', () => {
     expect(res.status).toBe(413)
     expect(ApiErrorSchema.parse(await res.json()).code).toBe('PAYLOAD_TOO_LARGE')
   })
+
+  it('Origin-Check (guard, Paket 3): fremde/fehlende Origin → 403, erlaubte streamt', async () => {
+    vi.stubEnv('ALLOWED_ORIGIN', 'https://nutriscan.netlify.app')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(['Hallo!'])))
+
+    const blocked = await handler(coachRequest(VALID_BODY)) // ohne Origin-Header
+    expect(blocked.status).toBe(403)
+    expect(ApiErrorSchema.parse(await blocked.json()).code).toBe('INVALID_REQUEST')
+
+    const ok = await handler(
+      new Request('http://localhost/api/coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', origin: 'https://nutriscan.netlify.app' },
+        body: JSON.stringify(VALID_BODY),
+      }),
+    )
+    expect(ok.status).toBe(200)
+    expect(await ok.text()).toBe('Hallo!')
+  })
+
+  it('Content-Length über 256 KB → 413 VOR dem Einlesen des Bodys', async () => {
+    const req = new Request('http://localhost/api/coach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'content-length': String(512 * 1024) },
+      body: JSON.stringify(VALID_BODY),
+    })
+    const res = await handler(req)
+    expect(res.status).toBe(413)
+    expect(ApiErrorSchema.parse(await res.json()).code).toBe('PAYLOAD_TOO_LARGE')
+    expect(req.bodyUsed).toBe(false)
+  })
 })
