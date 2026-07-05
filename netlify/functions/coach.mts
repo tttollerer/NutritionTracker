@@ -1,26 +1,32 @@
-import { z } from 'zod'
+import { encodeCoachStreamError } from '../../src/lib/apiContract'
+import {
+  buildUpstreamMessages,
+  coachError,
+  createSuggestionsFilter,
+  errorResponse,
+  isAbortError,
+  parseCoachRequest,
+} from './lib/coachShared'
 
 /**
- * KI-Ernährungscoach (PLAN.md §9.3). Textbasiert, bekommt eine aggregierte
- * Zusammenfassung (Profil, Ziele, Tages-/Wochenwerte, Defizite) + Gedächtnis
- * (Diätform/Allergien/Ton) und gibt Beratung sowie bestätigungspflichtige
- * Vorschläge (Ziele/Challenges/Log) als strukturiertes JSON zurück.
+ * KI-Ernährungscoach (PLAN.md §9.3, API_CONTRACT.md §3, v1.1). Textbasiert,
+ * bekommt eine aggregierte Zusammenfassung (Profil, Ziele, Tages-/Wochenwerte,
+ * Defizite) + Gedächtnis (Diätform/Allergien/Ton), optional ein Foto
+ * (Foto-Feedback) und gibt Beratung sowie bestätigungspflichtige Vorschläge
+ * (Ziele/Challenges/Log) als serverseitig validiertes JSON zurück.
+ *
+ * Fehler: immer Envelope { error, code } (Vertrag §1); Stream-Abbrüche als
+ * `event: error`-Block im 200er-Stream (Vertrag §3). Upstream-Rohtexte gehen
+ * nur in console.error, nie in Antworten.
  *
  * Secrets (nur in Netlify-Env): OPENROUTER_API_KEY, optional OPENROUTER_MODEL.
  */
 
 const DEFAULT_MODEL = 'google/gemini-2.0-flash-001'
-const MAX_BODY_BYTES = 256 * 1024
+const MAX_BODY_BYTES = 256 * 1024 // Vertrag §1: coach ≤ 256 KB (inkl. optionalem, klein skaliertem Foto)
+const UPSTREAM_TIMEOUT_MS = 20_000
 
-const Message = z.object({ role: z.enum(['user', 'assistant']), content: z.string().min(1).max(4000) })
-
-const RequestSchema = z.object({
-  messages: z.array(Message).min(1).max(40),
-  context: z.record(z.unknown()).optional(),
-  memory: z.record(z.unknown()).optional(),
-})
-
-function systemPrompt(context: unknown, memory: unknown): string {
+function systemPrompt(context: unknown, memory: unknown, hasImage: boolean): string {
   // White-Label: Coach-Name/-Persönlichkeit pro Mandant über Server-ENV.
   const coachName = process.env.COACH_NAME?.trim()
   const coachPersona = process.env.COACH_PERSONA?.trim()
@@ -36,6 +42,11 @@ function systemPrompt(context: unknown, memory: unknown): string {
     'Enthält der Kontext `glucose` (Blutzucker), gehe bei sehr hohen/niedrigen Werten vorsichtig und unterstützend darauf ein — ohne medizinische Diagnose.',
     'Enthält der Kontext `body` (jüngstes Gewicht + `weeklyRateKg` = Veränderung pro Woche), steuere an der REALEN Veränderung statt an der Formel: passt die Wochenrate nicht zum Ziel (z. B. Abnehmen, aber Rate ~0 über Wochen), erkläre das und schlage eine moderate Anpassung vor. Eine gesunde Rate liegt grob bei 0,3–0,7 kg/Woche.',
     'Der Kontext enthält `meals` (heutige Mahlzeiten mit kcal + Protein) und `now.hour` (Tageszeit). Nutze das für Timing-Tipps: ist das Protein sehr ungleich verteilt oder sind je nach Uhrzeit noch Mahlzeiten offen, schlage eine gleichmäßigere Verteilung vor (Richtwert grob 0,3–0,4 g Protein pro kg je Mahlzeit).',
+    ...(hasImage
+      ? [
+          'Der letzten Nutzernachricht ist ein FOTO beigefügt (z. B. eine Mahlzeit oder ein Produkt). Gib konkretes, wertschätzendes Feedback zum abgebildeten Essen im Kontext der Ziele und heutigen Werte: Was passt gut, was ließe sich verbessern? Erfinde dabei keine exakten Nährwerte oder Mikronährwerte — bleibe bei groben, ehrlichen Einschätzungen. Passt das Gezeigte gut, kannst du es als Log-Vorschlag (logs) mit realistischen Schätzwerten vorschlagen.',
+        ]
+      : []),
     'Berücksichtige hinterlegte Allergien/Unverträglichkeiten strikt und schlage niemals Lebensmittel vor, die diese enthalten.',
     'Gib keine medizinische Beratung. Bei sehr niedrigen Kalorienzielen oder Anzeichen für gestörtes Essverhalten reagiere vorsichtig und unterstützend und verweise ggf. auf Fachleute.',
     `KONTEXT (aggregiert): ${JSON.stringify(context ?? {})}`,
@@ -47,25 +58,27 @@ function systemPrompt(context: unknown, memory: unknown): string {
 }
 
 export default async (req: Request): Promise<Response> => {
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
+  // 405 behält den Status, trägt aber den INVALID_REQUEST-Envelope (Vertrag §1¹).
+  if (req.method !== 'POST') return errorResponse('INVALID_REQUEST', 405)
+
   const key = process.env.OPENROUTER_API_KEY
-  if (!key) return json({ error: 'OPENROUTER_API_KEY nicht gesetzt' }, 500)
-
-  const raw = await req.text()
-  if (raw.length > MAX_BODY_BYTES) return json({ error: 'Anfrage zu groß' }, 413)
-
-  let parsed: z.infer<typeof RequestSchema>
-  try {
-    parsed = RequestSchema.parse(JSON.parse(raw))
-  } catch {
-    return json({ error: 'Ungültige Anfrage' }, 400)
+  if (!key) {
+    // Vertrag §1²: 500 + UPSTREAM_ERROR, keine ENV-Namen im Body.
+    console.error('coach: OPENROUTER_API_KEY nicht gesetzt')
+    return errorResponse('UPSTREAM_ERROR', 500)
   }
 
+  const raw = await req.text()
+  if (raw.length > MAX_BODY_BYTES) return errorResponse('PAYLOAD_TOO_LARGE')
+
+  const parsed = parseCoachRequest(raw)
+  if (!parsed.ok) return errorResponse('INVALID_REQUEST')
+
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
-  const messages = [
-    { role: 'system', content: systemPrompt(parsed.context, parsed.memory) },
-    ...parsed.messages,
-  ]
+  const messages = buildUpstreamMessages(
+    parsed.data,
+    systemPrompt(parsed.data.context, parsed.data.memory, Boolean(parsed.data.imageBase64)),
+  )
 
   let upstream: Response
   try {
@@ -73,23 +86,33 @@ export default async (req: Request): Promise<Response> => {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, stream: true, messages }),
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     })
   } catch (e) {
-    return json({ error: String(e) }, 502)
+    console.error('coach: OpenRouter-Fetch fehlgeschlagen:', e)
+    return errorResponse(isAbortError(e) ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR')
   }
   if (!upstream.ok || !upstream.body) {
-    return json({ error: `OpenRouter ${upstream.status}: ${(await upstream.text()).slice(0, 200)}` }, 502)
+    const detail = await upstream.text().catch(() => '')
+    console.error(`coach: OpenRouter ${upstream.status}: ${detail.slice(0, 300)}`)
+    return errorResponse('UPSTREAM_ERROR')
   }
 
-  // OpenRouter-SSE in reinen Text-Token-Stream umwandeln und an den Client durchreichen.
+  // OpenRouter-SSE in reinen Text-Token-Stream umwandeln. Die Suggestions-Zeile
+  // (nach ###SUGGESTIONS###) wird serverseitig gepuffert, validiert und nur
+  // gültig weitergereicht; Abbrüche gehen als error-Event in den Stream.
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const reader = upstream.body!.getReader()
       const decoder = new TextDecoder()
       const encoder = new TextEncoder()
+      const filter = createSuggestionsFilter()
+      const emit = (text: string) => {
+        if (text) controller.enqueue(encoder.encode(text))
+      }
       let buf = ''
       try {
-        for (;;) {
+        streaming: for (;;) {
           const { done, value } = await reader.read()
           if (done) break
           buf += decoder.decode(value, { stream: true })
@@ -99,21 +122,26 @@ export default async (req: Request): Promise<Response> => {
             const l = line.trim()
             if (!l.startsWith('data:')) continue
             const data = l.slice(5).trim()
-            if (data === '[DONE]') {
-              controller.close()
-              return
-            }
+            if (data === '[DONE]') break streaming
             try {
               const piece = JSON.parse(data) as { choices?: { delta?: { content?: string } }[] }
               const delta = piece.choices?.[0]?.delta?.content
-              if (delta) controller.enqueue(encoder.encode(delta))
+              if (delta) emit(filter.push(delta))
             } catch {
               /* Teil-Chunk / Keep-Alive ignorieren */
             }
           }
         }
+        const fin = filter.finish()
+        if (fin.dropped) console.error('coach: ungültige Suggestions-Zeile verworfen')
+        emit(fin.text)
       } catch (e) {
-        controller.enqueue(encoder.encode(`\n[Fehler: ${String(e)}]`))
+        // Vertrag §3: error-Event statt "[Fehler: …]"-Text; Rohfehler nur ins Log.
+        console.error('coach: Stream abgebrochen:', e)
+        const fin = filter.finish()
+        if (fin.dropped) console.error('coach: ungültige Suggestions-Zeile verworfen')
+        emit(fin.text)
+        emit(encodeCoachStreamError(coachError(isAbortError(e) ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR')))
       }
       controller.close()
     },
@@ -123,10 +151,6 @@ export default async (req: Request): Promise<Response> => {
     status: 200,
     headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' },
   })
-}
-
-function json(body: unknown, status: number): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 }
 
 export const config = { path: '/api/coach' }
