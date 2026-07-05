@@ -107,13 +107,14 @@ export interface NewFoodInput {
   barcode?: string
 }
 
-/** Neues Lebensmittel im Katalog anlegen. */
+/**
+ * Lebensmittel im Katalog anlegen — mit Dedupe: existiert bereits ein Eintrag mit
+ * gleichem Barcode (oder ersatzweise gleichem Namen), wird dieser aktualisiert
+ * (Upsert) statt ein Duplikat zu erzeugen. defaultPortion des Treffers bleibt erhalten.
+ */
 export async function createFood(input: NewFoodInput): Promise<FoodItem> {
-  const food: FoodItem = {
-    id: uuid(),
-    name: input.name.trim(),
-    source: input.source ?? 'manual',
-    barcode: input.barcode,
+  const name = input.name.trim()
+  const values = {
     per: input.per,
     kcal: input.kcal,
     protein: input.protein,
@@ -122,6 +123,36 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
     micros: input.micros && Object.keys(input.micros).length ? input.micros : undefined,
     allergens: input.allergens?.length ? input.allergens : undefined,
     traces: input.traces?.length ? input.traces : undefined,
+  }
+
+  let existing: FoodItem | undefined
+  if (input.barcode) {
+    existing = await db.foods.where('barcode').equals(input.barcode).filter((f) => !f.deletedAt).first()
+  }
+  if (!existing) {
+    const lower = name.toLowerCase()
+    existing = await db.foods.filter((f) => !f.deletedAt && f.name.toLowerCase() === lower).first()
+  }
+
+  if (existing) {
+    const updated: FoodItem = {
+      ...existing,
+      ...values,
+      name,
+      barcode: input.barcode ?? existing.barcode,
+      source: input.source ?? existing.source,
+      updatedAt: now(),
+    }
+    await db.foods.put(updated)
+    return updated
+  }
+
+  const food: FoodItem = {
+    id: uuid(),
+    name,
+    source: input.source ?? 'manual',
+    barcode: input.barcode,
+    ...values,
     createdAt: now(),
     updatedAt: now(),
   }
@@ -172,11 +203,6 @@ export async function addGlucose(mgdl: number, context: GlucoseContext, note?: s
 
 export async function deleteGlucose(id: string) {
   await db.glucose.update(id, { deletedAt: now(), updatedAt: now() })
-}
-
-export async function recentGlucose(limit = 10): Promise<GlucoseReading[]> {
-  const all = await db.glucose.filter((g) => !g.deletedAt).toArray()
-  return all.sort((a, b) => b.loggedAt - a.loggedAt).slice(0, limit)
 }
 
 // ---- Verlaufswerte (Körper/Labor/Vitalwerte/Insulin) ----
@@ -284,12 +310,8 @@ export async function quickLogCatalog(
 /** Verkleinertes Foto lokal speichern, gibt die Foto-ID zurück. */
 export async function savePhoto(dataUrl: string): Promise<string> {
   const id = uuid()
-  await db.photos.put({ id, dataUrl, createdAt: now() })
+  await db.photos.put({ id, dataUrl, createdAt: now(), updatedAt: now() })
   return id
-}
-
-export async function getPhoto(id: string) {
-  return db.photos.get(id)
 }
 
 /** Eine Portion eines Lebensmittels für einen Tag/Mahlzeit loggen. */
@@ -367,12 +389,24 @@ export function waterGoalMl(weightKg?: number): number {
 }
 
 export async function addWater(ml: number, date = todayKey()) {
-  await db.water.put({ id: uuid(), date, ml, loggedAt: now() })
+  await db.water.put({ id: uuid(), date, ml, loggedAt: now(), updatedAt: now() })
 }
 
-/** Letzten Wasser-Eintrag des Tages zurücknehmen (Undo). */
+/**
+ * Letzten Wasser-Eintrag des Tages zurücknehmen (Undo).
+ * Bewusst harter Delete: Das Undo entfernt einen soeben lokal angelegten Eintrag,
+ * und die Wasser-Anzeige summiert ohne deletedAt-Filter. Beim Cloud-Sync (Phase 5)
+ * auf Soft-Delete (deletedAt-Tombstone, Feld existiert seit Schema v5) umstellen.
+ */
 export async function undoLastWater(date = todayKey()) {
-  const entries = await db.water.where('date').equals(date).toArray()
+  const entries = await db.water.where('date').equals(date).filter((w) => !w.deletedAt).toArray()
   const last = entries.sort((a, b) => b.loggedAt - a.loggedAt)[0]
   if (last) await db.water.delete(last.id)
+}
+
+/** ALLE Stores leeren (kompletter Reset, z. B. „Onboarding erneut"). */
+export async function resetAllData() {
+  await db.transaction('rw', db.tables, async () => {
+    await Promise.all(db.tables.map((t) => t.clear()))
+  })
 }

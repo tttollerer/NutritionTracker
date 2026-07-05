@@ -207,6 +207,14 @@
     "backup": "Backup",
     "export": "Exportieren",
     "import": "Importieren",
+    "importConfirmTitle": "Backup importieren?",
+    "importConfirmBody": "Der Import überschreibt alle vorhandenen Daten in der App durch den Stand aus der Backup-Datei.",
+    "importConfirmCta": "Überschreiben & importieren",
+    "importSuccess": "Backup erfolgreich importiert.",
+    "importError": "Import abgebrochen: keine gültige Backup-Datei. Deine Daten sind unverändert.",
+    "resetConfirmTitle": "Alles zurücksetzen?",
+    "resetConfirmBody": "Alle Daten werden gelöscht: Profil, Einträge, Messwerte, Fotos und Einstellungen. Tipp: vorher ein Backup exportieren.",
+    "resetConfirmCta": "Alles löschen",
     "edit": "Profil bearbeiten",
     "save": "Speichern",
     "proteinPerKg": "Protein (g/kg)",
@@ -338,6 +346,11 @@
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
     "allergyTraces": "Kann Spuren enthalten: {{list}}",
     "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
+  },
+  "pwa": {
+    "updateAvailable": "Update verfügbar",
+    "reload": "Neu laden",
+    "dismiss": "Später"
   },
   "common": {
     "loading": "Lädt …",

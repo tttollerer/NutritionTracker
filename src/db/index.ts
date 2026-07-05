@@ -35,8 +35,8 @@ export class NutritionDB extends Dexie {
   glucose!: Table<GlucoseReading, string>
   measurements!: Table<Measurement, string>
 
-  constructor() {
-    super('nutritiontracker')
+  constructor(name = 'nutritiontracker') {
+    super(name)
     this.version(1).stores({
       foods: 'id, name, barcode, updatedAt, deletedAt',
       logs: 'id, foodId, date, meal, updatedAt, deletedAt, [date+meal]',
@@ -61,6 +61,29 @@ export class NutritionDB extends Dexie {
     this.version(4).stores({
       measurements: 'id, type, date, loggedAt, deletedAt, [type+date]',
     })
+    // v5: Sync-Bereitschaft für Wasser & Fotos — updatedAt (und deletedAt als
+    // Tombstone-Feld) nachrüsten. Bestandsdaten bekommen updatedAt = Migrationszeitpunkt.
+    // Die Migration ist idempotent: bereits gesetzte Werte bleiben unangetastet.
+    this.version(5)
+      .stores({
+        water: 'id, date, loggedAt, updatedAt, deletedAt',
+        photos: 'id, createdAt, updatedAt, deletedAt',
+      })
+      .upgrade(async (tx) => {
+        const t = Date.now()
+        await tx
+          .table('water')
+          .toCollection()
+          .modify((w: { updatedAt?: number }) => {
+            if (w.updatedAt == null) w.updatedAt = t
+          })
+        await tx
+          .table('photos')
+          .toCollection()
+          .modify((p: { updatedAt?: number }) => {
+            if (p.updatedAt == null) p.updatedAt = t
+          })
+      })
   }
 }
 
