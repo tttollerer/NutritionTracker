@@ -7,8 +7,8 @@ import type { AiItem } from '@/lib/ai'
 import { getReview, clearReview, presetsFor, presetLabel, amountForUnitSwitch } from '@/lib/reviewStore'
 import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
-import { createFood, findFoodByName, getAllergies, logFood, savePhoto } from '@/db/repo'
-import type { Unit } from '@/db/types'
+import { createFood, findFoodByName, findFoodMatch, getAllergies, logFood, savePhoto } from '@/db/repo'
+import type { FoodItem, Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -21,6 +21,12 @@ export function Review() {
   const navigate = useNavigate()
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
+  // Stabile Schlüssel parallel zu `items`, damit der "schon gespeichert?"-Hinweis auch
+  // nach dem Löschen einzelner Items dem richtigen Eintrag zugeordnet bleibt.
+  const [keys, setKeys] = useState<number[]>(() => (payload?.items ?? []).map((_, i) => i))
+  const [matches, setMatches] = useState<Record<number, FoodItem>>({})
+  const [dismissedMatches, setDismissedMatches] = useState<Set<number>>(new Set())
+  const [reusedFoodId, setReusedFoodId] = useState<Record<number, string>>({})
   const [ack, setAck] = useState(false)
   const [busy, setBusy] = useState(false)
   // Lernschleife: Namen (lowercase), die beim Laden im Katalog gefunden und
@@ -30,6 +36,26 @@ export function Review() {
 
   useEffect(() => {
     if (!payload) navigate('/add', { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Einmalig prüfen, ob eines der erkannten Produkte bereits im Katalog liegt
+  // (per Barcode oder Name) — wird nur vorgeschlagen, nie automatisch übernommen
+  // (im Unterschied zum stillen Dedupe-Upsert von createFood beim Bestätigen).
+  useEffect(() => {
+    if (!payload) return
+    let cancelled = false
+    ;(async () => {
+      const found: Record<number, FoodItem> = {}
+      for (let i = 0; i < payload.items.length; i++) {
+        const m = await findFoodMatch({ name: payload.items[i].name, barcode: payload.barcode })
+        if (m) found[keys[i]] = m
+      }
+      if (!cancelled) setMatches(found)
+    })()
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -82,6 +108,18 @@ export function Review() {
   }
   function remove(i: number) {
     setItems((prev) => prev.filter((_, idx) => idx !== i))
+    setKeys((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  /** Gespeicherte Nährwerte des gefundenen Produkts übernehmen (Nutzer-Entscheidung). */
+  function adoptExistingFood(i: number, food: FoodItem) {
+    patch(i, { name: food.name, unit: food.per })
+    patchPer(i, { kcal: food.kcal, protein: food.protein, carbs: food.carbs, fat: food.fat, micros: food.micros })
+    setReusedFoodId((prev) => ({ ...prev, [keys[i]]: food.id }))
+    setDismissedMatches((prev) => new Set(prev).add(keys[i]))
+  }
+  function dismissMatch(i: number) {
+    setDismissedMatches((prev) => new Set(prev).add(keys[i]))
   }
 
   // Echter Abgleich: OFF-Allergen-/Spuren-Tags des Produkts (Primärquelle) +
@@ -99,24 +137,33 @@ export function Review() {
       const date = todayKey()
       // Mahlzeitenfoto einmal speichern, ID an alle Einträge hängen.
       const photoBlobId = payload!.photo ? await savePhoto(payload!.photo) : undefined
-      for (const it of items) {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i]
         const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
-        // createFood upsertet per Barcode/Name (Dedupe seit Welle 2) — bekannte
-        // Produkte werden aktualisiert statt dupliziert; logFood merkt sich
-        // anschließend die Menge als defaultPortion (Lernschleife).
-        const food = await createFood({
-          name: it.name,
-          per,
-          kcal: it.per100.kcal,
-          protein: it.per100.protein,
-          carbs: it.per100.carbs,
-          fat: it.per100.fat,
-          micros: it.per100.micros,
-          allergens: payload!.allergens,
-          traces: payload!.traces,
-          source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
-          barcode: payload!.barcode,
-        })
+        const key = keys[i]
+        // Gefundener Treffer, den der Nutzer NICHT explizit übernommen hat → als
+        // eigenständiges Produkt anlegen (kein stilles Überschreiben der
+        // bestehenden Werte durch den createFood-Dedupe-Upsert). Kein Treffer
+        // oder ausdrücklich übernommen → normales Dedupe-Verhalten (Welle 2):
+        // bekannte Produkte werden aktualisiert statt dupliziert.
+        const dedupe = !(matches[key] && !reusedFoodId[key])
+        const food = await createFood(
+          {
+            name: it.name,
+            per,
+            kcal: it.per100.kcal,
+            protein: it.per100.protein,
+            carbs: it.per100.carbs,
+            fat: it.per100.fat,
+            micros: it.per100.micros,
+            allergens: payload!.allergens,
+            traces: payload!.traces,
+            source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
+            barcode: payload!.barcode,
+          },
+          { dedupe },
+        )
+        // logFood merkt sich anschließend die Menge als defaultPortion (Lernschleife).
         await logFood({ food, date, meal: payload!.meal, amount: it.amount || (it.unit === 'portion' ? 1 : 100), unit: it.unit, photoBlobId })
       }
       clearReview()
@@ -189,6 +236,28 @@ export function Review() {
                     <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round(it.confidence * 100)}%` }} />
                   </div>
                   <span>{Math.round(it.confidence * 100)}%</span>
+                </div>
+              )}
+
+              {matches[keys[i]] && !dismissedMatches.has(keys[i]) && (
+                <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/10 p-3 text-xs">
+                  <p>
+                    {t('review.existingFound', {
+                      date: new Date(matches[keys[i]].updatedAt).toLocaleDateString('de-DE'),
+                    })}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button className="min-h-[36px] flex-1 px-3 text-xs" onClick={() => adoptExistingFood(i, matches[keys[i]])}>
+                      {t('review.useExisting')}
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      className="min-h-[36px] flex-1 px-3 text-xs"
+                      onClick={() => dismissMatch(i)}
+                    >
+                      {t('review.keepNew')}
+                    </Button>
+                  </div>
                 </div>
               )}
 

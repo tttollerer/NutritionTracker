@@ -24,11 +24,15 @@ const TIMEOUT_MS = 30_000
  * Ruft die KI-Analyse-Function auf und validiert die Antwort.
  * Fehler kommen IMMER als typisierter ApiError (Mapping über `code`,
  * Anzeige über `t(err.i18nKey)`), nie als roher fetch-/Parse-Fehler.
+ *
+ * `extraImages` sind weitere Fotos DESSELBEN Produkts (z. B. die
+ * Nährwerttabelle nach dem Produktfoto im `label`-Modus) — optional.
  */
 export async function analyzeImage(
   mode: AnalyzeMode,
   imageBase64: string,
   hint?: string,
+  extraImages?: string[],
 ): Promise<AiResult> {
   if (isOffline()) throw new ApiError('OFFLINE')
 
@@ -37,7 +41,7 @@ export async function analyzeImage(
     res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, imageBase64, hint }),
+      body: JSON.stringify({ mode, imageBase64, images: extraImages?.length ? extraImages : undefined, hint }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
   } catch (e) {

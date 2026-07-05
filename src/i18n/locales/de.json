@@ -419,7 +419,12 @@
     "retake": "Neu aufnehmen",
     "analyze": "Analysieren",
     "hintMeal": "Halte das ganze Essen ins Bild.",
-    "hintLabel": "Fotografiere die Nährwerttabelle scharf und gerade.",
+    "hintLabel": "Fotografiere jetzt die Nährwerttabelle scharf und gerade — sie ist die wichtigste Quelle für die Werte.",
+    "productTitle": "Produktfoto",
+    "hintProduct": "Fotografiere die Verpackung (Vorderseite, Marke, Name).",
+    "stepProduct": "Schritt 1 von 2 — Produkt",
+    "stepLabel": "Schritt 2 von 2 — Nährwerttabelle",
+    "continue": "Weiter",
     "manualBarcode": "Barcode eingeben",
     "scan": "Scannen",
     "notFound": "Produkt nicht gefunden — halte den nächsten Barcode ins Bild oder tippe ihn unten ein.",
@@ -444,7 +449,10 @@
     "microsTitle": "Mikronährstoffe – geschätzt ({{count}})",
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
     "allergyTraces": "Kann Spuren enthalten: {{list}}",
-    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
+    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren.",
+    "existingFound": "Dieses Produkt ist bereits gespeichert (zuletzt aktualisiert am {{date}}).",
+    "useExisting": "Gespeicherte Werte übernehmen",
+    "keepNew": "Neu erfassen"
   },
   "pwa": {
     "updateAvailable": "Update verfügbar",

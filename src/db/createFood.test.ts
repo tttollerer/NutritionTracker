@@ -79,4 +79,24 @@ describe('createFood Dedupe', () => {
     expect(second.id).not.toBe(first.id)
     expect(await db.foods.count()).toBe(2)
   })
+
+  it('{ dedupe: false } legt trotz Namens-/Barcode-Treffer einen neuen, eigenständigen Eintrag an', async () => {
+    const first = await createFood({
+      name: 'Double Choc Cookies',
+      per: 'g',
+      kcal: 480,
+      protein: 6,
+      carbs: 55,
+      fat: 22,
+      barcode: '999',
+    })
+    const second = await createFood(
+      { name: 'Double Choc Cookies', per: 'g', kcal: 499, protein: 5.8, carbs: 59, fat: 26, barcode: '999' },
+      { dedupe: false },
+    )
+    expect(second.id).not.toBe(first.id)
+    expect(await db.foods.count()).toBe(2)
+    // Der ursprüngliche Eintrag bleibt unangetastet — kein stilles Überschreiben.
+    expect((await db.foods.get(first.id))!.kcal).toBe(480)
+  })
 })
