@@ -86,9 +86,7 @@ export function Profile({ onReset }: { onReset: () => void }) {
               .filter((k) => goals[k])
               .map((k) => (
                 <li key={k} className="flex justify-between py-2 text-sm">
-                  <span className="text-muted-foreground">
-                    {k === 'kcal' ? 'Kalorien' : t(`today.macros.${k}`)}
-                  </span>
+                  <span className="text-muted-foreground">{t(`today.macros.${k}`)}</span>
                   <span className="font-medium tabular-nums">
                     {goals[k].target}
                     {goals[k].targetMax ? `–${goals[k].targetMax}` : ''} {goals[k].unit}

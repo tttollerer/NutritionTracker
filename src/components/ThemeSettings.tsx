@@ -68,7 +68,7 @@ export function ThemeSettings() {
                     style={{ background: th.swatch.accent }}
                   />
                 </span>
-                <span className="font-medium">{th.label}</span>
+                <span className="font-medium">{t(th.labelKey)}</span>
                 {active && <Check size={16} className="text-primary" />}
               </button>
             )

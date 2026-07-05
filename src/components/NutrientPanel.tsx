@@ -75,7 +75,7 @@ export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies
           className="flex items-center gap-1 text-xs text-muted-foreground"
         >
           <ChevronDown size={14} className={showAll ? 'rotate-180' : ''} />
-          {showAll ? 'weniger' : 'alle Nährstoffe'}
+          {showAll ? t('nutrients.showLess') : t('nutrients.showAll')}
         </button>
       </div>
 
