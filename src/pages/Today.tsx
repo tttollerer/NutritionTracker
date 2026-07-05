@@ -114,13 +114,13 @@ export function Today() {
                 <span className="text-muted-foreground">
                   {t(`today.macros.${m.key}`)}
                   {isProtein && weightKg ? (
-                    <span className="ml-1 text-xs text-muted-foreground/70">· {(m.value / weightKg).toFixed(1)} g/kg</span>
+                    <span className="ml-1 text-xs text-muted-foreground">· {(m.value / weightKg).toFixed(1)} g/kg</span>
                   ) : null}
                 </span>
                 <span className="tabular-nums">
                   {Math.round(m.value)}
                   {m.target ? ` / ${m.target}` : ''} g
-                  {reached && over >= 1 && <span className="ml-1 font-medium text-success">+{Math.round(over)}</span>}
+                  {reached && over >= 1 && <span className="ml-1 font-medium text-success-text">+{Math.round(over)}</span>}
                 </span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -151,7 +151,7 @@ export function Today() {
       <WaterCard weightKg={profile?.weightKg} />
 
       {logs.length === 0 ? (
-        <p className="rounded-2xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-lg bg-muted/50 p-6 text-center text-sm text-muted-foreground">
           {t('today.empty')}
         </p>
       ) : (
@@ -177,7 +177,7 @@ export function Today() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
                     >
                       <span className="flex min-w-0 items-center gap-3">
                         {photoUrl(l.photoBlobId) && (

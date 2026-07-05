@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Upload, RefreshCw, Droplets, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
+import { Download, Upload, RefreshCw, Activity, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
 import { getActiveGoalsMap, getSettings, resetAllData, updateSettings } from '@/db/repo'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
@@ -118,7 +118,7 @@ export function Profile({ onReset }: { onReset: () => void }) {
       <Card className="divide-y divide-border">
         <h2 className="px-4 pt-4 text-sm font-semibold">{t('profile.health')}</h2>
         <Toggle
-          icon={<Droplets size={20} />}
+          icon={<Activity size={20} />}
           label={t('profile.bloodSugar')}
           hint={t('profile.bloodSugarHint')}
           checked={!!settings?.bloodSugar}
@@ -216,7 +216,7 @@ export function Profile({ onReset }: { onReset: () => void }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             className={`fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-50 mx-auto flex max-w-md items-center gap-3 rounded-xl px-4 py-3 text-sm shadow-lg ${
-              feedback.kind === 'error' ? 'bg-destructive text-white' : 'bg-foreground text-background'
+              feedback.kind === 'error' ? 'bg-destructive text-destructive-foreground' : 'bg-foreground text-background'
             }`}
             style={{ width: 'calc(100% - 2rem)' }}
             role="status"

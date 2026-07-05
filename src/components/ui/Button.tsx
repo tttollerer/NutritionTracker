@@ -8,7 +8,7 @@ const variants: Record<Variant, string> = {
   primary: 'bg-primary text-primary-foreground shadow-sm',
   secondary: 'bg-secondary text-secondary-foreground',
   ghost: 'bg-transparent text-foreground',
-  destructive: 'bg-destructive text-white',
+  destructive: 'bg-destructive text-destructive-foreground shadow-sm',
 }
 
 interface ButtonProps extends ComponentProps<typeof motion.button> {
@@ -20,7 +20,7 @@ export function Button({ variant = 'primary', className, ...props }: ButtonProps
     <motion.button
       whileTap={{ scale: 0.96 }}
       className={cn(
-        'inline-flex min-h-[48px] items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors disabled:opacity-50',
+        'focus-ring inline-flex min-h-[48px] items-center justify-center gap-2 rounded-md px-4 text-sm font-semibold transition-colors disabled:opacity-50',
         variants[variant],
         className,
       )}

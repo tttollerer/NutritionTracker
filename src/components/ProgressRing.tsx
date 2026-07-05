@@ -30,7 +30,7 @@ export function ProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="hsl(var(--muted))"
+          stroke="hsl(var(--ring-track))"
           strokeWidth={stroke}
         />
         <motion.circle

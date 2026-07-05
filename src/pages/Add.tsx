@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, Barcode, Check, ImagePlus, X } from 'lucide-react'
+import { Camera, ScanText, ScanBarcode, Check, ImagePlus, X } from 'lucide-react'
 import { createFood, deleteLog, getAllergies, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
 import { checkAllergens } from '@/lib/allergens'
 import { useOverlays } from '@/lib/overlays-context'
@@ -47,7 +47,7 @@ export function Add() {
   const captureOptions = [
     { icon: Camera, key: 'photo', to: `/capture?mode=meal&meal=${meal}` },
     { icon: ScanText, key: 'label', to: `/capture?mode=label&meal=${meal}` },
-    { icon: Barcode, key: 'barcode', to: `/barcode?meal=${meal}` },
+    { icon: ScanBarcode, key: 'barcode', to: `/barcode?meal=${meal}` },
   ] as const
 
   async function logCatalog(id: string) {
@@ -112,7 +112,7 @@ export function Add() {
                 key={f.id}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => quickLog(f)}
-                className="flex w-full items-center justify-between rounded-xl border border-border bg-card p-3 text-left"
+                className="focus-ring flex w-full items-center justify-between rounded-lg border border-border bg-card p-3 text-left"
               >
                 <span>
                   <span className="font-medium">{f.name}</span>
@@ -120,7 +120,7 @@ export function Add() {
                     {f.kcal} kcal / 100 {f.per}
                   </span>
                 </span>
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-soft text-primary">
                   <Check size={18} />
                 </span>
               </motion.button>
@@ -165,13 +165,13 @@ export function Add() {
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('entry.per')}>
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
+            <div className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
               {(['g', 'ml'] as const).map((u) => (
                 <button
                   key={u}
                   type="button"
                   onClick={() => setPer(u)}
-                  className={`min-h-[44px] rounded-lg text-sm font-medium ${
+                  className={`focus-ring min-h-[44px] rounded-sm text-sm font-medium ${
                     per === u ? 'bg-card shadow-sm' : 'text-muted-foreground'
                   }`}
                 >
@@ -202,11 +202,11 @@ export function Add() {
         {/* Optionales Mahlzeitenfoto */}
         {photo ? (
           <div className="relative w-fit">
-            <img src={photo} alt="" className="h-20 w-20 rounded-xl object-cover" />
+            <img src={photo} alt="" className="h-20 w-20 rounded-md object-cover" />
             <button
               onClick={() => setPhoto(null)}
               aria-label={t('common.delete')}
-              className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-white"
+              className="focus-ring absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
             >
               <X size={14} />
             </button>
@@ -214,7 +214,7 @@ export function Add() {
         ) : (
           <button
             onClick={() => photoRef.current?.click()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-input py-2.5 text-sm text-muted-foreground"
+            className="focus-ring flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-input py-2.5 text-sm text-muted-foreground"
           >
             <ImagePlus size={18} /> {t('entry.photo')}
           </button>
@@ -233,7 +233,7 @@ export function Add() {
             key={key}
             whileTap={{ scale: 0.96 }}
             onClick={() => navigate(to)}
-            className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-card p-4"
+            className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4"
           >
             <Icon size={26} className="text-primary" />
             <span className="text-xs">{t(`add.${key}`)}</span>

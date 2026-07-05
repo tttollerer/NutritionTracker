@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Droplets, Trash2 } from 'lucide-react'
+import { Activity, Trash2 } from 'lucide-react'
 import { db } from '@/db'
 import { addGlucose, deleteGlucose } from '@/db/repo'
 import type { GlucoseContext } from '@/db/types'
@@ -16,8 +16,8 @@ import { Chip } from '@/components/ui/Chip'
 const CONTEXTS: GlucoseContext[] = ['fasting', 'before', 'after', 'random']
 const LEVEL_COLOR: Record<GlucoseLevel, string> = {
   low: 'text-destructive',
-  normal: 'text-success',
-  elevated: 'text-warning',
+  normal: 'text-success-text',
+  elevated: 'text-warning-text',
   high: 'text-destructive',
 }
 
@@ -45,11 +45,13 @@ export function GlucoseCard({ unit, date }: { unit: 'mg/dl' | 'mmol/l'; date: st
   return (
     <Card className="space-y-3 p-4">
       <h2 className="flex items-center gap-2 font-semibold">
-        <Droplets size={18} className="text-primary" /> {t('glucose.title')}
+        {/* Activity statt Droplets: Wasser behält das Tropfen-Icon exklusiv. */}
+        <Activity size={18} className="text-primary" /> {t('glucose.title')}
       </h2>
 
+      {/* low = akut gefährlich (rot), high = erhöht/beobachten (warnend) — unterscheidbar. */}
       {warn && (
-        <p className={cn('rounded-lg px-3 py-2 text-sm', warn === 'low' ? 'bg-destructive/15 text-destructive' : 'bg-destructive/15 text-destructive')}>
+        <p className={cn('rounded-lg px-3 py-2 text-sm', warn === 'low' ? 'bg-destructive/15 text-destructive' : 'bg-warning/15 text-warning-text')}>
           {warn === 'low' ? t('glucose.warnLow') : t('glucose.warnHigh')}
         </p>
       )}

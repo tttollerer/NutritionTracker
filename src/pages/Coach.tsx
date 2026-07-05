@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion } from 'framer-motion'
-import { Mic, Send, Volume2, VolumeX, Loader2, Target, Trophy, Plus } from 'lucide-react'
+import { Mic, Send, Volume2, VolumeX, Target, Trophy, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
+import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 import { sendCoachStream, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
 import { loadChat, saveChat } from '@/lib/chatStore'
@@ -114,7 +115,7 @@ export function Coach() {
             <div className="max-w-[85%] space-y-2">
               <div
                 className={cn(
-                  'rounded-2xl px-4 py-2.5 text-sm',
+                  'rounded-lg px-4 py-2.5 text-sm',
                   m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border',
                 )}
               >
@@ -128,7 +129,7 @@ export function Coach() {
         {/* Live gestreamte Antwort */}
         {streamText !== null && streamText.length > 0 && (
           <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
+            <div className="max-w-[85%] rounded-lg border border-border bg-card px-4 py-2.5 text-sm">
               {streamText}
               <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-primary align-middle" />
             </div>
@@ -136,7 +137,7 @@ export function Coach() {
         )}
         {busy && (streamText === null || streamText.length === 0) && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 size={16} className="animate-spin" /> {t('coach.thinking')}
+            <Spinner size={16} /> {t('coach.thinking')}
           </div>
         )}
         {error && <p className="text-sm text-destructive">{t('coach.error')}</p>}
@@ -157,8 +158,8 @@ export function Coach() {
             onClick={() => (recog.listening ? recog.stop() : recog.start())}
             aria-label={t('coach.mic')}
             className={cn(
-              'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
-              recog.listening ? 'bg-destructive text-white' : 'bg-secondary text-foreground',
+              'focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+              recog.listening ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-foreground',
             )}
           >
             <Mic size={20} />
@@ -252,7 +253,7 @@ function SuggestionRow({
       <button
         disabled={done}
         onClick={onClick}
-        className={cn('shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium', done ? 'text-success' : 'bg-primary text-primary-foreground')}
+        className={cn('focus-ring shrink-0 rounded-sm px-2.5 py-1 text-xs font-medium', done ? 'text-success-text' : 'bg-primary text-primary-foreground')}
       >
         {done ? t('coach.applied') : action}
       </button>

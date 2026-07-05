@@ -40,7 +40,7 @@ export function Awards() {
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-muted">
           <motion.div
-            className="h-full rounded-full bg-primary"
+            className="h-full rounded-full bg-brand-gradient"
             initial={{ width: 0 }}
             animate={{ width: `${pct * 100}%` }}
             transition={{ duration: 0.6, ease: 'easeOut' }}
@@ -54,7 +54,8 @@ export function Awards() {
       {/* Streak + Freeze */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="flex items-center gap-3 p-4">
-          <Flame className={stats.overallStreak > 0 ? 'text-accent' : 'text-muted-foreground'} size={32} />
+          {/* Warm statt Akzent-Cyan: die Flamme bleibt in jedem Theme „heiß" und kontraststark. */}
+          <Flame className={stats.overallStreak > 0 ? 'text-warning' : 'text-muted-foreground'} size={32} />
           <div>
             <div className="text-lg font-bold tabular-nums">{stats.overallStreak}</div>
             <div className="text-xs text-muted-foreground">
@@ -98,11 +99,11 @@ export function Awards() {
               <motion.div
                 key={b.key}
                 whileTap={{ scale: 0.95 }}
-                className={`flex flex-col items-center gap-2 rounded-2xl border p-3 text-center ${
+                className={`flex flex-col items-center gap-2 rounded-lg border p-3 text-center ${
                   has ? 'border-primary/40 bg-primary/5' : 'border-border bg-card opacity-60'
                 }`}
               >
-                <span className={`flex h-12 w-12 items-center justify-center rounded-full ${has ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                <span className={`flex h-12 w-12 items-center justify-center rounded-full ${has ? 'bg-primary-soft text-primary' : 'bg-muted text-muted-foreground'}`}>
                   {has ? '🏅' : <Lock size={18} />}
                 </span>
                 <span className="text-[11px] leading-tight">{t(`awards.badgeNames.${b.key}`)}</span>

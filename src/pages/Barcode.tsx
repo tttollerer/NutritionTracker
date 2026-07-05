@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, Loader2 } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { lookupBarcode } from '@/lib/openfoodfacts'
 import { setReview } from '@/lib/reviewStore'
 import type { Meal } from '@/db/types'
 import { defaultMeal } from '@/lib/meal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Spinner } from '@/components/ui/Spinner'
 
 // BarcodeDetector ist (noch) nicht in den TS-DOM-Typen.
 interface BarcodeDetectorLike {
@@ -119,7 +120,7 @@ export function Barcode() {
         <h1 className="text-2xl font-bold">{t('capture.barcodeTitle')}</h1>
       </header>
 
-      <div className="overflow-hidden rounded-2xl bg-black">
+      <div className="overflow-hidden rounded-lg bg-black">
         <video ref={videoRef} className="aspect-square w-full object-cover" muted playsInline />
       </div>
 
@@ -134,7 +135,7 @@ export function Barcode() {
           onChange={(e) => setManual(e.target.value)}
         />
         <Button className="w-full" disabled={!manual.trim() || busy} onClick={() => handleCode(manual)}>
-          {busy ? <Loader2 size={18} className="animate-spin" /> : t('capture.scan')}
+          {busy ? <Spinner size={18} /> : t('capture.scan')}
         </Button>
       </div>
     </div>

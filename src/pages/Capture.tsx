@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, Image as ImageIcon, Loader2, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
+import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
 import { analyzeImage, type AnalyzeMode } from '@/lib/ai'
 import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
@@ -13,6 +13,7 @@ import type { Meal } from '@/db/types'
 import { defaultMeal } from '@/lib/meal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 
 export function Capture() {
@@ -83,18 +84,16 @@ export function Capture() {
 
       {busy ? (
         <div className="flex flex-col items-center gap-4 pt-16 text-center">
-          <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-            <Loader2 size={40} className="text-primary" />
-          </motion.span>
+          <Spinner size={40} className="text-primary" />
           <p className="text-sm text-muted-foreground">{t('capture.analyzing')}</p>
         </div>
       ) : preview ? (
         /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */
         <div className="space-y-4">
-          <img src={preview} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
+          <img src={preview} alt="" className="max-h-72 w-full rounded-lg object-cover" />
 
           {error && (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
               <p className="font-medium text-destructive">{t('capture.error')}</p>
               <p className="mt-1 break-words text-xs text-muted-foreground">{error}</p>
             </div>
@@ -110,8 +109,8 @@ export function Capture() {
                   onClick={() => (recog.listening ? recog.stop() : recog.start())}
                   aria-label={t('coach.mic')}
                   className={cn(
-                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
-                    recog.listening ? 'bg-destructive text-white' : 'bg-secondary text-foreground',
+                    'focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+                    recog.listening ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-foreground',
                   )}
                 >
                   <Mic size={20} />
@@ -134,13 +133,13 @@ export function Capture() {
         <>
           <p className="text-sm text-muted-foreground">{uiHint}</p>
           {error && (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
               <p className="font-medium text-destructive">{t('capture.error')}</p>
               <p className="mt-1 break-words text-xs text-muted-foreground">{error}</p>
             </div>
           )}
           {consent === false ? (
-            <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
               <p className="flex items-center gap-2 font-medium">
                 <ShieldCheck size={18} className="text-primary" /> {t('capture.consentTitle')}
               </p>

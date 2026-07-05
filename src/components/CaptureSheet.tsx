@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, ScanText, Barcode, PencilLine, Check } from 'lucide-react'
+import { Camera, ScanText, ScanBarcode, PencilLine, Check } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { logFood, recentFoods, deleteLog } from '@/db/repo'
 import { defaultMeal, MEALS } from '@/lib/meal'
@@ -56,7 +56,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-3xl bg-card p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-2xl"
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-3xl bg-card p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-lg"
             role="dialog"
             aria-label={t('capture.sheetTitle')}
           >
@@ -72,7 +72,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             {/* Hero: Foto */}
             <button
               onClick={() => go(`/capture?mode=meal&meal=${meal}`)}
-              className="flex w-full items-center gap-4 rounded-2xl bg-primary p-5 text-left text-primary-foreground"
+              className="focus-ring flex w-full items-center gap-4 rounded-lg bg-primary p-5 text-left text-primary-foreground"
             >
               <Camera size={32} strokeWidth={2.2} />
               <span>
@@ -84,7 +84,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             {/* Sekundär: Tabelle + Barcode */}
             <div className="mt-3 grid grid-cols-2 gap-3">
               <SheetTile icon={ScanText} label={t('add.label')} onClick={() => go(`/capture?mode=label&meal=${meal}`)} />
-              <SheetTile icon={Barcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
+              <SheetTile icon={ScanBarcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
             </div>
 
             {/* Zuletzt benutzt: 1 Tipp */}
@@ -108,7 +108,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             {/* Manuell (seltenster Weg) */}
             <button
               onClick={() => go('/add')}
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-input py-2.5 text-sm text-muted-foreground"
+              className="focus-ring mt-4 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-input py-2.5 text-sm text-muted-foreground"
             >
               <PencilLine size={16} /> {t('add.manual')}
             </button>
@@ -121,7 +121,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
 
 function SheetTile({ icon: Icon, label, onClick }: { icon: typeof Camera; label: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-background p-4">
+    <button onClick={onClick} className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-background p-4">
       <Icon size={24} className="text-primary" />
       <span className="text-sm font-medium">{label}</span>
     </button>

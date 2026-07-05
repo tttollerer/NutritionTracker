@@ -79,6 +79,33 @@
   }
 }
 
+@layer components {
+  /* Gemeinsamer Fokus-Zustand für alle interaktiven Bausteine (Button, Chip, Toggle, Tab-Bar).
+     Eine Quelle statt pro Komponente eigener Ringe — Konsistenz & Tastatur-Sichtbarkeit. */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* Lade-Platzhalter: ruhiger Schimmer über die Tokens skeleton-base/skeleton-hi.
+     Wird durch prefers-reduced-motion (unten) automatisch statisch. */
+  .skeleton-shimmer {
+    background: linear-gradient(
+      100deg,
+      hsl(var(--skeleton-base)) 40%,
+      hsl(var(--skeleton-hi)) 50%,
+      hsl(var(--skeleton-base)) 60%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

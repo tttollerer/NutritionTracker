@@ -43,7 +43,7 @@ export function WaterCard({ weightKg }: { weightKg?: number }) {
             key={ml}
             whileTap={{ scale: 0.94 }}
             onClick={() => addWater(ml)}
-            className="flex-1 rounded-xl bg-secondary py-2.5 text-sm font-medium text-secondary-foreground"
+            className="focus-ring flex-1 rounded-md bg-secondary py-2.5 text-sm font-medium text-secondary-foreground"
           >
             +{ml} ml
           </motion.button>
@@ -53,7 +53,7 @@ export function WaterCard({ weightKg }: { weightKg?: number }) {
           onClick={() => undoLastWater()}
           aria-label={t('today.water.undo')}
           disabled={total === 0}
-          className="flex w-12 items-center justify-center rounded-xl bg-muted text-muted-foreground disabled:opacity-40"
+          className="focus-ring flex w-12 items-center justify-center rounded-md bg-muted text-muted-foreground disabled:opacity-40"
         >
           <Undo2 size={18} />
         </motion.button>

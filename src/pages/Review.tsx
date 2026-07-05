@@ -89,7 +89,7 @@ export function Review() {
       <p className="text-xs text-muted-foreground">{t('review.estimate')}</p>
 
       {items.length === 0 ? (
-        <p className="rounded-2xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-lg bg-muted/50 p-6 text-center text-sm text-muted-foreground">
           {t('review.empty')}
         </p>
       ) : (
@@ -126,7 +126,7 @@ export function Review() {
                 </p>
               )}
               {traces.length > 0 && (
-                <p className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-xs font-medium text-warning">
+                <p className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-xs font-medium text-warning-text">
                   ⚠️ {t('review.allergyTraces', { list: allergenNames(traces) })}
                 </p>
               )}
@@ -141,12 +141,12 @@ export function Review() {
                     onChange={(e) => patch(i, { amount: Number(e.target.value) })}
                     className="w-24"
                   />
-                  <div className="flex gap-1 rounded-xl bg-muted p-1">
+                  <div className="flex gap-1 rounded-md bg-muted p-1">
                     {(['g', 'ml'] as const).map((u) => (
                       <button
                         key={u}
                         onClick={() => patch(i, { unit: u })}
-                        className={`min-h-[40px] rounded-lg px-3 text-sm ${it.unit === u ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}
+                        className={`focus-ring min-h-[40px] rounded-sm px-3 text-sm ${it.unit === u ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}
                       >
                         {u}
                       </button>
