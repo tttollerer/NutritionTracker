@@ -30,6 +30,16 @@
       "title": "Wasser",
       "amount": "{{current}} / {{goal}} ml",
       "undo": "Letztes rückgängig"
+    },
+    "entryDeleted": "{{name}} gelöscht",
+    "edit": {
+      "title": "Eintrag bearbeiten",
+      "open": "{{name}} bearbeiten",
+      "amount": "Menge",
+      "unit": "Einheit",
+      "unitPortion": "Portion",
+      "meal": "Mahlzeit",
+      "save": "Speichern"
     }
   },
   "nutrients": {
@@ -91,7 +101,8 @@
     "mute": "Stumm",
     "mic": "Mikrofon",
     "disclaimer": "Orientierung, keine medizinische Beratung. Bei Beschwerden bitte Fachleute fragen.",
-    "error": "Coach nicht erreichbar. Ist der OPENROUTER_API_KEY gesetzt?",
+    "error": "Der Coach ist gerade nicht erreichbar. Bitte versuch es gleich noch einmal.",
+    "retry": "Erneut versuchen",
     "suggestTitle": "Vorschläge",
     "applyGoal": "Ziel übernehmen",
     "applyChallenge": "Challenge starten",
@@ -189,6 +200,7 @@
     "name": "Name",
     "namePh": "z. B. Haferflocken",
     "per": "Bezug",
+    "unitToggle": "Einheit wählen",
     "kcal": "kcal / 100",
     "protein": "Eiweiß (g)",
     "carbs": "Kohlenh. (g)",
@@ -329,7 +341,9 @@
     "hintLabel": "Fotografiere die Nährwerttabelle scharf und gerade.",
     "manualBarcode": "Barcode eingeben",
     "scan": "Scannen",
-    "notFound": "Produkt nicht gefunden",
+    "notFound": "Produkt nicht gefunden — halte den nächsten Barcode ins Bild oder tippe ihn unten ein.",
+    "searching": "Suche Produkt …",
+    "unknownProduct": "Unbekanntes Produkt",
     "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein.",
     "consentTitle": "Foto an KI senden?",
     "consentBody": "Zum Erkennen wird das Bild einmalig an unseren KI-Dienst (OpenRouter) übertragen und dort nicht dauerhaft gespeichert. Es wird kein Bild ohne dein Zutun gesendet.",
@@ -351,6 +365,17 @@
     "updateAvailable": "Update verfügbar",
     "reload": "Neu laden",
     "dismiss": "Später"
+  },
+  "errors": {
+    "offline": "Du bist offline — manuell erfassen klappt weiter.",
+    "rateLimited": "Gerade viele Anfragen. Warte kurz und versuch es dann erneut.",
+    "payloadTooLarge": "Das Bild ist zu groß. Nimm es bitte noch einmal mit etwas mehr Abstand auf.",
+    "timeout": "Das dauert gerade zu lange. Versuch es gleich noch einmal.",
+    "budgetExceeded": "Das KI-Kontingent ist für heute aufgebraucht — morgen geht's weiter. Manuell erfassen klappt jederzeit.",
+    "invalidRequest": "Die Anfrage war ungültig. Lade die App neu und versuch es erneut.",
+    "upstream": "Der Dienst ist gerade nicht erreichbar. Versuch es bitte später erneut.",
+    "generic": "Das hat leider nicht geklappt. Bitte versuch es erneut.",
+    "manualFallback": "Manuell erfassen"
   },
   "common": {
     "loading": "Lädt …",

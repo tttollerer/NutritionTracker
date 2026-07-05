@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mic, Send, Volume2, VolumeX, Target, Trophy, Plus } from 'lucide-react'
+import { Mic, RotateCcw, Send, Volume2, VolumeX, Target, Trophy, Plus } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +11,7 @@ import { Chip } from '@/components/ui/Chip'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 import { sendCoachStream, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
+import { toApiError } from '@/lib/apiError'
 import { loadChat, saveChat } from '@/lib/chatStore'
 import { completeSentences, speakQueue, stopSpeaking, useSpeechRecognition } from '@/lib/speech'
 import { applyChallengeSuggestion, applyGoalSuggestion, createFood, logFood } from '@/db/repo'
@@ -18,10 +20,12 @@ import { todayKey } from '@/lib/utils'
 
 export function Coach() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadChat())
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(false)
+  // i18n-Key des gemappten Fehlers (errors.*), nie ein roher Fehlertext.
+  const [errorKey, setErrorKey] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
   const [streamText, setStreamText] = useState<string | null>(null) // live wachsende Antwort
   const endRef = useRef<HTMLDivElement>(null)
@@ -45,11 +49,23 @@ export function Coach() {
   async function send(text: string) {
     const content = text.trim()
     if (!content || busyRef.current) return
-    busyRef.current = true
     setInput('')
-    setError(false)
+    await run([...messagesRef.current, { role: 'user', content }])
+  }
+
+  /** Letzte Nutzer-Nachricht erneut senden (eine evtl. Teil-Antwort wird verworfen). */
+  async function retry() {
+    if (busyRef.current) return
+    const msgs = messagesRef.current
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'user') return run(msgs.slice(0, i + 1))
+    }
+  }
+
+  async function run(next: ChatMessage[]) {
+    busyRef.current = true
+    setErrorKey(null)
     stopSpeaking()
-    const next: ChatMessage[] = [...messagesRef.current, { role: 'user', content }]
     messagesRef.current = next
     setMessages(next)
     setBusy(true)
@@ -75,8 +91,15 @@ export function Coach() {
       const withReply: ChatMessage[] = [...next, { role: 'assistant', content: res.reply, suggestions: res.suggestions }]
       messagesRef.current = withReply
       setMessages(withReply)
-    } catch {
-      setError(true)
+    } catch (e) {
+      const err = toApiError(e)
+      // Stream-Abbruch (SSE error-Event): bereits gestreamten Text behalten.
+      if (err.partialReply) {
+        const withPartial: ChatMessage[] = [...next, { role: 'assistant', content: err.partialReply }]
+        messagesRef.current = withPartial
+        setMessages(withPartial)
+      }
+      setErrorKey(err.i18nKey)
     } finally {
       setStreamText(null)
       busyRef.current = false
@@ -140,7 +163,21 @@ export function Coach() {
             <Spinner size={16} /> {t('coach.thinking')}
           </div>
         )}
-        {error && <p className="text-sm text-destructive">{t('coach.error')}</p>}
+        {errorKey && (
+          <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+            <p className="text-destructive">{t(errorKey)}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onClick={() => void retry()} disabled={busy}>
+                <RotateCcw size={16} /> {t('coach.retry')}
+              </Button>
+              {errorKey === 'errors.offline' && (
+                <Button variant="secondary" onClick={() => navigate('/add')}>
+                  {t('errors.manualFallback')}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 

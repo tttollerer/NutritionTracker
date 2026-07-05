@@ -1,39 +1,57 @@
-import { z } from 'zod'
+import {
+  AnalyzeItemSchema,
+  AnalyzeResultSchema,
+  type AnalyzeItem,
+  type AnalyzeRequest,
+  type AnalyzeResult,
+} from './apiContract'
+import { ApiError, apiErrorFromResponse, isOffline, toApiError } from './apiError'
 
-/** Antwort-Schema der KI-Analyse (deckungsgleich mit der Netlify-Function). */
-export const AiItem = z.object({
-  name: z.string().min(1),
-  amount: z.number().nonnegative(),
-  unit: z.enum(['g', 'ml', 'portion']),
-  confidence: z.number().min(0).max(1).optional(),
-  per100: z.object({
-    kcal: z.number().nonnegative(),
-    protein: z.number().nonnegative(),
-    carbs: z.number().nonnegative(),
-    fat: z.number().nonnegative(),
-    micros: z.record(z.number().nonnegative()).optional(),
-  }),
-})
-export const AiResult = z.object({ items: z.array(AiItem), notes: z.string().optional() })
-
-export type AiItem = z.infer<typeof AiItem>
-export type AiResult = z.infer<typeof AiResult>
-export type AnalyzeMode = 'meal' | 'label' | 'portion'
+/**
+ * Vertrags-Schemata aus apiContract.ts (v1.1) unter den bisherigen Namen
+ * re-exportiert — die EINE Quelle ist der Vertrag, nicht diese Datei.
+ */
+export const AiItem = AnalyzeItemSchema
+export const AiResult = AnalyzeResultSchema
+export type AiItem = AnalyzeItem
+export type AiResult = AnalyzeResult
+export type AnalyzeMode = AnalyzeRequest['mode']
 
 const ENDPOINT = import.meta.env.VITE_ANALYZE_URL ?? '/api/analyze'
+const TIMEOUT_MS = 30_000
 
-/** Ruft die KI-Analyse-Function auf und validiert die Antwort. */
+/**
+ * Ruft die KI-Analyse-Function auf und validiert die Antwort.
+ * Fehler kommen IMMER als typisierter ApiError (Mapping über `code`,
+ * Anzeige über `t(err.i18nKey)`), nie als roher fetch-/Parse-Fehler.
+ */
 export async function analyzeImage(
   mode: AnalyzeMode,
   imageBase64: string,
   hint?: string,
 ): Promise<AiResult> {
-  const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mode, imageBase64, hint }),
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data?.error ?? `Analyse fehlgeschlagen (${res.status})`)
-  return AiResult.parse(data)
+  if (isOffline()) throw new ApiError('OFFLINE')
+
+  let res: Response
+  try {
+    res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode, imageBase64, hint }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch (e) {
+    // Netzwerkfehler (TypeError) → OFFLINE, AbortSignal.timeout → TIMEOUT
+    throw toApiError(e)
+  }
+
+  // Erst res.ok prüfen, dann parsen — Fehler tragen den Envelope aus dem Vertrag.
+  if (!res.ok) throw await apiErrorFromResponse(res)
+
+  try {
+    return AnalyzeResultSchema.parse(await res.json())
+  } catch {
+    // 200 mit kaputtem Body (z. B. HTML einer Zwischenschicht) → kein Parse-Crash
+    throw new ApiError('GENERIC')
+  }
 }

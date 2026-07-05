@@ -1,4 +1,5 @@
 import type { NewFoodInput } from '@/db/repo'
+import { ApiError, isOffline } from './apiError'
 import { microsFromOff } from './nutrients'
 
 /**
@@ -24,10 +25,21 @@ interface OffRaw {
 
 const BASE = 'https://world.openfoodfacts.org/api/v2/product'
 
+/**
+ * `null` = Produkt nicht gefunden (weiterscannen sinnvoll). Netz-/Serverfehler
+ * werfen einen typisierten ApiError (OFFLINE/UPSTREAM_ERROR) für die UI-Schicht.
+ */
 export async function lookupBarcode(barcode: string): Promise<OffProduct | null> {
+  if (isOffline()) throw new ApiError('OFFLINE')
   const res = await fetch(`${BASE}/${encodeURIComponent(barcode)}.json`)
-  if (!res.ok) return null
-  const data = (await res.json()) as OffRaw
+  if (res.status === 404) return null
+  if (!res.ok) throw new ApiError('UPSTREAM_ERROR')
+  let data: OffRaw
+  try {
+    data = (await res.json()) as OffRaw
+  } catch {
+    throw new ApiError('UPSTREAM_ERROR')
+  }
   if (data.status !== 1 || !data.product) return null
   return mapProduct(barcode, data.product)
 }
@@ -40,7 +52,9 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
   const traces = (p.traces_tags ?? []).map((a) => a.replace(/^en:/, ''))
   return {
     food: {
-      name: p.product_name?.trim() || 'Unbekanntes Produkt',
+      // Kein Anzeige-Text hier: leerer Name wird in der UI-Schicht über
+      // i18n (capture.unknownProduct) ersetzt.
+      name: p.product_name?.trim() ?? '',
       per: 'g',
       kcal: Math.round(kcal ?? 0),
       protein: round1(n['proteins_100g'] ?? 0),
