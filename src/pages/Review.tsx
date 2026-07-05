@@ -104,7 +104,7 @@ export function Review() {
                 <button
                   aria-label={t('common.delete')}
                   onClick={() => remove(i)}
-                  className="flex h-12 w-10 items-center justify-center text-muted-foreground hover:text-destructive"
+                  className="focus-ring flex h-12 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 size={18} />
                 </button>
@@ -141,10 +141,12 @@ export function Review() {
                     onChange={(e) => patch(i, { amount: Number(e.target.value) })}
                     className="w-24"
                   />
-                  <div className="flex gap-1 rounded-md bg-muted p-1">
+                  <div role="group" aria-label={t('entry.unitToggle')} className="flex gap-1 rounded-md bg-muted p-1">
                     {(['g', 'ml'] as const).map((u) => (
                       <button
                         key={u}
+                        type="button"
+                        aria-pressed={it.unit === u}
                         onClick={() => patch(i, { unit: u })}
                         className={`focus-ring min-h-[40px] rounded-sm px-3 text-sm ${it.unit === u ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}
                       >
@@ -219,7 +221,11 @@ function ItemMicros({ micros, onChange }: { micros: Record<string, number>; onCh
   if (keys.length === 0) return null
   return (
     <div className="border-t border-border pt-3">
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="focus-ring flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground"
+      >
         <ChevronDown size={14} className={open ? 'rotate-180' : ''} />
         {t('review.microsTitle', { count: keys.length })}
       </button>

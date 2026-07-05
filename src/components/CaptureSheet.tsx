@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -16,12 +16,52 @@ interface Props {
   showUndo: (label: string, undo: () => void | Promise<void>) => void
 }
 
+/** Fokussierbare Elemente im Sheet (für Initial-Fokus & Fokus-Trap). */
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 /** Erfass-Quick-Sheet: in 2 Tipps zur Kamera. Vom +-Button & der Heute-Karte geöffnet. */
 export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
   const recents = useLiveQuery(() => recentFoods(6), [])
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
+
+  // Fokus-Management: beim Öffnen Fokus ins Sheet, beim Schließen zurück zum Auslöser.
+  useEffect(() => {
+    if (!open) return
+    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const raf = requestAnimationFrame(() => {
+      sheetRef.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus()
+    })
+    return () => {
+      cancelAnimationFrame(raf)
+      triggerRef.current?.focus()
+    }
+  }, [open])
+
+  // Escape schließt, Tab zirkuliert im Sheet (leichtgewichtiger Fokus-Trap).
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      onClose()
+      return
+    }
+    if (e.key !== 'Tab') return
+    const nodes = sheetRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE)
+    if (!nodes || nodes.length === 0) return
+    const first = nodes[0]
+    const last = nodes[nodes.length - 1]
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 
   function go(path: string) {
     onClose()
@@ -50,6 +90,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             exit={{ opacity: 0 }}
             onClick={onClose}
             className="fixed inset-0 z-40 bg-black/40"
+            aria-hidden="true"
           />
           <motion.div
             initial={{ y: '100%' }}
@@ -58,7 +99,10 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-3xl bg-card p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-lg"
             role="dialog"
+            aria-modal="true"
             aria-label={t('capture.sheetTitle')}
+            ref={sheetRef}
+            onKeyDown={onKeyDown}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
 
@@ -96,7 +140,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                     <button
                       key={f.id}
                       onClick={() => quickLog(f)}
-                      className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
+                      className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
                     >
                       <Check size={14} className="text-primary" /> {f.name}
                     </button>

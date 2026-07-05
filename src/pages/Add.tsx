@@ -165,11 +165,12 @@ export function Add() {
         )}
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('entry.per')}>
-            <div className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
+            <div role="group" aria-label={t('entry.unitToggle')} className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
               {(['g', 'ml'] as const).map((u) => (
                 <button
                   key={u}
                   type="button"
+                  aria-pressed={per === u}
                   onClick={() => setPer(u)}
                   className={`focus-ring min-h-[44px] rounded-sm text-sm font-medium ${
                     per === u ? 'bg-card shadow-sm' : 'text-muted-foreground'
