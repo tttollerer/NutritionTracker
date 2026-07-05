@@ -41,10 +41,6 @@ export function completeSentences(text: string, from: number): { sentences: stri
   return { sentences, consumed }
 }
 
-export function speechSupported(): boolean {
-  return typeof window !== 'undefined' && (!!getRecognitionCtor() || 'speechSynthesis' in window)
-}
-
 interface SpeechRecognitionLike {
   lang: string
   continuous: boolean
