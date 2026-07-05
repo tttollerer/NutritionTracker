@@ -81,4 +81,73 @@ describe('computeStats', () => {
     const s = computeStats(logs, goals, '2026-06-27')
     expect(s.overallStreak).toBe(1) // gestern erfolgreich, heute noch offen
   })
+
+  it('adds bonus points into level calculation', () => {
+    const logs = [log('2026-06-27', { kcal: 2100, protein: 160 })]
+    const base = computeStats(logs, goals, '2026-06-27')
+    const s = computeStats(logs, goals, '2026-06-27', { bonusPoints: 100 })
+    expect(s.points).toBe(base.points + 100)
+    expect(s.level).toBe(base.level + 1)
+  })
+})
+
+describe('computeStats – Streak-Freeze', () => {
+  // Erfolg am 26., Lücke am 27., Erfolg am 28. (= heute)
+  const logs = [
+    log('2026-06-26', { kcal: 2100, protein: 160 }),
+    log('2026-06-28', { kcal: 2100, protein: 160 }),
+  ]
+  const today = '2026-06-28'
+
+  it('breaks the streak without tokens', () => {
+    const s = computeStats(logs, goals, today)
+    expect(s.overallStreak).toBe(1)
+    expect(s.frozenUsed).toEqual([])
+  })
+
+  it('bridges one gap day with exactly one token', () => {
+    const s = computeStats(logs, goals, today, {
+      freeze: { available: 1, frozenDates: new Set() },
+    })
+    expect(s.overallStreak).toBe(2) // beide Erfolgstage, Lücke überbrückt
+    expect(s.frozenUsed).toEqual(['2026-06-27']) // genau 1 Token verbraucht
+  })
+
+  it('is idempotent: an already-frozen gap day costs no second token', () => {
+    // Erneuter Aufruf mit persistiertem Zustand (Token verbraucht, Tag eingefroren).
+    const s = computeStats(logs, goals, today, {
+      freeze: { available: 0, frozenDates: new Set(['2026-06-27']) },
+    })
+    expect(s.overallStreak).toBe(2) // Streak bleibt erhalten
+    expect(s.frozenUsed).toEqual([]) // nichts erneut verbraucht
+  })
+
+  it('never wastes a token on the end of history', () => {
+    // Nur heute erfolgreich — davor keine Kette, die ein Token retten könnte.
+    const single = [log('2026-06-28', { kcal: 2100, protein: 160 })]
+    const s = computeStats(single, goals, today, {
+      freeze: { available: 3, frozenDates: new Set() },
+    })
+    expect(s.overallStreak).toBe(1)
+    expect(s.frozenUsed).toEqual([])
+  })
+
+  it('bridges consecutive gap days while tokens last', () => {
+    const twoGap = [
+      log('2026-06-25', { kcal: 2100, protein: 160 }),
+      log('2026-06-28', { kcal: 2100, protein: 160 }),
+    ]
+    const ok = computeStats(twoGap, goals, today, {
+      freeze: { available: 2, frozenDates: new Set() },
+    })
+    expect(ok.overallStreak).toBe(2)
+    expect(ok.frozenUsed).toEqual(['2026-06-27', '2026-06-26'])
+
+    // Mit nur 1 Token reicht es nicht bis zum nächsten Erfolgstag → nichts verbrauchen.
+    const short = computeStats(twoGap, goals, today, {
+      freeze: { available: 1, frozenDates: new Set() },
+    })
+    expect(short.overallStreak).toBe(1)
+    expect(short.frozenUsed).toEqual([])
+  })
 })

@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Trophy } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Photo } from '@/db/types'
 import { deleteLog, getActiveGoalsMap, getAllergies, getSettings, restoreLog } from '@/db/repo'
 import { useOverlays } from '@/lib/overlays-context'
 import { EditLogSheet } from '@/components/EditLogSheet'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
+import { activeChallenges, evaluateChallenge } from '@/lib/challenges'
 import { todayKey } from '@/lib/utils'
 import { MEALS } from '@/lib/meal'
 import { macroColor } from '@/lib/macroColor'
@@ -50,6 +51,7 @@ export function Today() {
   }, [logs])
   const allergies = useLiveQuery(() => getAllergies(), [])
   const settings = useLiveQuery(() => getSettings(), [])
+  const challenges = useLiveQuery(() => activeChallenges(), [])
 
   if (logs === undefined || foods === undefined || goals === undefined) {
     return (
@@ -114,6 +116,42 @@ export function Today() {
         allergies={allergies}
         sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
       />
+
+      {/* Aktive Coach-Challenges kompakt anzeigen (Details & Aktionen: Erfolge). */}
+      {challenges && challenges.length > 0 && (
+        <Card className="space-y-2 p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Trophy size={16} className="text-warning" aria-hidden />
+            {t('today.challenges')}
+          </h2>
+          {challenges.map((c) => {
+            const p = evaluateChallenge(c, { [date]: sum }, date)
+            const dayProgress = p?.kind === 'day' ? p : null
+            return (
+              <div key={c.id} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{c.title}</span>
+                  {dayProgress && (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {dayProgress.current} / {dayProgress.target} {dayProgress.unit ?? ''}
+                    </span>
+                  )}
+                </div>
+                {dayProgress && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <motion.div
+                      className={`h-full rounded-full ${dayProgress.met ? 'bg-success' : 'bg-brand-gradient'}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${dayProgress.pct * 100}%` }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </Card>
+      )}
 
       <div className="flex flex-col items-center">
         <ProgressRing

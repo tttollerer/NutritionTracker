@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next'
-import { motion } from 'framer-motion'
-import { Flame, Snowflake, Lock } from 'lucide-react'
-import { useGamification } from '@/hooks/useGamification'
-import { BADGES } from '@/lib/gamification'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Check, Flame, Lock, Snowflake, Trophy, X } from 'lucide-react'
+import { fireConfetti, useGamification } from '@/hooks/useGamification'
+import { BADGES, POINTS_PER_CHALLENGE } from '@/lib/gamification'
+import { markChallengeDone, markChallengeFailed } from '@/lib/challenges'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -23,7 +24,7 @@ export function Awards() {
     )
   }
 
-  const { stats, unlocked, companion, freezeTokens } = g
+  const { stats, unlocked, companion, freezeTokens, challenges, doneChallenges } = g
   const levelFloor = (stats.level - 1) * 100
   const intoLevel = stats.points - levelFloor
   const pct = Math.min(intoLevel / 100, 1)
@@ -71,6 +72,88 @@ export function Awards() {
           </div>
         </Card>
       </div>
+
+      {/* Aktive Challenges (Coach-Vorschläge, Paket 10) */}
+      {(challenges.length > 0 || doneChallenges > 0) && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground">{t('awards.challenges')}</h2>
+          <AnimatePresence initial={false}>
+            {challenges.map(({ challenge, progress }) => (
+              <motion.div
+                key={challenge.id}
+                layout
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <Card className="space-y-2 p-4">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="shrink-0 text-warning" size={20} aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{challenge.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {t(challenge.period === 'day' ? 'awards.challengePeriodDay' : 'awards.challengePeriodWeek')}
+                      </p>
+                    </div>
+                    <button
+                      aria-label={t('awards.challengeDone')}
+                      onClick={() => {
+                        void markChallengeDone(challenge.id)
+                        fireConfetti()
+                      }}
+                      className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success/10 text-success-text"
+                    >
+                      <Check size={20} />
+                    </button>
+                    <button
+                      aria-label={t('awards.challengeFailed')}
+                      onClick={() => void markChallengeFailed(challenge.id)}
+                      className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+                  {progress ? (
+                    <div className="space-y-1">
+                      <div className="h-2 overflow-hidden rounded-full bg-muted">
+                        <motion.div
+                          className={`h-full rounded-full ${progress.met ? 'bg-success' : 'bg-brand-gradient'}`}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress.pct * 100}%` }}
+                          transition={{ duration: 0.4, ease: 'easeOut' }}
+                        />
+                      </div>
+                      <p className="text-xs tabular-nums text-muted-foreground">
+                        {progress.kind === 'day'
+                          ? t('awards.challengeProgressDay', {
+                              current: progress.current,
+                              target: progress.target,
+                              unit: progress.unit ?? '',
+                            })
+                          : t('awards.challengeProgressWeek', {
+                              current: progress.current,
+                              target: progress.target,
+                            })}
+                        {progress.met && ` · ${t('awards.challengeMet')}`}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t('awards.challengeManual')}</p>
+                  )}
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {doneChallenges > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t('awards.challengeCompleted', {
+                count: doneChallenges,
+                points: doneChallenges * POINTS_PER_CHALLENGE,
+              })}
+            </p>
+          )}
+        </section>
+      )}
 
       {/* Begleiter */}
       <Card className="flex items-center gap-4 p-4">
