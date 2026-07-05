@@ -63,6 +63,12 @@ export const AnalyzeRequestSchema = z.object({
   mode: z.enum(['meal', 'label', 'portion']),
   /** Data-URL oder rohes Base64 (JPEG angenommen, wenn ohne Präfix). */
   imageBase64: z.string().min(1),
+  /**
+   * Weitere Fotos DESSELBEN Produkts (z. B. Nährwerttabelle nach dem
+   * Produktfoto im `label`-Modus) — optional, additiv zu `imageBase64`.
+   * Bestehende Aufrufer (ein Bild) lassen dies weg; unverändertes Verhalten.
+   */
+  images: z.array(z.string().min(1)).max(3).optional(),
   hint: z.string().max(280).optional(),
 })
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>

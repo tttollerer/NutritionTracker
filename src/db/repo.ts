@@ -161,8 +161,14 @@ export interface NewFoodInput {
  * Lebensmittel im Katalog anlegen — mit Dedupe: existiert bereits ein Eintrag mit
  * gleichem Barcode (oder ersatzweise gleichem Namen), wird dieser aktualisiert
  * (Upsert) statt ein Duplikat zu erzeugen. defaultPortion des Treffers bleibt erhalten.
+ *
+ * `opts.dedupe = false` erzwingt einen neuen Eintrag auch bei Namens-/Barcode-Treffer —
+ * für Fälle, in denen der Nutzer einen vorgeschlagenen Treffer explizit abgelehnt hat
+ * (Review-Screen "schon gespeichert?"-Hinweis) und ein automatisches Überschreiben
+ * der bestehenden Werte deshalb nicht gewünscht ist.
  */
-export async function createFood(input: NewFoodInput): Promise<FoodItem> {
+export async function createFood(input: NewFoodInput, opts?: { dedupe?: boolean }): Promise<FoodItem> {
+  const dedupe = opts?.dedupe ?? true
   const name = input.name.trim()
   const values = {
     per: input.per,
@@ -176,12 +182,14 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   }
 
   let existing: FoodItem | undefined
-  if (input.barcode) {
-    existing = await db.foods.where('barcode').equals(input.barcode).filter((f) => !f.deletedAt).first()
-  }
-  if (!existing) {
-    const lower = name.toLowerCase()
-    existing = await db.foods.filter((f) => !f.deletedAt && f.name.toLowerCase() === lower).first()
+  if (dedupe) {
+    if (input.barcode) {
+      existing = await db.foods.where('barcode').equals(input.barcode).filter((f) => !f.deletedAt).first()
+    }
+    if (!existing) {
+      const lower = name.toLowerCase()
+      existing = await db.foods.filter((f) => !f.deletedAt && f.name.toLowerCase() === lower).first()
+    }
   }
 
   if (existing) {
@@ -219,6 +227,20 @@ export async function findFoodByName(name: string): Promise<FoodItem | undefined
   const lower = name.trim().toLowerCase()
   if (!lower) return undefined
   return db.foods.filter((f) => !f.deletedAt && f.name.toLowerCase() === lower).first()
+}
+
+/**
+ * Vorschau auf den createFood-Dedupe-Treffer (Barcode zuerst, sonst Name) —
+ * Grundlage für den "schon gespeichert?"-Hinweis im Review-Screen: der Nutzer
+ * entscheidet bewusst, ob die gespeicherten Werte übernommen werden, statt dass
+ * createFood sie automatisch überschreibt.
+ */
+export async function findFoodMatch(args: { name: string; barcode?: string }): Promise<FoodItem | undefined> {
+  if (args.barcode) {
+    const byBarcode = await db.foods.where('barcode').equals(args.barcode).filter((f) => !f.deletedAt).first()
+    if (byBarcode) return byBarcode
+  }
+  return findFoodByName(args.name)
 }
 
 /** Hinterlegte Allergene des Nutzers (für Warnungen beim Erfassen). */

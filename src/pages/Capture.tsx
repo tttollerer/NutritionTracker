@@ -18,27 +18,43 @@ import { Skeleton } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 
+/** Nur im `label`-Modus (Verpackung mit Nährwerttabelle) geführter 2-Schritt-Ablauf. */
+type LabelStep = 'product' | 'label'
+
 export function Capture() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const mode = (params.get('mode') as AnalyzeMode) || 'meal'
   const meal = (params.get('meal') as Meal) || defaultMeal()
+  const isLabelMode = mode === 'label'
 
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   // i18n-Key des gemappten Fehlers (errors.*), nie ein roher Fehlertext.
   const [errorKey, setErrorKey] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(null) // verkleinertes Bild, noch nicht gesendet
+
+  // Einzelbild-Modi (meal/portion): ein Foto reicht.
+  const [preview, setPreview] = useState<string | null>(null)
+  // label-Modus: erzwungener 2-Schritt-Ablauf — Produktfoto, dann Nährwerttabelle.
+  const [step, setStep] = useState<LabelStep>('product')
+  const [productPhoto, setProductPhoto] = useState<string | null>(null)
+  const [labelPhoto, setLabelPhoto] = useState<string | null>(null)
+
   const [hint, setHint] = useState(() => params.get('hint') ?? '')
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
 
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
   const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
 
-  const title = mode === 'label' ? t('capture.labelTitle') : t('capture.mealTitle')
-  const uiHint = mode === 'label' ? t('capture.hintLabel') : t('capture.hintMeal')
+  const title = !isLabelMode ? t('capture.mealTitle') : step === 'product' ? t('capture.productTitle') : t('capture.labelTitle')
+  const uiHint = !isLabelMode ? t('capture.hintMeal') : step === 'product' ? t('capture.hintProduct') : t('capture.hintLabel')
+  const stepHint = isLabelMode ? (step === 'product' ? t('capture.stepProduct') : t('capture.stepLabel')) : null
+
+  // Finale Vorschau (mit Beschreibung + Analysieren-Button): Einzelbild-Modus mit
+  // gesetztem Foto, oder label-Modus sobald beide Fotos vorliegen.
+  const atFinalPreview = isLabelMode ? Boolean(productPhoto && labelPhoto) : Boolean(preview)
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -47,21 +63,29 @@ export function Capture() {
     setErrorKey(null)
     try {
       // Verkleinern + Vorschau zeigen — noch NICHT an die KI senden.
-      setPreview(await downscaleImage(file))
+      const img = await downscaleImage(file)
+      if (isLabelMode) {
+        if (step === 'product') setProductPhoto(img)
+        else setLabelPhoto(img)
+      } else {
+        setPreview(img)
+      }
     } catch (err) {
       setErrorKey(toApiError(err).i18nKey)
     }
   }
 
   async function analyze() {
-    if (!preview) return
+    const primary = isLabelMode ? productPhoto : preview
+    if (!primary) return
+    const extraImages = isLabelMode && labelPhoto ? [labelPhoto] : undefined
     setErrorKey(null)
     setBusy(true)
     try {
-      const result = await analyzeImage(mode, preview, hint.trim() || undefined)
+      const result = await analyzeImage(mode, primary, hint.trim() || undefined, extraImages)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
       // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
-      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined, notes: result.notes })
+      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? primary : undefined, notes: result.notes })
       navigate('/review')
     } catch (err) {
       setErrorKey(toApiError(err).i18nKey)
@@ -70,11 +94,34 @@ export function Capture() {
     }
   }
 
+  /** Kompletter Reset (z. B. „Neu aufnehmen" auf der finalen Vorschau). */
   function retake() {
     setPreview(null)
+    setProductPhoto(null)
+    setLabelPhoto(null)
+    setStep('product')
     setHint('')
     setErrorKey(null)
     if (recog.listening) recog.stop()
+  }
+
+  /** Nur das Nährwerttabellen-Foto verwerfen, Produktfoto bleibt erhalten. */
+  function retakeLabelPhoto() {
+    setLabelPhoto(null)
+  }
+
+  function goToLabelStep() {
+    setStep('label')
+  }
+
+  function backToProductStep() {
+    setLabelPhoto(null)
+    setStep('product')
+  }
+
+  function handleBack() {
+    if (isLabelMode && step === 'label') backToProductStep()
+    else navigate(-1)
   }
 
   // Gemappter Fehlertext + bei Offline der Ausweg „manuell erfassen" (/add).
@@ -93,21 +140,29 @@ export function Capture() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)} aria-label={t('common.back')} className="text-muted-foreground">
+        <button onClick={handleBack} aria-label={t('common.back')} className="text-muted-foreground">
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold">{title}</h1>
       </header>
+      {stepHint && !atFinalPreview && <p className="-mt-4 text-xs font-medium text-primary">{stepHint}</p>}
 
       {busy ? (
         <div className="flex flex-col items-center gap-4 pt-16 text-center">
           <Spinner size={40} className="text-primary" />
           <p className="text-sm text-muted-foreground">{t('capture.analyzing')}</p>
         </div>
-      ) : preview ? (
+      ) : atFinalPreview ? (
         /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */
         <div className="space-y-4">
-          <img src={preview} alt="" className="max-h-72 w-full rounded-lg object-cover" />
+          {isLabelMode ? (
+            <div className="grid grid-cols-2 gap-3">
+              <img src={productPhoto!} alt="" className="h-40 w-full rounded-lg object-cover" />
+              <img src={labelPhoto!} alt="" className="h-40 w-full rounded-lg object-cover" />
+            </div>
+          ) : (
+            <img src={preview!} alt="" className="max-h-72 w-full rounded-lg object-cover" />
+          )}
 
           {errorBox}
 
@@ -133,7 +188,7 @@ export function Capture() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="secondary" onClick={retake}>
+            <Button variant="secondary" onClick={isLabelMode ? retakeLabelPhoto : retake}>
               <RotateCcw size={18} /> {t('capture.retake')}
             </Button>
             <Button onClick={analyze}>
@@ -141,8 +196,22 @@ export function Capture() {
             </Button>
           </div>
         </div>
+      ) : isLabelMode && step === 'product' && productPhoto ? (
+        /* ── Produktfoto aufgenommen: bestätigen & weiter zu Schritt 2 ── */
+        <div className="space-y-4">
+          <img src={productPhoto} alt="" className="max-h-72 w-full rounded-lg object-cover" />
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="secondary" onClick={() => setProductPhoto(null)}>
+              <RotateCcw size={18} /> {t('capture.retake')}
+            </Button>
+            <Button onClick={goToLabelStep}>{t('capture.continue')}</Button>
+          </div>
+        </div>
       ) : (
         <>
+          {isLabelMode && step === 'label' && (
+            <img src={productPhoto!} alt="" className="h-28 w-full rounded-lg object-cover" />
+          )}
           <p className="text-sm text-muted-foreground">{uiHint}</p>
           {errorBox}
           {consent === undefined ? (

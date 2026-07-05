@@ -31,20 +31,40 @@ const SYSTEM: Record<string, string> = {
   portion:
     'Schätze die Menge des abgebildeten Lebensmittels so genau wie möglich. Gib ein Item mit geschätzter Menge und Nährwerten je 100 g/ml zurück.',
   label:
-    'Lies die abfotografierte Nährwerttabelle exakt aus. Gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100).',
+    'Lies die abfotografierte Nährwerttabelle exakt aus. Diese Herstellerangaben sind Fakten, keine Schätzung — übernimm jeden dort aufgedruckten Wert exakt und vollständig (u. a. Brennwert/kcal, Fett, gesättigte Fettsäuren, Kohlenhydrate, Zucker, Ballaststoffe, Eiweiß, Salz sowie alle weiteren aufgeführten Nährstoffe wie Vitamine/Mineralstoffe) und runde oder schätze NICHTS davon selbst. Rechne „Salz" (g) in Natrium (mg) um: Natrium = Salz × 400. Falls mehrere Fotos vorliegen, nutze das Produktfoto nur zur Identifikation (Name, Marke) — die Nährwerttabelle ist immer die primäre Quelle für alle Zahlenwerte. Setze confidence auf 1.0, wenn die Werte direkt von einem lesbaren Etikett stammen, sonst niedriger. Gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100).',
 }
 
 // Mikronährstoff-Schlüssel + Einheiten (deckungsgleich mit src/lib/nutrients.ts).
 const MICRO_INSTRUCTION =
-  'Schätze in per100 zusätzlich ein Objekt "micros" mit den Mikronährstoffen je 100 g/ml, die du sinnvoll einschätzen kannst (unbekannte weglassen). Erlaubte Schlüssel und Einheiten: fiber (g), sugar (g), satFat (g), sodium (mg), iron (mg), calcium (mg), magnesium (mg), zinc (mg), potassium (mg), vitaminC (mg), vitaminD (µg), vitaminB12 (µg), omega3 (g). Werte sind Schätzungen für typische Lebensmittel dieser Art.'
+  'Ergänze in per100 zusätzlich ein Objekt "micros" mit Mikronährstoffen je 100 g/ml. Ist eine Nährwerttabelle sichtbar, übernimm ALLE dort aufgedruckten passenden Werte exakt (nicht nur schätzen); ansonsten schätze plausible Werte für typische Lebensmittel dieser Art (unbekannte weglassen). Erlaubte Schlüssel und Einheiten: fiber (g), sugar (g), satFat (g), sodium (mg), iron (mg), calcium (mg), magnesium (mg), zinc (mg), potassium (mg), vitaminC (mg), vitaminD (µg), vitaminB12 (µg), omega3 (g).'
 
 const JSON_INSTRUCTION =
   'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?}. ' +
   MICRO_INSTRUCTION +
   ' Keine Erklärungen, kein Markdown.'
 
-async function callOpenRouter(model: string, key: string, system: string, imageBase64: string, hint?: string) {
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+async function callOpenRouter(
+  model: string,
+  key: string,
+  system: string,
+  mode: string,
+  images: string[],
+  hint?: string,
+) {
+  const intro =
+    images.length > 1
+      ? mode === 'label'
+        ? `Es folgen ${images.length} Fotos desselben Produkts: zuerst die Verpackung, danach die Nährwerttabelle(n). Kombiniere alle Informationen; die Nährwerttabelle hat für Zahlenwerte immer Vorrang.`
+        : `Es folgen ${images.length} Fotos desselben Produkts/Gerichts. Kombiniere alle Informationen.`
+      : 'Analysiere das Bild.'
+  const content: Array<Record<string, unknown>> = [
+    { type: 'text', text: hint ? `${intro} Hinweis: ${hint}` : intro },
+  ]
+  for (const img of images) {
+    const dataUrl = img.startsWith('data:') ? img : `data:image/jpeg;base64,${img}`
+    content.push({ type: 'image_url', image_url: { url: dataUrl } })
+  }
+
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -56,13 +76,7 @@ async function callOpenRouter(model: string, key: string, system: string, imageB
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: `${system}\n\n${JSON_INSTRUCTION}` },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: hint ? `Hinweis: ${hint}` : 'Analysiere das Bild.' },
-            { type: 'image_url', image_url: { url: dataUrl } },
-          ],
-        },
+        { role: 'user', content },
       ],
     }),
     // Paket 3: hängender Upstream wird abgebrochen → UPSTREAM_TIMEOUT (504).
@@ -115,7 +129,8 @@ export default async (req: Request): Promise<Response> => {
   let lastErr: unknown
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const content = await callOpenRouter(model, key, system, parsed.data.imageBase64, parsed.data.hint)
+      const images = [parsed.data.imageBase64, ...(parsed.data.images ?? [])]
+      const content = await callOpenRouter(model, key, system, parsed.data.mode, images, parsed.data.hint)
       const result = AnalyzeResultSchema.parse(extractJson(content))
       return new Response(JSON.stringify(result), {
         status: 200,
