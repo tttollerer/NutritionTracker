@@ -108,6 +108,11 @@
     "applyChallenge": "Challenge starten",
     "applyLog": "Eintragen",
     "applied": "Übernommen ✓",
+    "attach": "Foto anhängen",
+    "photoAlt": "Angehängtes Foto",
+    "photoDefaultMsg": "Was sagst du zu diesem Essen?",
+    "pickMeal": "Als welche Mahlzeit eintragen?",
+    "loggedTo": "{{name}} → {{meal}} eingetragen",
     "starters": {
       "today": "Was soll ich heute noch essen?",
       "protein": "Wie treffe ich mein Proteinziel?",
@@ -248,11 +253,39 @@
     "modeLight": "Hell",
     "modeDark": "Dunkel",
     "modeSystem": "System",
-    "brandTheme": "Farbwelt"
+    "brandTheme": "Farbwelt",
+    "coachTone": "Coach-Ton",
+    "coachToneHint": "So spricht dich dein Ernährungscoach an.",
+    "tones": {
+      "motivating": "Motivierend",
+      "casual": "Locker",
+      "strict": "Streng"
+    }
   },
   "trends": {
     "title": "Verlauf & Messwerte",
     "intro": "Trage deine Werte regelmäßig ein — daraus erkennen wir und der Coach deinen Fortschritt.",
+    "measurementsTitle": "Messwerte",
+    "nutrition": {
+      "title": "Ernährung",
+      "kcalTitle": "Kalorien",
+      "kcalSubtitle": "Letzte 14 Tage",
+      "kcalPerDay": "kcal pro Tag",
+      "macroTitle": "Makros",
+      "macroSubtitle": "Ø letzte 7 Tage",
+      "loggedDays": "an {{logged}} von {{total}} Tagen geloggt",
+      "insightsTitle": "Wochen-Insights",
+      "goalHits": "{{hits}}/{{total}} Tagen",
+      "noGoals": "Noch keine aktiven Ziele — der Coach hilft dir, welche festzulegen.",
+      "empty": "Hier erscheint dein Ernährungs-Verlauf, sobald du Mahlzeiten loggst.",
+      "emptyCta": "Erste Mahlzeit loggen",
+      "nutrients": {
+        "kcal": "Kalorien",
+        "protein": "Eiweiß",
+        "carbs": "Kohlenhydrate",
+        "fat": "Fett"
+      }
+    },
     "valuePh": "Wert ({{unit}})",
     "add": "Eintragen",
     "noData": "Noch kein Wert erfasst.",
@@ -352,9 +385,13 @@
   "review": {
     "title": "Ergebnis prüfen",
     "empty": "Keine Ergebnisse. Bitte erneut versuchen.",
+    "retake": "Erneut fotografieren",
     "confidence": "Sicherheit",
     "estimate": "KI-Schätzung — bitte prüfen.",
+    "aiNotes": "Hinweis der KI",
+    "knownFood": "Bekannt — übliche Menge vorausgefüllt.",
     "confirm": "Übernehmen",
+    "saving": "Wird übernommen …",
     "perInfo": "Werte je 100 {{unit}}",
     "microsTitle": "Mikronährstoffe – geschätzt ({{count}})",
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",

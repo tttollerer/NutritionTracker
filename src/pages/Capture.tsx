@@ -60,7 +60,8 @@ export function Capture() {
     try {
       const result = await analyzeImage(mode, preview, hint.trim() || undefined)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
-      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined })
+      // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
+      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined, notes: result.notes })
       navigate('/review')
     } catch (err) {
       setErrorKey(toApiError(err).i18nKey)

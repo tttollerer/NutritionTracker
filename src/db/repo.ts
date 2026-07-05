@@ -1,10 +1,20 @@
 import { v4 as uuid } from 'uuid'
 import { db } from './index'
-import type { FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Measurement, Profile, Settings, Unit } from './types'
+import type { CoachMemory, FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Measurement, Profile, Settings, Unit } from './types'
 import { computeTargets, kcalFloor } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
 
 const now = () => Date.now()
+
+/**
+ * CoachMemory.diet aus den Ernährungsformen des Profils ableiten (Paket 11):
+ * erste/kombinierte Form als kompakter String (z. B. "vegan+glutenfree"),
+ * keine Formen → undefined (Feld bleibt leer statt Leerstring).
+ */
+export function dietFromForms(dietForms: string[] | undefined): string | undefined {
+  const forms = (dietForms ?? []).map((f) => f.trim()).filter(Boolean)
+  return forms.length ? forms.join('+') : undefined
+}
 
 /** Profil aus dem Onboarding speichern und daraus die Ziele ableiten. */
 export async function saveOnboarding(profile: Omit<Profile, 'id' | 'updatedAt'>, allergies: string[]) {
@@ -14,12 +24,15 @@ export async function saveOnboarding(profile: Omit<Profile, 'id' | 'updatedAt'>,
   await db.transaction('rw', db.profile, db.goals, db.coachMemory, db.gamification, async () => {
     await db.profile.put(fullProfile)
     await db.goals.bulkPut(goals)
+    // Ton einer bestehenden Memory (z. B. „Onboarding erneut") nicht zurücksetzen.
+    const prevMemory = await db.coachMemory.get('me')
     await db.coachMemory.put({
       id: 'me',
+      diet: dietFromForms(fullProfile.dietForms),
       allergies,
       dislikes: [],
       likes: [],
-      tone: 'motivating',
+      tone: prevMemory?.tone ?? 'motivating',
       updatedAt: now(),
     })
     const existing = await db.gamification.get('me')
@@ -65,7 +78,33 @@ export async function updateProfile(patch: Partial<Omit<Profile, 'id'>>) {
   if (patch.weightKg != null && patch.weightKg !== current.weightKg) {
     await addMeasurement('weight', patch.weightKg, 'kg')
   }
+  // CoachMemory.diet mit den geänderten Ernährungsformen synchron halten (Paket 11).
+  if (patch.dietForms) {
+    await updateCoachMemory({ diet: dietFromForms(patch.dietForms) })
+  }
   return { profile: updated, targets: computeTargets(updated) }
+}
+
+// ---- Coach-Gedächtnis (CoachMemory, PLAN.md §9.3) ----
+
+export async function getCoachMemory(): Promise<CoachMemory | undefined> {
+  return db.coachMemory.get('me')
+}
+
+/**
+ * Felder des Coach-Gedächtnisses ändern (legt bei Bedarf einen Default-Datensatz
+ * an, falls die Memory z. B. nach einem Alt-Import fehlt).
+ */
+export async function updateCoachMemory(patch: Partial<Omit<CoachMemory, 'id' | 'updatedAt'>>) {
+  const cur = await db.coachMemory.get('me')
+  const base: CoachMemory =
+    cur ?? { id: 'me', allergies: [], dislikes: [], likes: [], tone: 'motivating', updatedAt: 0 }
+  await db.coachMemory.put({ ...base, ...patch, id: 'me', updatedAt: now() })
+}
+
+/** Ton-Auswahl des Coachs (Profil-Screen, Paket 11). */
+export async function setCoachTone(tone: CoachMemory['tone']) {
+  await updateCoachMemory({ tone })
 }
 
 /** Die vier vom System abgeleiteten Basis-Ziele (deterministische IDs). */
@@ -169,6 +208,17 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   }
   await db.foods.put(food)
   return food
+}
+
+/**
+ * Katalog-Treffer per Namens-Match (case-insensitiv, getrimmt) — Lernschleife
+ * im Prüf-Screen: bekannte Lebensmittel liefern ihre gemerkte defaultPortion
+ * als Vorbelegung. Gleiche Match-Regel wie der createFood-Namens-Dedupe.
+ */
+export async function findFoodByName(name: string): Promise<FoodItem | undefined> {
+  const lower = name.trim().toLowerCase()
+  if (!lower) return undefined
+  return db.foods.filter((f) => !f.deletedAt && f.name.toLowerCase() === lower).first()
 }
 
 /** Hinterlegte Allergene des Nutzers (für Warnungen beim Erfassen). */

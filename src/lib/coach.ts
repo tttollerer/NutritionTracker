@@ -22,6 +22,14 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   suggestions?: CoachSuggestions
+  /**
+   * Angehängtes Foto (stark verkleinerte JPEG-Data-URL, ≤ ~190 KB binär).
+   * Wird nur mitgesendet, wenn die Nachricht die LETZTE User-Nachricht ist
+   * (Foto-Feedback, Vertrag v1.1) — ältere Fotos bleiben reine Anzeige.
+   */
+  image?: string
+  /** Bereits übernommene Vorschlags-Keys (z. B. "g0", "log1") — übersteht Reload (Vertrag §4). */
+  applied?: string[]
 }
 
 const ENDPOINT = import.meta.env.VITE_COACH_URL ?? '/api/coach'
@@ -158,6 +166,14 @@ export async function sendCoachStream(
   if (isOffline()) throw new ApiError('OFFLINE')
 
   const [context, memory] = await Promise.all([buildCoachContext(), getMemory()])
+  // Ton + Diätform gehen als Teil der Memory in den System-Kontext der Function.
+  // Fallback: Nutzer ohne gepflegtes diet-Feld (Memory nur beim Seeding
+  // geschrieben) bekommen die Ableitung aus den Profil-Ernährungsformen.
+  const dietFallback = context.profile?.dietForms?.length ? context.profile.dietForms.join('+') : undefined
+  // Foto-Feedback (Vertrag v1.1): Bild nur mitsenden, wenn es an der LETZTEN
+  // User-Nachricht hängt — der Server legt es genau dieser Nachricht bei.
+  const last = messages[messages.length - 1]
+  const imageBase64 = last?.role === 'user' ? last.image : undefined
   let res: Response
   try {
     res = await fetch(ENDPOINT, {
@@ -166,7 +182,10 @@ export async function sendCoachStream(
       body: JSON.stringify({
         messages: messages.map(({ role, content }) => ({ role, content })),
         context,
-        memory: memory ? { diet: memory.diet, allergies: memory.allergies, likes: memory.likes, dislikes: memory.dislikes, tone: memory.tone } : null,
+        memory: memory
+          ? { diet: memory.diet ?? dietFallback, allergies: memory.allergies, likes: memory.likes, dislikes: memory.dislikes, tone: memory.tone }
+          : null,
+        ...(imageBase64 ? { imageBase64 } : {}),
       }),
     })
   } catch (e) {

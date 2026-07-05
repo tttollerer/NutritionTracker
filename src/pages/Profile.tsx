@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Upload, RefreshCw, Activity, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
-import { getActiveGoalsMap, getSettings, resetAllData, updateSettings } from '@/db/repo'
+import { Download, Upload, RefreshCw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
+import { getActiveGoalsMap, getCoachMemory, getSettings, resetAllData, setCoachTone, updateSettings } from '@/db/repo'
+import type { CoachMemory } from '@/db/types'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { ThemeSettings } from '@/components/ThemeSettings'
@@ -12,7 +13,10 @@ import { EditProfile } from '@/components/EditProfile'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
+import { Chip } from '@/components/ui/Chip'
 import { Toggle } from '@/components/ui/Toggle'
+
+const COACH_TONES: CoachMemory['tone'][] = ['motivating', 'casual', 'strict']
 
 type PendingAction = { kind: 'import'; json: string } | { kind: 'reset' }
 type Feedback = { kind: 'success' | 'error'; text: string }
@@ -21,6 +25,7 @@ export function Profile({ onReset }: { onReset: () => void }) {
   const { t } = useTranslation()
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
   const settings = useLiveQuery(() => getSettings(), [])
+  const coachMemory = useLiveQuery(() => getCoachMemory(), [])
   const fileRef = useRef<HTMLInputElement>(null)
   const [editing, setEditing] = useState(false)
   const [pending, setPending] = useState<PendingAction | null>(null)
@@ -113,6 +118,25 @@ export function Profile({ onReset }: { onReset: () => void }) {
       </Card>
 
       <ThemeSettings />
+
+      {/* Coach-Ton: fließt als CoachMemory.tone in jeden Coach-Request ein. */}
+      <Card className="space-y-3 p-4">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Bot size={20} className="text-muted-foreground" aria-hidden="true" />
+          {t('profile.coachTone')}
+        </h2>
+        <p className="text-xs text-muted-foreground">{t('profile.coachToneHint')}</p>
+        <div className="flex flex-wrap gap-2">
+          {COACH_TONES.map((tone) => (
+            <Chip
+              key={tone}
+              label={t(`profile.tones.${tone}`)}
+              selected={(coachMemory?.tone ?? 'motivating') === tone}
+              onClick={() => void setCoachTone(tone)}
+            />
+          ))}
+        </div>
+      </Card>
 
       {/* Optionale Gesundheits-Module */}
       <Card className="divide-y divide-border">

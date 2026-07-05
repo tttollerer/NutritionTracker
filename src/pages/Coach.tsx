@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Mic, RotateCcw, Send, Volume2, VolumeX, Target, Trophy, Plus } from 'lucide-react'
+import { Camera, Image as ImageIcon, ImagePlus, Mic, RotateCcw, Send, ShieldCheck, Volume2, VolumeX, Target, Trophy, Plus, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -13,10 +14,33 @@ import { cn } from '@/lib/utils'
 import { sendCoachStream, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
 import { toApiError } from '@/lib/apiError'
 import { loadChat, saveChat } from '@/lib/chatStore'
+import { downscaleImage } from '@/lib/image'
+import { useOverlays } from '@/lib/overlays-context'
 import { completeSentences, speakQueue, stopSpeaking, useSpeechRecognition } from '@/lib/speech'
-import { applyChallengeSuggestion, applyGoalSuggestion, createFood, logFood } from '@/db/repo'
-import { defaultMeal } from '@/lib/meal'
+import { applyChallengeSuggestion, applyGoalSuggestion, createFood, deleteLog, getSettings, logFood, updateSettings } from '@/db/repo'
+import type { Meal } from '@/db/types'
+import { defaultMeal, MEALS } from '@/lib/meal'
 import { todayKey } from '@/lib/utils'
+
+/**
+ * Foto fürs Coach-Feedback DEUTLICH stärker komprimieren als beim analyze-Pfad
+ * (1024 px / q0.7): Das Coach-Body-Limit liegt bei 256 KB inkl. Kontext +
+ * Verlauf, das Bild muss also ≤ ~190 KB binär bleiben. 512 px / q0.5 liefert
+ * typischerweise 20–60 KB; falls ein Motiv doch größer gerät, wird einmal auf
+ * 384 px / q0.4 nachverdichtet.
+ */
+const COACH_IMAGE_MAX_BYTES = 190 * 1024
+
+function dataUrlBytes(dataUrl: string): number {
+  const b64 = dataUrl.slice(dataUrl.indexOf(',') + 1)
+  return Math.floor((b64.length * 3) / 4)
+}
+
+async function compressForCoach(file: Blob): Promise<string> {
+  const first = await downscaleImage(file, 512, 0.5)
+  if (dataUrlBytes(first) <= COACH_IMAGE_MAX_BYTES) return first
+  return downscaleImage(file, 384, 0.4)
+}
 
 export function Coach() {
   const { t } = useTranslation()
@@ -28,6 +52,13 @@ export function Coach() {
   const [errorKey, setErrorKey] = useState<string | null>(null)
   const [muted, setMuted] = useState(false)
   const [streamText, setStreamText] = useState<string | null>(null) // live wachsende Antwort
+  // Foto-Anhang: erst nach explizitem Tap auf Senden geht das Bild raus.
+  const [pendingImage, setPendingImage] = useState<string | null>(null)
+  const [attachOpen, setAttachOpen] = useState(false) // Kamera/Galerie-Wahl
+  const [consentOpen, setConsentOpen] = useState(false) // Datenschutz-Einwilligung
+  const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   // Ref auf den aktuellen Verlauf: verhindert, dass eine späte Spracherkennung
   // oder ein schnelles zweites Senden gegen einen veralteten Stand schreibt.
@@ -47,10 +78,14 @@ export function Coach() {
   useEffect(() => endRef.current?.scrollIntoView({ behavior: 'smooth' }), [messages, busy, streamText])
 
   async function send(text: string) {
-    const content = text.trim()
+    // Foto ohne Text: sinnvolle Standardfrage, damit der Vertrag (content ≥ 1) hält.
+    const content = text.trim() || (pendingImage ? t('coach.photoDefaultMsg') : '')
     if (!content || busyRef.current) return
+    const image = pendingImage ?? undefined
+    setPendingImage(null)
+    setAttachOpen(false)
     setInput('')
-    await run([...messagesRef.current, { role: 'user', content }])
+    await run([...messagesRef.current, { role: 'user', content, image }])
   }
 
   /** Letzte Nutzer-Nachricht erneut senden (eine evtl. Teil-Antwort wird verworfen). */
@@ -107,6 +142,40 @@ export function Coach() {
     }
   }
 
+  /** Übernommenen Vorschlag an der Nachricht persistieren (sessionStorage, Vertrag §4). */
+  function markApplied(msgIndex: number, key: string, on: boolean) {
+    setMessages((msgs) =>
+      msgs.map((m, i) => {
+        if (i !== msgIndex) return m
+        const cur = m.applied ?? []
+        const applied = on ? (cur.includes(key) ? cur : [...cur, key]) : cur.filter((k) => k !== key)
+        return { ...m, applied }
+      }),
+    )
+  }
+
+  function openAttach() {
+    if (busy) return
+    if (consent === false) {
+      setConsentOpen(true)
+      return
+    }
+    if (consent === true) setAttachOpen((o) => !o)
+    // consent === undefined: Einstellung lädt noch — Tap ignorieren statt raten.
+  }
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    setAttachOpen(false)
+    if (!file) return
+    try {
+      setPendingImage(await compressForCoach(file))
+    } catch (err) {
+      setErrorKey(toApiError(err).i18nKey)
+    }
+  }
+
   const starters = ['today', 'protein', 'week'] as const
 
   return (
@@ -121,7 +190,8 @@ export function Coach() {
         </button>
       </PageHeader>
 
-      <div className="flex-1 space-y-3 overflow-y-auto pb-2">
+      {/* role="log" + aria-live: gestreamte Coach-Antworten erreichen Screenreader. */}
+      <div role="log" aria-live="polite" className="flex-1 space-y-3 overflow-y-auto pb-2">
         {messages.length === 0 && (
           <div className="space-y-4 pt-6 text-center">
             <p className="mx-auto max-w-xs text-sm text-muted-foreground">{t('coach.empty')}</p>
@@ -142,9 +212,18 @@ export function Coach() {
                   m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-card border border-border',
                 )}
               >
+                {m.image && (
+                  <img src={m.image} alt={t('coach.photoAlt')} className="mb-2 h-28 w-28 rounded-md object-cover" />
+                )}
                 {m.content}
               </div>
-              {m.suggestions && <Suggestions s={m.suggestions} />}
+              {m.suggestions && (
+                <Suggestions
+                  s={m.suggestions}
+                  applied={m.applied ?? []}
+                  onApplied={(key, on) => markApplied(i, key, on)}
+                />
+              )}
             </div>
           </div>
         ))}
@@ -181,8 +260,69 @@ export function Coach() {
         <div ref={endRef} />
       </div>
 
+      {/* Datenschutz: Foto geht erst nach expliziter Einwilligung an die KI (wie Capture). */}
+      {consentOpen && consent === false && (
+        <div className="mt-2 space-y-3 rounded-lg border border-border bg-card p-4">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <ShieldCheck size={18} className="text-primary" /> {t('capture.consentTitle')}
+          </p>
+          <p className="text-sm text-muted-foreground">{t('capture.consentBody')}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Button variant="secondary" onClick={() => setConsentOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={() => {
+                void updateSettings({ photoConsent: true })
+                setConsentOpen(false)
+                setAttachOpen(true)
+              }}
+            >
+              {t('capture.consentAccept')}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Kamera/Galerie-Wahl für den Foto-Anhang */}
+      {attachOpen && !pendingImage && (
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <Button variant="secondary" onClick={() => cameraRef.current?.click()}>
+            <Camera size={18} /> {t('capture.take')}
+          </Button>
+          <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
+            <ImageIcon size={18} /> {t('capture.choose')}
+          </Button>
+        </div>
+      )}
+
+      {/* Vorschau des Anhangs — Senden schickt Text + Foto zusammen. */}
+      {pendingImage && (
+        <div className="relative mt-2 w-fit">
+          <img src={pendingImage} alt={t('coach.photoAlt')} className="h-16 w-16 rounded-md object-cover" />
+          <button
+            onClick={() => setPendingImage(null)}
+            aria-label={t('common.delete')}
+            className="focus-ring absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Eingabe */}
       <div className="flex items-center gap-2 pt-2">
+        <button
+          onClick={openAttach}
+          aria-label={t('coach.attach')}
+          aria-expanded={attachOpen}
+          className={cn(
+            'focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+            pendingImage ? 'bg-primary-soft text-primary' : 'bg-secondary text-foreground',
+          )}
+        >
+          <ImagePlus size={20} />
+        </button>
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -202,26 +342,51 @@ export function Coach() {
             <Mic size={20} />
           </motion.button>
         )}
-        <Button className="h-12 w-12 shrink-0 px-0" onClick={() => void send(input)} disabled={busy} aria-label={t('coach.send')}>
+        <Button
+          className="h-12 w-12 shrink-0 px-0"
+          onClick={() => void send(input)}
+          disabled={busy || (!input.trim() && !pendingImage)}
+          aria-label={t('coach.send')}
+        >
           <Send size={18} />
         </Button>
       </div>
       <p className="pt-1.5 text-center text-[10px] text-muted-foreground">{t('coach.disclaimer')}</p>
+
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
+      <input ref={galleryRef} type="file" accept="image/*" hidden onChange={onFile} />
     </div>
   )
 }
 
-function Suggestions({ s }: { s: CoachSuggestions }) {
+function Suggestions({
+  s,
+  applied,
+  onApplied,
+}: {
+  s: CoachSuggestions
+  /** Persistierte Keys bereits übernommener Vorschläge (aus der ChatMessage). */
+  applied: string[]
+  onApplied: (key: string, on: boolean) => void
+}) {
   const { t } = useTranslation()
-  const [done, setDone] = useState<Set<string>>(new Set())
-  const mark = (k: string) => setDone((d) => new Set(d).add(k))
+  const { showUndo } = useOverlays()
+  // Welcher Log-Vorschlag zeigt gerade den Mahlzeit-Picker?
+  const [pickingLog, setPickingLog] = useState<number | null>(null)
+  const done = (k: string) => applied.includes(k)
 
-  async function applyLog(i: number) {
+  async function applyLog(i: number, meal: Meal) {
     const l = s.logs![i]
     const per: 'g' | 'ml' = l.unit === 'ml' ? 'ml' : 'g'
     const food = await createFood({ name: l.name, per, ...l.per100, source: 'ai' })
-    await logFood({ food, date: todayKey(), meal: defaultMeal(), amount: l.amount, unit: l.unit })
-    mark(`log${i}`)
+    const entry = await logFood({ food, date: todayKey(), meal, amount: l.amount, unit: l.unit })
+    setPickingLog(null)
+    onApplied(`log${i}`, true)
+    // Sichtbares Feedback wohin es ging + Undo (wie in Add.tsx).
+    showUndo(t('coach.loggedTo', { name: l.name, meal: t(`today.meals.${meal}`) }), async () => {
+      await deleteLog(entry.id)
+      onApplied(`log${i}`, false)
+    })
   }
 
   return (
@@ -233,10 +398,10 @@ function Suggestions({ s }: { s: CoachSuggestions }) {
           icon={<Target size={16} />}
           label={`${g.nutrient}: ${g.type} ${g.target}${g.targetMax ? `–${g.targetMax}` : ''} ${g.unit}`}
           action={t('coach.applyGoal')}
-          done={done.has(`g${i}`)}
+          done={done(`g${i}`)}
           onClick={async () => {
             await applyGoalSuggestion(g)
-            mark(`g${i}`)
+            onApplied(`g${i}`, true)
           }}
         />
       ))}
@@ -246,22 +411,39 @@ function Suggestions({ s }: { s: CoachSuggestions }) {
           icon={<Trophy size={16} />}
           label={c.title}
           action={t('coach.applyChallenge')}
-          done={done.has(`c${i}`)}
+          done={done(`c${i}`)}
           onClick={async () => {
             await applyChallengeSuggestion(c)
-            mark(`c${i}`)
+            onApplied(`c${i}`, true)
           }}
         />
       ))}
       {s.logs?.map((l, i) => (
-        <SuggestionRow
-          key={`l${i}`}
-          icon={<Plus size={16} />}
-          label={`${l.name} · ${l.amount}${l.unit} · ${l.per100.kcal} kcal/100`}
-          action={t('coach.applyLog')}
-          done={done.has(`log${i}`)}
-          onClick={() => applyLog(i)}
-        />
+        <div key={`l${i}`} className="space-y-2">
+          <SuggestionRow
+            icon={<Plus size={16} />}
+            label={`${l.name} · ${l.amount}${l.unit} · ${l.per100.kcal} kcal/100`}
+            action={t('coach.applyLog')}
+            done={done(`log${i}`)}
+            onClick={() => setPickingLog((p) => (p === i ? null : i))}
+          />
+          {/* Mahlzeit-Picker im Bestätigungs-Moment: Nutzer sieht, wohin geloggt wird. */}
+          {pickingLog === i && !done(`log${i}`) && (
+            <div className="space-y-1.5 rounded-lg bg-muted/50 p-2">
+              <p className="px-1 text-xs text-muted-foreground">{t('coach.pickMeal')}</p>
+              <div className="flex flex-wrap gap-2">
+                {MEALS.map((m) => (
+                  <Chip
+                    key={m}
+                    label={t(`today.meals.${m}`)}
+                    selected={m === defaultMeal()}
+                    onClick={() => void applyLog(i, m)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       ))}
     </Card>
   )
