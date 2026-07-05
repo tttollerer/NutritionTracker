@@ -31,7 +31,7 @@ export function Capture() {
   // i18n-Key des gemappten Fehlers (errors.*), nie ein roher Fehlertext.
   const [errorKey, setErrorKey] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null) // verkleinertes Bild, noch nicht gesendet
-  const [hint, setHint] = useState('')
+  const [hint, setHint] = useState(() => params.get('hint') ?? '')
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
 
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).

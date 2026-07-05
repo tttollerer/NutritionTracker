@@ -9,6 +9,32 @@ bereits behoben). ~70 Befunde, davon 1 × P0, 18 × P1, Rest P2.
 
 ---
 
+## Status nach Umsetzung (Abnahme 2026-07-05)
+
+**Wellen 1–4 umgesetzt (Pakete 1–15), Paket 16 bewusst zurückgestellt.**
+Abnahme-Verifikation: Build PASS · Lint PASS (0 Errors, 1 unkritische react-refresh-Warning
+in `UpdatePrompt.tsx`) · Test PASS (230 Tests, 30 Dateien). Stichproben der kritischen Fixes
+(Backup inkl. `measurements`, Portion-Presets, guard.ts in beiden Functions, `memory ?? {}`,
+`MotionConfig reducedMotion="user"`, Update-Prompt in `main.tsx`) bestätigt.
+
+**Restliste (dokumentierte Schulden, nicht Teil des Abschlusses):**
+
+- **Paket 16 (Gamification-Ausbau):** Quests, „Wrapped"-Rückblick, Vorwochen-Vergleich,
+  Mystery-Badges, Level-Gating, Per-Ziel-Streaks.
+- **USDA/OFF-Nährwert-Resolver** serverseitig (PLAN §12 — KI-Schätzwerte bleiben vorerst Quelle
+  für Foto-Analysen).
+- **iOS-ZXing-Nachrüstung** für Barcode (BarcodeDetector fehlt in Safari; manuelle Eingabe als
+  Fallback vorhanden).
+- **Server-STT/TTS-Fallback** (Web Speech API vorhanden).
+- **en.json-Vollausbau** (App ist festgeschriebene Single-Locale DE).
+- **Freihand-Sprachmodus** (PLAN §9.4, optional).
+- **i18n-Restbefunde:** (1) deutscher `STREAM_ERROR_FALLBACK`-Text hartkodiert in
+  `src/lib/apiContract.ts:181` (Fallback für kaputte Stream-Daten, bewusst außerhalb i18next,
+  da auch ohne React-Kontext nutzbar); (2) `brand.ts`-Default-Description auf Deutsch —
+  bewusster White-Label-Default, per `VITE_BRAND_DESCRIPTION` überschreibbar.
+
+---
+
 ## 1) Nicht Teil des Abschlusses (verschoben)
 
 | Punkt | Begründung |
