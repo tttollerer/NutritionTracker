@@ -22,6 +22,12 @@ export interface FoodItem {
   micros?: Micros
   allergens?: string[] // OFF-Allergen-Tags (enthält) — für Warnungen über alle Log-Pfade
   traces?: string[] // OFF-Spuren-Tags („kann Spuren enthalten")
+  /**
+   * Favoriten-Stern (1-Tap-Wiederholung, PLAN §7.2). Bewusst NICHT indiziert —
+   * Abfragen laufen über .filter(), daher braucht das optionale Feld keine
+   * neue Dexie-Schemaversion.
+   */
+  favorite?: boolean
   defaultPortion?: { amount: number; unit: Unit }
   createdAt: number
   updatedAt: number
@@ -96,6 +102,12 @@ export interface GamificationState {
   level: number
   streaks: Record<string, number>
   freezeTokens: number
+  /**
+   * Lückentage ('YYYY-MM-DD'), die bereits mit einem Freeze-Token überbrückt
+   * wurden. Macht den Token-Verbrauch idempotent: derselbe Lückentag kostet
+   * nie zweimal. Optionales, nicht indiziertes Feld — keine Dexie-Migration nötig.
+   */
+  frozenDates?: string[]
   unlocked: string[]
   companion?: { type: string; stage: number; mood: 'happy' | 'ok' | 'sad' }
   updatedAt: number

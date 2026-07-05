@@ -3,8 +3,21 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, Check, ImagePlus, X } from 'lucide-react'
-import { createFood, deleteLog, getAllergies, logFood, quickLogCatalog, recentFoods, savePhoto } from '@/db/repo'
+import { Camera, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History } from 'lucide-react'
+import {
+  copyYesterday,
+  createFood,
+  deleteLog,
+  favoriteFoods,
+  getAllergies,
+  logFood,
+  quickLogCatalog,
+  recentFoods,
+  savePhoto,
+  searchFoods,
+  toggleFavorite,
+  yesterdayLogCount,
+} from '@/db/repo'
 import { checkAllergens } from '@/lib/allergens'
 import { useOverlays } from '@/lib/overlays-context'
 import type { FoodItem, Meal } from '@/db/types'
@@ -24,8 +37,14 @@ export function Add() {
   const { showUndo } = useOverlays()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
   const recents = useLiveQuery(() => recentFoods(), [])
+  const favorites = useLiveQuery(() => favoriteFoods(), [])
+  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
   const [ack, setAck] = useState(false)
+
+  // Katalog-Suche (live über db.foods)
+  const [query, setQuery] = useState('')
+  const results = useLiveQuery(() => searchFoods(query), [query])
 
   // Manuelles Formular
   const [name, setName] = useState('')
@@ -70,6 +89,20 @@ export function Add() {
     navigate('/')
   }
 
+  /** Menge eines bekannten Lebensmittels per Foto schätzen (mode 'portion'). */
+  function portionPhoto(food: FoodItem) {
+    navigate(`/capture?mode=portion&meal=${meal}&hint=${encodeURIComponent(food.name)}`)
+  }
+
+  async function copyFromYesterday() {
+    const copied = await copyYesterday()
+    if (copied.length === 0) return
+    showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
+      await Promise.all(copied.map((c) => deleteLog(c.id)))
+    })
+    navigate('/')
+  }
+
   // Namens-basierte Allergen-Warnung für manuell erfasste Lebensmittel.
   const manualHits = checkAllergens({ name }, allergies).contains
   const allergenNames = (keys: string[]) =>
@@ -87,9 +120,14 @@ export function Add() {
       fat: Number(fat) || 0,
     })
     const photoBlobId = photo ? await savePhoto(photo) : undefined
-    await logFood({ food, date: todayKey(), meal, amount: Number(amount) || 100, unit: per, photoBlobId })
+    const entry = await logFood({ food, date: todayKey(), meal, amount: Number(amount) || 100, unit: per, photoBlobId })
+    showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
     navigate('/')
   }
+
+  // Favoriten stehen in der eigenen Sektion — aus „zuletzt benutzt" ausblenden.
+  const recentsWithoutFavs = (recents ?? []).filter((f) => !f.favorite)
+  const searching = query.trim().length > 0
 
   return (
     <div className="space-y-6">
@@ -102,28 +140,73 @@ export function Add() {
         ))}
       </div>
 
+      {/* KI- & Barcode-Erfassung — der schnellste Weg zuerst (PLAN §7.2) */}
+      <div className="grid grid-cols-3 gap-3">
+        {captureOptions.map(({ icon: Icon, key, to }) => (
+          <motion.button
+            key={key}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => navigate(to)}
+            className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4"
+          >
+            <Icon size={26} className="text-primary" />
+            <span className="text-xs">{t(`add.${key}`)}</span>
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Katalog-Suche über die eigenen Lebensmittel */}
+      <section className="space-y-2">
+        <div className="relative">
+          <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('add.searchPh')}
+            aria-label={t('add.searchPh')}
+            className="pl-10"
+          />
+        </div>
+        {searching && results && (
+          results.length > 0 ? (
+            <div className="space-y-2">
+              {results.map((f) => (
+                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t('add.searchNone')}</p>
+          )
+        )}
+      </section>
+
+      {/* Favoriten — 1-Tap-Wiederholung, immer vor „zuletzt benutzt" */}
+      {!searching && favorites && favorites.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium text-muted-foreground">{t('add.favorites')}</h2>
+          <div className="space-y-2">
+            {favorites.map((f) => (
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Gestern kopieren */}
+      {!searching && yesterdayCount > 0 && (
+        <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday()}>
+          <History size={18} /> {t('add.copyYesterday')}
+        </Button>
+      )}
+
       {/* Zuletzt benutzt */}
-      {recents && recents.length > 0 && (
+      {!searching && recentsWithoutFavs.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-medium text-muted-foreground">{t('entry.recent')}</h2>
           <div className="space-y-2">
-            {recents.map((f) => (
-              <motion.button
-                key={f.id}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => quickLog(f)}
-                className="focus-ring flex w-full items-center justify-between rounded-lg border border-border bg-card p-3 text-left"
-              >
-                <span>
-                  <span className="font-medium">{f.name}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {f.kcal} kcal / 100 {f.per}
-                  </span>
-                </span>
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-soft text-primary">
-                  <Check size={18} />
-                </span>
-              </motion.button>
+            {recentsWithoutFavs.map((f) => (
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -226,21 +309,57 @@ export function Add() {
           {t('entry.save')}
         </Button>
       </Card>
+    </div>
+  )
+}
 
-      {/* KI- & Barcode-Erfassung */}
-      <div className="grid grid-cols-3 gap-3">
-        {captureOptions.map(({ icon: Icon, key, to }) => (
-          <motion.button
-            key={key}
-            whileTap={{ scale: 0.96 }}
-            onClick={() => navigate(to)}
-            className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4"
-          >
-            <Icon size={26} className="text-primary" />
-            <span className="text-xs">{t(`add.${key}`)}</span>
-          </motion.button>
-        ))}
-      </div>
+/**
+ * Lebensmittel-Zeile mit 1-Tap-Log (gemerkte Portion), „Menge per Foto"
+ * (Capture mode 'portion') und Favoriten-Stern (48-px-Targets, aria-pressed).
+ */
+function FoodRow({
+  food,
+  onLog,
+  onPortionPhoto,
+}: {
+  food: FoodItem
+  onLog: () => void
+  onPortionPhoto: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-2">
+      <motion.button
+        whileTap={{ scale: 0.98 }}
+        onClick={onLog}
+        className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center rounded-md px-2 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{food.name}</span>
+          <span className="block text-xs text-muted-foreground">
+            {food.kcal} kcal / 100 {food.per}
+          </span>
+        </span>
+      </motion.button>
+      <button
+        type="button"
+        onClick={onPortionPhoto}
+        aria-label={t('add.portionPhoto', { name: food.name })}
+        className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground"
+      >
+        <Camera size={20} />
+      </button>
+      <button
+        type="button"
+        onClick={() => void toggleFavorite(food.id)}
+        aria-pressed={!!food.favorite}
+        aria-label={t('add.favToggle', { name: food.name })}
+        className={`focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md ${
+          food.favorite ? 'text-primary' : 'text-muted-foreground'
+        }`}
+      >
+        <Star size={20} fill={food.favorite ? 'currentColor' : 'none'} />
+      </button>
     </div>
   )
 }

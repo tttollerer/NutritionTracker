@@ -471,6 +471,95 @@ export async function recentFoods(limit = 8): Promise<FoodItem[]> {
   return foods.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit)
 }
 
+// ---- Favoriten, Katalog-Suche & „Gestern kopieren" (Paket 12, PLAN §7.2) ----
+
+/**
+ * Favoriten-Stern eines Lebensmittels umschalten. `favorite` ist bewusst nicht
+ * indiziert (siehe FoodItem) — kein Dexie-Versionssprung nötig. Beim Entfernen
+ * wird das Feld ganz gelöscht (Dexie entfernt undefined-Properties), damit die
+ * Datensätze sync-sauber bleiben. Gibt den neuen Zustand zurück.
+ */
+export async function toggleFavorite(foodId: string): Promise<boolean> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return false
+  const next = !food.favorite
+  await db.foods.update(foodId, { favorite: next || undefined, updatedAt: now() })
+  return next
+}
+
+/** Alle favorisierten Lebensmittel, alphabetisch (stabile 1-Tap-Liste). */
+export async function favoriteFoods(): Promise<FoodItem[]> {
+  const foods = await db.foods.filter((f) => !f.deletedAt && !!f.favorite).toArray()
+  return foods.sort((a, b) => a.name.localeCompare(b.name, 'de'))
+}
+
+/**
+ * Match-Regel der Katalog-Suche: case-insensitives „Name enthält Suchbegriff"
+ * (getrimmt). Als pure Funktion exportiert, damit sie direkt testbar ist.
+ */
+export function foodNameMatches(name: string, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  return q.length > 0 && name.toLowerCase().includes(q)
+}
+
+/**
+ * Eigenen Lebensmittel-Katalog (db.foods) durchsuchen — ohne Soft-Deleted,
+ * Favoriten zuerst, danach zuletzt benutzte; max. `limit` Treffer.
+ */
+export async function searchFoods(query: string, limit = 20): Promise<FoodItem[]> {
+  if (!query.trim()) return []
+  const hits = await db.foods.filter((f) => !f.deletedAt && foodNameMatches(f.name, query)).toArray()
+  return hits
+    .sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite) || b.updatedAt - a.updatedAt)
+    .slice(0, limit)
+}
+
+/** Vortag eines 'YYYY-MM-DD'-Schlüssels (lokal, DST-sicher über setDate). */
+function previousDayKey(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() - 1)
+  return todayKey(dt)
+}
+
+/** Anzahl gestriger (nicht gelöschter) Einträge — steuert den „Gestern kopieren"-Button. */
+export async function yesterdayLogCount(targetDate = todayKey()): Promise<number> {
+  return db.logs
+    .where('date')
+    .equals(previousDayKey(targetDate))
+    .filter((l) => !l.deletedAt)
+    .count()
+}
+
+/**
+ * Alle gestrigen Logs (optional nur eine Mahlzeit) auf heute kopieren:
+ * neue UUIDs, loggedAt jetzt, computed-Snapshot wird ÜBERNOMMEN (nicht neu
+ * berechnet — auch wenn sich das Lebensmittel inzwischen geändert hat, bleibt
+ * die Kopie identisch zu dem, was gestern gegessen wurde). Foto und aiRaw
+ * werden bewusst nicht mitkopiert (sie gehören zur gestrigen Aufnahme).
+ * Gibt die Kopien zurück (Undo: alle wieder löschen).
+ */
+export async function copyYesterday(meal?: Meal, targetDate = todayKey()): Promise<LogEntry[]> {
+  const source = await db.logs
+    .where('date')
+    .equals(previousDayKey(targetDate))
+    .filter((l) => !l.deletedAt && (!meal || l.meal === meal))
+    .toArray()
+  const copies: LogEntry[] = source.map((l) => ({
+    id: uuid(),
+    foodId: l.foodId,
+    date: targetDate,
+    meal: l.meal,
+    loggedAt: now(),
+    amount: l.amount,
+    unit: l.unit,
+    computed: structuredClone(l.computed),
+    updatedAt: now(),
+  }))
+  if (copies.length) await db.logs.bulkPut(copies)
+  return copies
+}
+
 function round1(n: number) {
   return Math.round(n * 10) / 10
 }
