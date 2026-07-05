@@ -22,6 +22,7 @@
       "snack": "Snack"
     },
     "macros": {
+      "kcal": "Kalorien",
       "protein": "Eiweiß",
       "carbs": "Kohlenhydrate",
       "fat": "Fett"
@@ -30,6 +31,17 @@
       "title": "Wasser",
       "amount": "{{current}} / {{goal}} ml",
       "undo": "Letztes rückgängig"
+    },
+    "entryDeleted": "{{name}} gelöscht",
+    "challenges": "Deine Challenges",
+    "edit": {
+      "title": "Eintrag bearbeiten",
+      "open": "{{name}} bearbeiten",
+      "amount": "Menge",
+      "unit": "Einheit",
+      "unitPortion": "Portion",
+      "meal": "Mahlzeit",
+      "save": "Speichern"
     }
   },
   "nutrients": {
@@ -42,6 +54,8 @@
     "recommendTitle": "Was noch essen?",
     "recommendNone": "Alle Tagesziele erreicht – stark! 💪",
     "covers": "deckt",
+    "showAll": "alle Nährstoffe",
+    "showLess": "weniger",
     "names": {
       "protein": "Eiweiß",
       "fiber": "Ballaststoffe",
@@ -63,11 +77,36 @@
   },
   "catalog": {
     "common": "Häufige Lebensmittel",
-    "vices": "Genuss & Laster"
+    "vices": "Genuss & Laster",
+    "foods": {
+      "quark": "Magerquark",
+      "chicken": "Hähnchenbrust",
+      "salmon": "Lachs",
+      "eggs": "Eier",
+      "yogurt": "Naturjoghurt",
+      "tofu": "Tofu",
+      "lentils": "Linsen (gekocht)",
+      "chickpeas": "Kichererbsen",
+      "oats": "Haferflocken",
+      "spinach": "Spinat",
+      "broccoli": "Brokkoli",
+      "orange": "Orange",
+      "banana": "Banane",
+      "almonds": "Mandeln",
+      "walnuts": "Walnüsse",
+      "chia": "Chiasamen",
+      "wholegrain": "Vollkornbrot",
+      "coffee": "Kaffee",
+      "espresso": "Espresso",
+      "beer": "Bier",
+      "wine": "Rotwein",
+      "cola": "Cola",
+      "energy": "Energydrink"
+    }
   },
   "nudge": {
     "limitOver": "Du liegst heute {{over}} {{unit}} {{nutrient}} über dem Limit — heute besser nichts mehr davon.",
-    "proteinEvening": "Dir fehlen noch {{remaining}} {{unit}} Protein bis zum Ziel — Zeit für etwas Eiweißreiches:",
+    "proteinEvening": "Dir fehlen noch {{remaining}} {{unit}} Eiweiß bis zum Ziel — Zeit für etwas Eiweißreiches:",
     "microDeficit": "Dir fehlt heute noch {{nutrient}}. Wie wäre es mit:",
     "noLogYet": "Schon was gegessen? Tippe auf +, um deine Mahlzeit zu erfassen.",
     "allMet": "Stark — heute alle Nährstoffziele erreicht! 💪"
@@ -78,11 +117,18 @@
     "label": "Tabelle scannen",
     "barcode": "Barcode",
     "manual": "Manuell",
-    "soon": "Kommt in einer späteren Phase."
+    "searchPh": "Lebensmittel suchen …",
+    "searchNone": "Nichts gefunden — unten manuell erfassen.",
+    "favorites": "Favoriten",
+    "favToggle": "{{name}} als Favorit",
+    "portionPhoto": "Menge von {{name}} per Foto schätzen",
+    "copyYesterday": "Gestern kopieren",
+    "copiedYesterday_one": "1 Eintrag von gestern kopiert",
+    "copiedYesterday_other": "{{count}} Einträge von gestern kopiert"
   },
   "coach": {
     "title": "Coach",
-    "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Proteinziel zu treffen?\"",
+    "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Eiweißziel zu treffen?\"",
     "inputPh": "Nachricht oder Mikrofon …",
     "send": "Senden",
     "listening": "Höre zu …",
@@ -91,15 +137,20 @@
     "mute": "Stumm",
     "mic": "Mikrofon",
     "disclaimer": "Orientierung, keine medizinische Beratung. Bei Beschwerden bitte Fachleute fragen.",
-    "error": "Coach nicht erreichbar. Ist der OPENROUTER_API_KEY gesetzt?",
+    "retry": "Erneut versuchen",
     "suggestTitle": "Vorschläge",
     "applyGoal": "Ziel übernehmen",
     "applyChallenge": "Challenge starten",
     "applyLog": "Eintragen",
     "applied": "Übernommen ✓",
+    "attach": "Foto anhängen",
+    "photoAlt": "Angehängtes Foto",
+    "photoDefaultMsg": "Was sagst du zu diesem Essen?",
+    "pickMeal": "Als welche Mahlzeit eintragen?",
+    "loggedTo": "{{name}} → {{meal}} eingetragen",
     "starters": {
       "today": "Was soll ich heute noch essen?",
-      "protein": "Wie treffe ich mein Proteinziel?",
+      "protein": "Wie treffe ich mein Eiweißziel?",
       "week": "Wie war meine Woche?"
     }
   },
@@ -111,6 +162,16 @@
     "streak": "{{count}} Tage Streak",
     "streakNone": "Heute starten!",
     "freeze": "{{count}} Joker",
+    "challenges": "Aktive Challenges",
+    "challengePeriodDay": "Tages-Challenge",
+    "challengePeriodWeek": "Wochen-Challenge",
+    "challengeProgressDay": "{{current}} / {{target}} {{unit}}",
+    "challengeProgressWeek": "{{current}} von {{target}} Tagen",
+    "challengeMet": "geschafft ✓",
+    "challengeManual": "Selbst einschätzen: Hast du sie geschafft?",
+    "challengeDone": "Challenge geschafft",
+    "challengeFailed": "Challenge abbrechen",
+    "challengeCompleted": "{{count}} abgeschlossen · +{{points}} Punkte",
     "companionTitle": "Dein Begleiter",
     "companionMood": {
       "happy": "Bestens gelaunt!",
@@ -151,6 +212,11 @@
     "dietForms": "Ernährungsform",
     "allergies": "Allergien",
     "submit": "Ziele berechnen & loslegen",
+    "errors": {
+      "age": "Bitte ein Alter zwischen 10 und 100 angeben.",
+      "height": "Bitte eine Größe zwischen 100 und 250 cm angeben.",
+      "weight": "Bitte ein Gewicht zwischen 30 und 300 kg angeben."
+    },
     "disclaimer": "NutriScan dient der Orientierung und ersetzt keine ärztliche oder ernährungsmedizinische Beratung.",
     "personas": {
       "strength": "Kraft/Muskelaufbau",
@@ -189,27 +255,33 @@
     "name": "Name",
     "namePh": "z. B. Haferflocken",
     "per": "Bezug",
+    "unitToggle": "Einheit wählen",
     "kcal": "kcal / 100",
     "protein": "Eiweiß (g)",
     "carbs": "Kohlenh. (g)",
     "fat": "Fett (g)",
     "amount": "Menge",
-    "meal": "Mahlzeit",
     "recent": "Zuletzt benutzt",
     "photo": "Foto hinzufügen",
-    "save": "Hinzufügen",
-    "allergyWarning": "Achtung: enthält ggf. ein hinterlegtes Allergen."
+    "save": "Hinzufügen"
   },
   "profile": {
     "title": "Profil & Ziele",
-    "placeholder": "Onboarding & Ziele kommen in Phase 1.",
     "yourGoals": "Deine Tagesziele",
     "backup": "Backup",
     "export": "Exportieren",
     "import": "Importieren",
+    "importConfirmTitle": "Backup importieren?",
+    "importConfirmBody": "Der Import überschreibt alle vorhandenen Daten in der App durch den Stand aus der Backup-Datei.",
+    "importConfirmCta": "Überschreiben & importieren",
+    "importSuccess": "Backup erfolgreich importiert.",
+    "importError": "Import abgebrochen: keine gültige Backup-Datei. Deine Daten sind unverändert.",
+    "resetConfirmTitle": "Alles zurücksetzen?",
+    "resetConfirmBody": "Alle Daten werden gelöscht: Profil, Einträge, Messwerte, Fotos und Einstellungen. Tipp: vorher ein Backup exportieren.",
+    "resetConfirmCta": "Alles löschen",
     "edit": "Profil bearbeiten",
     "save": "Speichern",
-    "proteinPerKg": "Protein (g/kg)",
+    "proteinPerKg": "Eiweiß (g/kg)",
     "proteinPerKgHint": "Leer lassen = Standard für deinen Schwerpunkt.",
     "targetsPreview": "Neue Tagesziele",
     "reset": "Onboarding erneut",
@@ -218,7 +290,6 @@
     "bloodSugarHint": "Diabetes: Messwerte eintragen & Warnungen",
     "sugarWarner": "Zucker-Warner",
     "sugarWarnerHint": "Strengeres Zucker-Limit ({{limit}} g/Tag)",
-    "glucoseUnit": "Blutzucker-Einheit",
     "trends": "Verlauf & Messwerte",
     "labValues": "Laborwerte",
     "labValuesHint": "Ferritin, Vitamin D, B12, HbA1c, Blutfette",
@@ -228,11 +299,43 @@
     "modeLight": "Hell",
     "modeDark": "Dunkel",
     "modeSystem": "System",
-    "brandTheme": "Farbwelt"
+    "brandTheme": "Farbwelt",
+    "themes": {
+      "vital": "Vital",
+      "classic": "Klassisch"
+    },
+    "coachTone": "Coach-Ton",
+    "coachToneHint": "So spricht dich dein Ernährungscoach an.",
+    "tones": {
+      "motivating": "Motivierend",
+      "casual": "Locker",
+      "strict": "Streng"
+    }
   },
   "trends": {
     "title": "Verlauf & Messwerte",
     "intro": "Trage deine Werte regelmäßig ein — daraus erkennen wir und der Coach deinen Fortschritt.",
+    "measurementsTitle": "Messwerte",
+    "nutrition": {
+      "title": "Ernährung",
+      "kcalTitle": "Kalorien",
+      "kcalSubtitle": "Letzte 14 Tage",
+      "kcalPerDay": "kcal pro Tag",
+      "macroTitle": "Makros",
+      "macroSubtitle": "Ø letzte 7 Tage",
+      "loggedDays": "an {{logged}} von {{total}} Tagen geloggt",
+      "insightsTitle": "Wochen-Insights",
+      "goalHits": "{{hits}}/{{total}} Tagen",
+      "noGoals": "Noch keine aktiven Ziele — der Coach hilft dir, welche festzulegen.",
+      "empty": "Hier erscheint dein Ernährungs-Verlauf, sobald du Mahlzeiten loggst.",
+      "emptyCta": "Erste Mahlzeit loggen",
+      "nutrients": {
+        "kcal": "Kalorien",
+        "protein": "Eiweiß",
+        "carbs": "Kohlenhydrate",
+        "fat": "Fett"
+      }
+    },
     "valuePh": "Wert ({{unit}})",
     "add": "Eintragen",
     "noData": "Noch kein Wert erfasst.",
@@ -278,7 +381,6 @@
   },
   "glucose": {
     "title": "Blutzucker",
-    "add": "Messwert eintragen",
     "value": "Wert ({{unit}})",
     "context": "Kontext",
     "save": "Eintragen",
@@ -312,7 +414,6 @@
     "added": "{{name}} hinzugefügt",
     "analyzing": "Analysiere …",
     "error": "Analyse fehlgeschlagen",
-    "retry": "Erneut versuchen",
     "describe": "Beschreibung (optional)",
     "describePh": "z. B. „mit Reis und Soße\" – tippen oder 🎤 diktieren",
     "retake": "Neu aufnehmen",
@@ -321,7 +422,9 @@
     "hintLabel": "Fotografiere die Nährwerttabelle scharf und gerade.",
     "manualBarcode": "Barcode eingeben",
     "scan": "Scannen",
-    "notFound": "Produkt nicht gefunden",
+    "notFound": "Produkt nicht gefunden — halte den nächsten Barcode ins Bild oder tippe ihn unten ein.",
+    "searching": "Suche Produkt …",
+    "unknownProduct": "Unbekanntes Produkt",
     "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein.",
     "consentTitle": "Foto an KI senden?",
     "consentBody": "Zum Erkennen wird das Bild einmalig an unseren KI-Dienst (OpenRouter) übertragen und dort nicht dauerhaft gespeichert. Es wird kein Bild ohne dein Zutun gesendet.",
@@ -330,17 +433,36 @@
   "review": {
     "title": "Ergebnis prüfen",
     "empty": "Keine Ergebnisse. Bitte erneut versuchen.",
+    "retake": "Erneut fotografieren",
     "confidence": "Sicherheit",
     "estimate": "KI-Schätzung — bitte prüfen.",
+    "aiNotes": "Hinweis der KI",
+    "knownFood": "Bekannt — übliche Menge vorausgefüllt.",
     "confirm": "Übernehmen",
+    "saving": "Wird übernommen …",
     "perInfo": "Werte je 100 {{unit}}",
     "microsTitle": "Mikronährstoffe – geschätzt ({{count}})",
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
     "allergyTraces": "Kann Spuren enthalten: {{list}}",
     "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
   },
+  "pwa": {
+    "updateAvailable": "Update verfügbar",
+    "reload": "Neu laden",
+    "dismiss": "Später"
+  },
+  "errors": {
+    "offline": "Du bist offline — manuell erfassen klappt weiter.",
+    "rateLimited": "Gerade viele Anfragen. Warte kurz und versuch es dann erneut.",
+    "payloadTooLarge": "Das Bild ist zu groß. Nimm es bitte noch einmal mit etwas mehr Abstand auf.",
+    "timeout": "Das dauert gerade zu lange. Versuch es gleich noch einmal.",
+    "budgetExceeded": "Das KI-Kontingent ist für heute aufgebraucht — morgen geht's weiter. Manuell erfassen klappt jederzeit.",
+    "invalidRequest": "Die Anfrage war ungültig. Lade die App neu und versuch es erneut.",
+    "upstream": "Der Dienst ist gerade nicht erreichbar. Versuch es bitte später erneut.",
+    "generic": "Das hat leider nicht geklappt. Bitte versuch es erneut.",
+    "manualFallback": "Manuell erfassen"
+  },
   "common": {
-    "loading": "Lädt …",
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "undo": "Rückgängig",

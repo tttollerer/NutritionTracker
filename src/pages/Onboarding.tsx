@@ -8,6 +8,22 @@ import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Field, Input } from '@/components/ui/Input'
 
+/**
+ * Pflichtfeld-Grenzen (Paket 12): plausible Bereiche statt stillem Mapping
+ * auf Defaults. Bewusst ohne react-hook-form/zod — drei Zahlenfelder
+ * rechtfertigen keine Formular-Bibliothek im Onboarding-Bundle.
+ */
+const LIMITS = {
+  age: { min: 10, max: 100 },
+  height: { min: 100, max: 250 },
+  weight: { min: 30, max: 300 },
+} as const
+
+function isInvalid(value: string, { min, max }: { min: number; max: number }): boolean {
+  const n = Number(value)
+  return value.trim() === '' || !Number.isFinite(n) || n < min || n > max
+}
+
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -26,14 +42,20 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const toggle = (list: string[], v: string, set: (l: string[]) => void) =>
     set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
 
+  const ageInvalid = isInvalid(age, LIMITS.age)
+  const heightInvalid = isInvalid(height, LIMITS.height)
+  const weightInvalid = isInvalid(weight, LIMITS.weight)
+  const formValid = !ageInvalid && !heightInvalid && !weightInvalid
+
   async function submit() {
+    if (!formValid) return
     setSaving(true)
     await saveOnboarding(
       {
         sex,
-        age: Number(age) || 30,
-        heightCm: Number(height) || 175,
-        weightKg: Number(weight) || 75,
+        age: Number(age),
+        heightCm: Number(height),
+        weightKg: Number(weight),
         activity,
         goal,
         persona,
@@ -63,15 +85,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       />
 
       <div className="grid grid-cols-3 gap-3">
-        <Field label={t('onboarding.age')}>
-          <Input type="number" inputMode="numeric" value={age} onChange={(e) => setAge(e.target.value)} />
-        </Field>
-        <Field label={t('onboarding.height')}>
-          <Input type="number" inputMode="numeric" value={height} onChange={(e) => setHeight(e.target.value)} />
-        </Field>
-        <Field label={t('onboarding.weight')}>
-          <Input type="number" inputMode="numeric" value={weight} onChange={(e) => setWeight(e.target.value)} />
-        </Field>
+        <NumField id="ob-age" label={t('onboarding.age')} value={age} onChange={setAge} invalid={ageInvalid} error={t('onboarding.errors.age')} />
+        <NumField id="ob-height" label={t('onboarding.height')} value={height} onChange={setHeight} invalid={heightInvalid} error={t('onboarding.errors.height')} />
+        <NumField id="ob-weight" label={t('onboarding.weight')} value={weight} onChange={setWeight} invalid={weightInvalid} error={t('onboarding.errors.weight')} />
       </div>
 
       <Segment
@@ -123,11 +139,47 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </div>
       </div>
 
-      <Button className="w-full" onClick={submit} disabled={saving}>
+      <Button className="w-full" onClick={submit} disabled={saving || !formValid}>
         {t('onboarding.submit')}
       </Button>
       <p className="text-center text-[11px] text-muted-foreground">{t('onboarding.disclaimer')}</p>
     </div>
+  )
+}
+
+/** Zahlenfeld mit Inline-Fehlermeldung (aria-invalid + aria-describedby). */
+function NumField({
+  id,
+  label,
+  value,
+  onChange,
+  invalid,
+  error,
+}: {
+  id: string
+  label: string
+  value: string
+  onChange: (v: string) => void
+  invalid: boolean
+  error: string
+}) {
+  return (
+    <Field label={label}>
+      <Input
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={invalid}
+        aria-describedby={invalid ? `${id}-error` : undefined}
+        className={invalid ? 'border-destructive ring-destructive' : undefined}
+      />
+      {invalid && (
+        <p id={`${id}-error`} className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+    </Field>
   )
 }
 

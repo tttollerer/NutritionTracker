@@ -2,16 +2,22 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { App } from './App'
+import { notifySwUpdate } from './components/UpdatePrompt'
 import { requestPersistentStorage } from './lib/storage'
 import './i18n'
 import './index.css'
 
-// Gespeichertes Theme früh anwenden (vor dem ersten Render).
-const storedTheme = localStorage.getItem('nt-theme') ?? 'dark'
-document.documentElement.classList.toggle('dark', storedTheme === 'dark')
+// Theme wird vor dem ersten Paint vom Inline-Skript in index.html gesetzt
+// (inkl. Migration des Legacy-Keys); danach übernimmt der ThemeProvider.
 
-// PWA-Service-Worker registrieren (Update-Prompt-Strategie).
-registerSW({ immediate: true })
+// PWA-Service-Worker registrieren (Update-Prompt-Strategie): bei neuer
+// Version zeigt der UpdatePrompt-Banner „Update verfügbar — Neu laden".
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    notifySwUpdate(() => updateSW(true))
+  },
+})
 
 // Persistenten Speicher anfragen, damit IndexedDB nicht evicted wird.
 void requestPersistentStorage()

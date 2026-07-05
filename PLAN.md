@@ -496,13 +496,26 @@ Nicht jeder braucht alles — wie Allergien sind manche Funktionen **opt-in** ü
 
 ## 12. Offene Punkte / später zu entscheiden
 
-- Genauer Umfang der Mineralstoff-/Vitaminliste (Start: gängige ~10, erweiterbar).
-- USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF, Rohzutaten → USDA).
-- iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera.
-- Barcode-Scan nutzt aktuell die native `BarcodeDetector`-API (+ manuelle Eingabe als Fallback);
+*Stand 2026-07-05 (Projektabschluss Phasen 0–4): erledigte Punkte markiert, Rest bleibt ehrliche
+Schuldenliste. Detaillierte Restliste: [docs/ABSCHLUSSPLAN.md](./docs/ABSCHLUSSPLAN.md).*
+
+- ~~Genauer Umfang der Mineralstoff-/Vitaminliste~~ — Start-Set umgesetzt (`src/lib/nutrients.ts`);
+  Erweiterung bleibt jederzeit möglich, kein offener Beschluss mehr.
+- **Offen:** USDA vs. Open Food Facts als Primärquelle pro Lebensmittelart (Markenprodukte → OFF,
+  Rohzutaten → USDA). Ein serverseitiger Nährwert-Resolver existiert noch nicht.
+- iOS-PWA-Grenzen: eingeschränkte Push-Notifications/Background-Sync, HTTPS-Pflicht für Kamera
+  (Plattform-Fakt, bleibt bestehen).
+- **Offen:** Barcode-Scan nutzt die native `BarcodeDetector`-API (+ manuelle Eingabe als Fallback);
   für iOS/Safari ggf. ZXing nachrüsten, da `BarcodeDetector` dort fehlt.
-- KI-Nährwerte für Fotos kommen in Phase 2 noch direkt vom Modell (Schätzung); Umstellung auf
-  vertrauenswürdige DB-Werte (USDA/OFF) wie in §2 vorgesehen folgt.
+- **Offen:** KI-Nährwerte für Fotos kommen weiterhin direkt vom Modell (Schätzung); Umstellung auf
+  vertrauenswürdige DB-Werte (USDA/OFF) wie in §2 vorgesehen folgt — hängt am Resolver-Punkt oben.
+- **Offen (bewusst verschoben, Abschluss-Audit):** Server-STT/TTS-Fallback (§11 Phase 4),
+  Freihand-Sprachmodus (§9.4, optional), en.json-Vollausbau (App ist bewusst Single-Locale DE),
+  Gamification-Ausbau Paket 16 (Quests, „Wrapped", Vorwochen-Vergleich, Mystery-Badges,
+  Level-Gating, Per-Ziel-Streaks).
+- **Erledigt im Abschluss:** Endpunkt-Härtung aus §4 (Origin-Check, Body-Limit, Rate-Limit,
+  Tagesbudget) zentral in `netlify/functions/lib/guard.ts`; Backup deckt alle Stores inkl.
+  `measurements` ab; PWA-Update-Prompt verdrahtet; API-Fehler-Vertrag mit geteilten zod-Schemata.
 
 ## 13. Nächste Schritte
 

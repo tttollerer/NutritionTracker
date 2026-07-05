@@ -1,45 +1,35 @@
 import { z } from 'zod'
 import { db } from '@/db'
 import { getActiveGoalsMap } from '@/db/repo'
+import {
+  COACH_SENTINEL,
+  CoachSuggestionsSchema,
+  extractCoachStreamError,
+} from './apiContract'
+import { ApiError, apiErrorFromResponse, isOffline, toApiError } from './apiError'
 import { sumsByDate } from './gamification'
 import { computeDayNutrition, rankDeficits } from './deficit'
 import { trend } from './measurements'
 import { todayKey } from './utils'
 
-/** Coach-Antwort-Schema (deckungsgleich mit der Netlify-Function). */
-export const CoachSuggestions = z.object({
-  goals: z
-    .array(
-      z.object({
-        nutrient: z.string(),
-        type: z.enum(['min', 'max', 'range']),
-        target: z.number(),
-        targetMax: z.number().optional(),
-        unit: z.string(),
-        reason: z.string().optional(),
-      }),
-    )
-    .optional(),
-  challenges: z.array(z.object({ title: z.string(), period: z.enum(['day', 'week']) })).optional(),
-  logs: z
-    .array(
-      z.object({
-        name: z.string(),
-        amount: z.number(),
-        unit: z.enum(['g', 'ml', 'portion']),
-        per100: z.object({ kcal: z.number(), protein: z.number(), carbs: z.number(), fat: z.number() }),
-      }),
-    )
-    .optional(),
-})
+/** Vertrags-Schema (apiContract.ts v1.1) unter dem bisherigen Namen re-exportiert. */
+export const CoachSuggestions = CoachSuggestionsSchema
 export const CoachResult = z.object({ reply: z.string(), suggestions: CoachSuggestions.optional() })
 
 export type CoachResult = z.infer<typeof CoachResult>
-export type CoachSuggestions = z.infer<typeof CoachSuggestions>
+export type CoachSuggestions = z.infer<typeof CoachSuggestionsSchema>
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   suggestions?: CoachSuggestions
+  /**
+   * Angehängtes Foto (stark verkleinerte JPEG-Data-URL, ≤ ~190 KB binär).
+   * Wird nur mitgesendet, wenn die Nachricht die LETZTE User-Nachricht ist
+   * (Foto-Feedback, Vertrag v1.1) — ältere Fotos bleiben reine Anzeige.
+   */
+  image?: string
+  /** Bereits übernommene Vorschlags-Keys (z. B. "g0", "log1") — übersteht Reload (Vertrag §4). */
+  applied?: string[]
 }
 
 const ENDPOINT = import.meta.env.VITE_COACH_URL ?? '/api/coach'
@@ -133,8 +123,23 @@ export async function getMemory() {
   return db.coachMemory.get('me')
 }
 
-/** Trenner zwischen Antworttext und Vorschlags-JSON (gestreamt). */
-export const COACH_SENTINEL = '###SUGGESTIONS###'
+/** Trenner zwischen Antworttext und Vorschlags-JSON (gestreamt) — aus dem Vertrag. */
+export { COACH_SENTINEL }
+
+/** Beginn eines Stream-Fehler-Events (Vertrag §3, extractCoachStreamError). */
+const STREAM_ERROR_MARKER = 'event: error'
+
+/** Anzeigbarer Teil des (Teil-)Streams: vor Vorschlags-Trenner und Fehler-Event. */
+function visiblePart(streamed: string): string {
+  let cut = streamed.length
+  const s = streamed.indexOf(COACH_SENTINEL)
+  if (s >= 0) cut = Math.min(cut, s)
+  const e = streamed.startsWith(STREAM_ERROR_MARKER)
+    ? 0
+    : streamed.indexOf(`\n${STREAM_ERROR_MARKER}`)
+  if (e >= 0) cut = Math.min(cut, e)
+  return streamed.slice(0, cut).trimStart()
+}
 
 function parseSuggestions(jsonish: string): CoachSuggestions | undefined {
   const cleaned = jsonish.trim().replace(/^```json\s*/i, '').replace(/```$/, '')
@@ -149,31 +154,46 @@ function parseSuggestions(jsonish: string): CoachSuggestions | undefined {
  * Coach aufrufen mit Token-Streaming. `onReply` erhält den bisher empfangenen
  * Antworttext (vor dem Vorschlags-Trenner) — für Live-Anzeige + satzweise
  * Sprachausgabe. Liefert am Ende den vollständigen `CoachResult`.
+ *
+ * Fehler kommen IMMER als typisierter ApiError (Anzeige über `t(err.i18nKey)`).
+ * Ein Fehler-Event MITTEN im Stream (Vertrag §3) beendet den Stream mit einem
+ * ApiError, dessen `partialReply` den bereits gestreamten Text erhält.
  */
 export async function sendCoachStream(
   messages: ChatMessage[],
   onReply: (replySoFar: string) => void,
 ): Promise<CoachResult> {
-  const [context, memory] = await Promise.all([buildCoachContext(), getMemory()])
-  const res = await fetch(ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      messages: messages.map(({ role, content }) => ({ role, content })),
-      context,
-      memory: memory ? { diet: memory.diet, allergies: memory.allergies, likes: memory.likes, dislikes: memory.dislikes, tone: memory.tone } : null,
-    }),
-  })
+  if (isOffline()) throw new ApiError('OFFLINE')
 
-  if (!res.ok || !res.body) {
-    let msg = `Coach-Anfrage fehlgeschlagen (${res.status})`
-    try {
-      msg = (await res.json())?.error ?? msg
-    } catch {
-      /* kein JSON */
-    }
-    throw new Error(msg)
+  const [context, memory] = await Promise.all([buildCoachContext(), getMemory()])
+  // Ton + Diätform gehen als Teil der Memory in den System-Kontext der Function.
+  // Fallback: Nutzer ohne gepflegtes diet-Feld (Memory nur beim Seeding
+  // geschrieben) bekommen die Ableitung aus den Profil-Ernährungsformen.
+  const dietFallback = context.profile?.dietForms?.length ? context.profile.dietForms.join('+') : undefined
+  // Foto-Feedback (Vertrag v1.1): Bild nur mitsenden, wenn es an der LETZTEN
+  // User-Nachricht hängt — der Server legt es genau dieser Nachricht bei.
+  const last = messages[messages.length - 1]
+  const imageBase64 = last?.role === 'user' ? last.image : undefined
+  let res: Response
+  try {
+    res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: messages.map(({ role, content }) => ({ role, content })),
+        context,
+        memory: memory
+          ? { diet: memory.diet ?? dietFallback, allergies: memory.allergies, likes: memory.likes, dislikes: memory.dislikes, tone: memory.tone }
+          : null,
+        ...(imageBase64 ? { imageBase64 } : {}),
+      }),
+    })
+  } catch (e) {
+    throw toApiError(e) // Netzwerkfehler → OFFLINE statt kryptischem TypeError
   }
+
+  if (!res.ok) throw await apiErrorFromResponse(res)
+  if (!res.body) throw new ApiError('GENERIC')
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -182,12 +202,16 @@ export async function sendCoachStream(
     const { done, value } = await reader.read()
     if (done) break
     full += decoder.decode(value, { stream: true })
-    const idx = full.indexOf(COACH_SENTINEL)
-    onReply((idx >= 0 ? full.slice(0, idx) : full).trimStart())
+    onReply(visiblePart(full))
   }
+  full += decoder.decode()
 
-  const idx = full.indexOf(COACH_SENTINEL)
-  const reply = (idx >= 0 ? full.slice(0, idx) : full).trim()
-  const suggestions = idx >= 0 ? parseSuggestions(full.slice(idx + COACH_SENTINEL.length)) : undefined
+  // Fehler-Event aus dem Stream filtern (Vertrag §3) und wie einen HTTP-Fehler behandeln.
+  const { text, error } = extractCoachStreamError(full)
+  const idx = text.indexOf(COACH_SENTINEL)
+  const reply = (idx >= 0 ? text.slice(0, idx) : text).trim()
+  if (error) throw new ApiError(error.code, error.error, reply)
+
+  const suggestions = idx >= 0 ? parseSuggestions(text.slice(idx + COACH_SENTINEL.length)) : undefined
   return { reply, suggestions }
 }

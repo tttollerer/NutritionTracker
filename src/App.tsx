@@ -1,3 +1,4 @@
+import { lazy, Suspense, type ReactNode } from 'react'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { ThemeProvider } from '@/lib/theme-provider'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -7,13 +8,31 @@ import { Onboarding } from '@/pages/Onboarding'
 import { Today } from '@/pages/Today'
 import { Add } from '@/pages/Add'
 import { Capture } from '@/pages/Capture'
-import { Barcode } from '@/pages/Barcode'
-import { Review } from '@/pages/Review'
-import { Coach } from '@/pages/Coach'
-import { Awards } from '@/pages/Awards'
 import { Profile } from '@/pages/Profile'
-import { Trends } from '@/pages/Trends'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { UpdatePrompt } from '@/components/UpdatePrompt'
+
+// Schwere, nicht-kritische Routen lazy laden (Code-Splitting): Kernflows
+// Heute/Erfassen/Capture bleiben im Haupt-Chunk, damit sie sofort da sind.
+const Barcode = lazy(() => import('@/pages/Barcode').then((m) => ({ default: m.Barcode })))
+const Review = lazy(() => import('@/pages/Review').then((m) => ({ default: m.Review })))
+const Coach = lazy(() => import('@/pages/Coach').then((m) => ({ default: m.Coach })))
+const Awards = lazy(() => import('@/pages/Awards').then((m) => ({ default: m.Awards })))
+const Trends = lazy(() => import('@/pages/Trends').then((m) => ({ default: m.Trends })))
+
+function PageSkeleton() {
+  return (
+    <div className="mx-auto max-w-md space-y-4 px-4 pt-10">
+      <Skeleton className="h-8 w-40" />
+      <Skeleton className="h-44 w-full" />
+    </div>
+  )
+}
+
+/** Lazy-Route mit Skeleton-Fallback, solange der Chunk lädt. */
+function lazyPage(node: ReactNode) {
+  return <Suspense fallback={<PageSkeleton />}>{node}</Suspense>
+}
 
 /** Zeigt das Onboarding, solange noch kein Profil existiert; sonst die App-Shell. */
 function RootGate() {
@@ -22,12 +41,7 @@ function RootGate() {
   const profile = useLiveQuery(async () => (await db.profile.get('me')) ?? null, [])
 
   if (profile === undefined) {
-    return (
-      <div className="mx-auto max-w-md space-y-4 px-4 pt-10">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-44 w-full" />
-      </div>
-    )
+    return <PageSkeleton />
   }
   if (!profile) {
     return (
@@ -47,11 +61,11 @@ const router = createBrowserRouter([
       { index: true, element: <Today /> },
       { path: 'add', element: <Add /> },
       { path: 'capture', element: <Capture /> },
-      { path: 'barcode', element: <Barcode /> },
-      { path: 'review', element: <Review /> },
-      { path: 'coach', element: <Coach /> },
-      { path: 'awards', element: <Awards /> },
-      { path: 'trends', element: <Trends /> },
+      { path: 'barcode', element: lazyPage(<Barcode />) },
+      { path: 'review', element: lazyPage(<Review />) },
+      { path: 'coach', element: lazyPage(<Coach />) },
+      { path: 'awards', element: lazyPage(<Awards />) },
+      { path: 'trends', element: lazyPage(<Trends />) },
       { path: 'profile', element: <Profile onReset={() => undefined} /> },
     ],
   },
@@ -61,6 +75,7 @@ export function App() {
   return (
     <ThemeProvider>
       <RouterProvider router={router} />
+      <UpdatePrompt />
     </ThemeProvider>
   )
 }

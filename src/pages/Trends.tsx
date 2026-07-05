@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
 import { TrendChart, type ChartSeries } from '@/components/TrendChart'
+import { NutritionHistory } from '@/components/NutritionHistory'
+import { Skeleton } from '@/components/ui/Skeleton'
 
 const RANGES = [
   { key: '4w', days: 28 },
@@ -31,7 +33,8 @@ const RANGES = [
 ] as const
 
 const PRIMARY = 'hsl(var(--primary))'
-const ACCENT = '#f59e0b'
+// Zweitlinie (Diastole) über Design-Token statt Ad-hoc-Hex — theme- und darkmode-fähig.
+const ACCENT = 'hsl(var(--warning))'
 
 export function Trends() {
   const { t } = useTranslation()
@@ -39,7 +42,22 @@ export function Trends() {
   const all = useLiveQuery(() => db.measurements.filter((m) => !m.deletedAt).toArray(), [])
   const [rangeDays, setRangeDays] = useState<number>(90)
 
-  if (!settings || !all) return null
+  // Skeleton statt Blank, solange Dexie lädt (Muster wie Today).
+  if (!settings || !all) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title={t('trends.title')} />
+        <Skeleton className="h-4 w-3/4" />
+        <div className="flex gap-2">
+          {RANGES.map((r) => (
+            <Skeleton key={r.key} className="h-8 w-20 rounded-full" />
+          ))}
+        </div>
+        <Skeleton className="h-44 w-full" />
+        <Skeleton className="h-44 w-full" />
+      </div>
+    )
+  }
   const today = todayKey()
   const byType: Record<string, Measurement[]> = {}
   for (const m of all) (byType[m.type] ??= []).push(m)
@@ -55,7 +73,12 @@ export function Trends() {
       <PageHeader title={t('trends.title')} />
       <p className="text-sm text-muted-foreground">{t('trends.intro')}</p>
 
-      {/* Globaler Zeitraum */}
+      {/* Ernährungs-Verlauf (§7.5): kcal-Historie, Makro-Woche, Wochen-Insights */}
+      <NutritionHistory />
+
+      <h2 className="text-sm font-semibold text-muted-foreground">{t('trends.measurementsTitle')}</h2>
+
+      {/* Globaler Zeitraum (für die Messwerte darunter) */}
       <div className="flex flex-wrap gap-2">
         {RANGES.map((r) => (
           <Chip key={r.key} label={t(`trends.range.${r.key}`)} selected={rangeDays === r.days} onClick={() => setRangeDays(r.days)} />

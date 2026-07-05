@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, Image as ImageIcon, Loader2, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
+import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
 import { analyzeImage, type AnalyzeMode } from '@/lib/ai'
+import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
 import { getSettings, updateSettings } from '@/db/repo'
@@ -13,6 +14,8 @@ import type { Meal } from '@/db/types'
 import { defaultMeal } from '@/lib/meal'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 
 export function Capture() {
@@ -25,9 +28,10 @@ export function Capture() {
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  // i18n-Key des gemappten Fehlers (errors.*), nie ein roher Fehlertext.
+  const [errorKey, setErrorKey] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null) // verkleinertes Bild, noch nicht gesendet
-  const [hint, setHint] = useState('')
+  const [hint, setHint] = useState(() => params.get('hint') ?? '')
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
 
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
@@ -40,26 +44,27 @@ export function Capture() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setError(null)
+    setErrorKey(null)
     try {
       // Verkleinern + Vorschau zeigen — noch NICHT an die KI senden.
       setPreview(await downscaleImage(file))
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setErrorKey(toApiError(err).i18nKey)
     }
   }
 
   async function analyze() {
     if (!preview) return
-    setError(null)
+    setErrorKey(null)
     setBusy(true)
     try {
       const result = await analyzeImage(mode, preview, hint.trim() || undefined)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
-      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined })
+      // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
+      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined, notes: result.notes })
       navigate('/review')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setErrorKey(toApiError(err).i18nKey)
     } finally {
       setBusy(false)
     }
@@ -68,9 +73,22 @@ export function Capture() {
   function retake() {
     setPreview(null)
     setHint('')
-    setError(null)
+    setErrorKey(null)
     if (recog.listening) recog.stop()
   }
+
+  // Gemappter Fehlertext + bei Offline der Ausweg „manuell erfassen" (/add).
+  const errorBox = errorKey && (
+    <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
+      <p className="font-medium text-destructive">{t('capture.error')}</p>
+      <p className="text-muted-foreground">{t(errorKey)}</p>
+      {errorKey === 'errors.offline' && (
+        <Button variant="secondary" className="w-full" onClick={() => navigate('/add')}>
+          {t('errors.manualFallback')}
+        </Button>
+      )}
+    </div>
+  )
 
   return (
     <div className="space-y-6">
@@ -83,22 +101,15 @@ export function Capture() {
 
       {busy ? (
         <div className="flex flex-col items-center gap-4 pt-16 text-center">
-          <motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-            <Loader2 size={40} className="text-primary" />
-          </motion.span>
+          <Spinner size={40} className="text-primary" />
           <p className="text-sm text-muted-foreground">{t('capture.analyzing')}</p>
         </div>
       ) : preview ? (
         /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */
         <div className="space-y-4">
-          <img src={preview} alt="" className="max-h-72 w-full rounded-2xl object-cover" />
+          <img src={preview} alt="" className="max-h-72 w-full rounded-lg object-cover" />
 
-          {error && (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
-              <p className="font-medium text-destructive">{t('capture.error')}</p>
-              <p className="mt-1 break-words text-xs text-muted-foreground">{error}</p>
-            </div>
-          )}
+          {errorBox}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-muted-foreground">{t('capture.describe')}</label>
@@ -110,8 +121,8 @@ export function Capture() {
                   onClick={() => (recog.listening ? recog.stop() : recog.start())}
                   aria-label={t('coach.mic')}
                   className={cn(
-                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
-                    recog.listening ? 'bg-destructive text-white' : 'bg-secondary text-foreground',
+                    'focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full',
+                    recog.listening ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-foreground',
                   )}
                 >
                   <Mic size={20} />
@@ -133,14 +144,15 @@ export function Capture() {
       ) : (
         <>
           <p className="text-sm text-muted-foreground">{uiHint}</p>
-          {error && (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm">
-              <p className="font-medium text-destructive">{t('capture.error')}</p>
-              <p className="mt-1 break-words text-xs text-muted-foreground">{error}</p>
+          {errorBox}
+          {consent === undefined ? (
+            /* Consent noch nicht aus Dexie geladen → Skeleton statt leerem Aktionsbereich */
+            <div className="grid gap-3" aria-hidden="true">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
             </div>
-          )}
-          {consent === false ? (
-            <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+          ) : consent === false ? (
+            <div className="space-y-3 rounded-lg border border-border bg-card p-4">
               <p className="flex items-center gap-2 font-medium">
                 <ShieldCheck size={18} className="text-primary" /> {t('capture.consentTitle')}
               </p>
@@ -150,16 +162,14 @@ export function Capture() {
               </Button>
             </div>
           ) : (
-            consent === true && (
-              <div className="grid gap-3">
-                <Button onClick={() => cameraRef.current?.click()}>
-                  <Camera size={20} /> {t('capture.take')}
-                </Button>
-                <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
-                  <ImageIcon size={20} /> {t('capture.choose')}
-                </Button>
-              </div>
-            )
+            <div className="grid gap-3">
+              <Button onClick={() => cameraRef.current?.click()}>
+                <Camera size={20} /> {t('capture.take')}
+              </Button>
+              <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
+                <ImageIcon size={20} /> {t('capture.choose')}
+              </Button>
+            </div>
           )}
         </>
       )}
