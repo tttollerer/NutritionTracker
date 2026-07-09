@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, PencilLine, Check } from 'lucide-react'
+import { Camera, ScanText, ScanBarcode, PencilLine, Check, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { logFood, recentFoods, deleteLog } from '@/db/repo'
+import { downscaleImage } from '@/lib/image'
+import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { todayKey } from '@/lib/utils'
 import { Chip } from '@/components/ui/Chip'
@@ -20,7 +22,7 @@ interface Props {
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-/** Erfass-Quick-Sheet: in 2 Tipps zur Kamera. Vom +-Button & der Heute-Karte geöffnet. */
+/** Erfass-Quick-Sheet: „Essen fotografieren" öffnet direkt die Kamera → dann Vorschau. */
 export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -28,6 +30,10 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const recents = useLiveQuery(() => recentFoods(6), [])
   const sheetRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
+
+  const mealCamRef = useRef<HTMLInputElement>(null)
+  const mealGalRef = useRef<HTMLInputElement>(null)
+  const labelCamRef = useRef<HTMLInputElement>(null)
 
   // Fokus-Management: beim Öffnen Fokus ins Sheet, beim Schließen zurück zum Auslöser.
   useEffect(() => {
@@ -66,6 +72,17 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   function go(path: string) {
     onClose()
     navigate(path)
+  }
+
+  // Aufgenommenes/gewähltes Bild verkleinern, übergeben und direkt zur Vorschau.
+  async function onFile(mode: 'meal' | 'label', e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const img = await downscaleImage(file)
+    setPendingImage(img)
+    onClose()
+    navigate(`/capture?mode=${mode}&meal=${meal}`)
   }
 
   async function quickLog(food: FoodItem) {
@@ -113,9 +130,9 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               ))}
             </div>
 
-            {/* Hero: Foto */}
+            {/* Hero: Foto (öffnet direkt die Kamera) */}
             <button
-              onClick={() => go(`/capture?mode=meal&meal=${meal}`)}
+              onClick={() => mealCamRef.current?.click()}
               className="focus-ring flex w-full items-center gap-4 rounded-lg bg-primary p-5 text-left text-primary-foreground"
             >
               <Camera size={32} strokeWidth={2.2} />
@@ -125,9 +142,17 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               </span>
             </button>
 
-            {/* Sekundär: Tabelle + Barcode */}
+            {/* Aus Galerie (falls kein Live-Foto) */}
+            <button
+              onClick={() => mealGalRef.current?.click()}
+              className="focus-ring mt-2 flex w-full items-center justify-center gap-2 rounded-md py-1.5 text-sm text-muted-foreground"
+            >
+              <ImageIcon size={16} /> {t('capture.choose')}
+            </button>
+
+            {/* Sekundär: Tabelle (Kamera direkt) + Barcode */}
             <div className="mt-3 grid grid-cols-2 gap-3">
-              <SheetTile icon={ScanText} label={t('add.label')} onClick={() => go(`/capture?mode=label&meal=${meal}`)} />
+              <SheetTile icon={ScanText} label={t('add.label')} onClick={() => labelCamRef.current?.click()} />
               <SheetTile icon={ScanBarcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
             </div>
 
@@ -157,6 +182,11 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               <PencilLine size={16} /> {t('add.manual')}
             </button>
           </motion.div>
+
+          {/* Versteckte Datei-Eingaben: Kamera (capture) + Galerie */}
+          <input ref={mealCamRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onFile('meal', e)} />
+          <input ref={mealGalRef} type="file" accept="image/*" hidden onChange={(e) => void onFile('meal', e)} />
+          <input ref={labelCamRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onFile('label', e)} />
         </>
       )}
     </AnimatePresence>
