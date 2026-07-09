@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { Droplet, Undo2 } from 'lucide-react'
 import { db } from '@/db'
 import { addWater, undoLastWater, waterGoalMl } from '@/db/repo'
-import { todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
 import { Card } from '@/components/ui/Card'
 
 const PRESETS = [250, 500]
@@ -12,7 +12,7 @@ const PRESETS = [250, 500]
 /** Wasser-Tracking-Widget fürs Dashboard (PLAN.md §9 Komfort). */
 export function WaterCard({ weightKg }: { weightKg?: number }) {
   const { t } = useTranslation()
-  const date = todayKey()
+  const date = useTodayKey() // reaktiv über Mitternacht (Befund 1)
   const entries = useLiveQuery(() => db.water.where('date').equals(date).toArray(), [date])
   const total = (entries ?? []).reduce((a, w) => a + w.ml, 0)
   const goal = waterGoalMl(weightKg)

@@ -7,6 +7,12 @@ interface ProgressRingProps {
   stroke?: number
   label?: string
   sublabel?: string
+  /**
+   * Überschreitungs-Zustand (Befund 7): Ring + Sublabel wechseln auf den
+   * destructive-Token, damit „über Ziel" nicht wie 100 % Erfolg aussieht.
+   * Additiv — ohne Prop bleibt alles wie bisher.
+   */
+  over?: boolean
 }
 
 /** Animierter Fortschrittsring für Kalorien/Makros (PLAN.md §8). */
@@ -17,6 +23,7 @@ export function ProgressRing({
   stroke = 14,
   label,
   sublabel,
+  over = false,
 }: ProgressRingProps) {
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
@@ -38,7 +45,7 @@ export function ProgressRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="hsl(var(--primary))"
+          stroke={over ? 'hsl(var(--destructive))' : 'hsl(var(--primary))'}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -49,7 +56,11 @@ export function ProgressRing({
       </svg>
       <div className="absolute flex flex-col items-center">
         {label && <span className="text-3xl font-bold tabular-nums">{label}</span>}
-        {sublabel && <span className="text-sm text-muted-foreground">{sublabel}</span>}
+        {sublabel && (
+          <span className={`text-sm ${over ? 'font-medium text-destructive' : 'text-muted-foreground'}`}>
+            {sublabel}
+          </span>
+        )}
       </div>
     </div>
   )

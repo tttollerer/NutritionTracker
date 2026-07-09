@@ -45,6 +45,12 @@ export interface FoodItem {
    * * amount. Nicht indiziert, additiv — keine Dexie-Migration nötig.
    */
   price?: { amount: number; per: number }
+  /**
+   * Produktfotos: IDs von Zeilen der bestehenden `photos`-Tabelle (Data-URLs).
+   * Wie `favorite`/`pantry` bewusst NICHT indiziert und optional — additiv,
+   * keine Dexie-Migration nötig. Reihenfolge = Anzeige-Reihenfolge.
+   */
+  photoIds?: string[]
   createdAt: number
   updatedAt: number
   deletedAt?: number

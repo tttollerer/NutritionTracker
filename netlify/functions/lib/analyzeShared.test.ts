@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { ApiErrorSchema } from '../../../src/lib/apiContract'
+import { AnalyzeResultSchema, ApiErrorSchema } from '../../../src/lib/apiContract'
 import {
   ANALYZE_ERROR_TEXT,
   analyzeErrorResponse,
+  clampQuestions,
   extractJson,
+  MAX_QUESTIONS,
   parseAnalyzeRequest,
 } from './analyzeShared'
 
@@ -59,6 +61,47 @@ describe('analyzeShared (Helfer der Analyze-Function, Vertrag §1/§2)', () => {
       for (const text of Object.values(ANALYZE_ERROR_TEXT)) {
         expect(text).not.toMatch(/OPENROUTER|API_KEY|ENV|stack/i)
       }
+    })
+  })
+
+  describe('clampQuestions (questions-Sanitizing v1.2, Paket B)', () => {
+    const item = {
+      name: 'Pommes',
+      amount: 150,
+      unit: 'g',
+      per100: { kcal: 290, protein: 3.5, carbs: 40, fat: 13 },
+    }
+
+    it('lässt Antworten ohne questions unverändert durch', () => {
+      const raw = { items: [item], notes: 'ok' }
+      expect(clampQuestions(raw)).toBe(raw)
+      expect(clampQuestions(null)).toBe(null)
+      expect(clampQuestions('kein objekt')).toBe('kein objekt')
+    })
+
+    it('kappt ein übermotiviertes Modell auf MAX_QUESTIONS und entfernt Leere/Fremdtypen', () => {
+      const raw = {
+        items: [item],
+        questions: ['  Joghurtsauce oder Mayo?  ', '', 42, 'Frittiert?', 'Noch eine dritte?'],
+      }
+      const clamped = clampQuestions(raw) as { questions?: string[] }
+      expect(clamped.questions).toEqual(['Joghurtsauce oder Mayo?', 'Frittiert?'])
+      expect(clamped.questions!.length).toBeLessThanOrEqual(MAX_QUESTIONS)
+      // Das Ergebnis besteht die Vertragsvalidierung — genau dafür ist das Kappen da.
+      expect(AnalyzeResultSchema.safeParse(clamped).success).toBe(true)
+    })
+
+    it('entfernt ein leeres/unbrauchbares questions-Feld komplett (abwärtskompatibel)', () => {
+      expect(clampQuestions({ items: [item], questions: [] })).toEqual({ items: [item] })
+      expect(clampQuestions({ items: [item], questions: 'Mayo?' })).toEqual({ items: [item] })
+      expect(clampQuestions({ items: [item], questions: [null, ''] })).toEqual({ items: [item] })
+    })
+
+    it('kürzt überlange Fragen auf die Vertragslänge (200 Zeichen)', () => {
+      const long = 'F'.repeat(500) + '?'
+      const clamped = clampQuestions({ items: [item], questions: [long] }) as { questions: string[] }
+      expect(clamped.questions[0]).toHaveLength(200)
+      expect(AnalyzeResultSchema.safeParse(clamped).success).toBe(true)
     })
   })
 })

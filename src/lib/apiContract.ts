@@ -90,6 +90,13 @@ export const AnalyzeItemSchema = z.object({
 export const AnalyzeResultSchema = z.object({
   items: z.array(AnalyzeItemSchema),
   notes: z.string().optional(),
+  /**
+   * v1.2 (Paket B, additiv): bis zu 2 kurze Rückfragen der KI, deren Antwort
+   * die Schätzung deutlich verbessern würde (z. B. „Joghurtsauce oder Mayo?").
+   * Fehlt das Feld, gibt es keine Rückfragen — abwärtskompatibel. Der Server
+   * kappt überzählige/leere Einträge vor der Validierung (clampQuestions).
+   */
+  questions: z.array(z.string().min(1).max(200)).max(2).optional(),
 })
 export type AnalyzeItem = z.infer<typeof AnalyzeItemSchema>
 export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>

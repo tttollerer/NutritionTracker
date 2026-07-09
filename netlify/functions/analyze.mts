@@ -1,5 +1,5 @@
 import { AnalyzeResultSchema } from '../../src/lib/apiContract'
-import { analyzeErrorResponse, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
+import { analyzeErrorResponse, clampQuestions, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
 import { isAbortError } from './lib/coachShared'
 import { createGuard } from './lib/guard'
 
@@ -39,9 +39,14 @@ const MICRO_INSTRUCTION =
   'Schätze in per100 zusätzlich ein Objekt "micros" mit den Mikronährstoffen je 100 g/ml, die du sinnvoll einschätzen kannst (unbekannte weglassen). Erlaubte Schlüssel und Einheiten: fiber (g), sugar (g), satFat (g), sodium (mg), iron (mg), calcium (mg), magnesium (mg), zinc (mg), potassium (mg), vitaminC (mg), vitaminD (µg), vitaminB12 (µg), omega3 (g). Werte sind Schätzungen für typische Lebensmittel dieser Art.'
 
 const JSON_INSTRUCTION =
-  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?}. ' +
+  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?,"questions":string[]?}. ' +
   MICRO_INSTRUCTION +
   ' Keine Erklärungen, kein Markdown.'
+
+// Verfeinerungsschleife (Vertrag v1.2, Paket B): nur meal/portion — bei einer
+// abfotografierten Nährwerttabelle gibt es nichts nachzufragen.
+const QUESTIONS_INSTRUCTION =
+  ' Wenn eine Zusatzangabe die Schätzung deutlich verbessern würde (z. B. Saucen-Art wie "Joghurtsauce oder Mayo?", Zubereitungsart, verstecktes Fett), stelle bis zu 2 kurze Rückfragen im Feld "questions". Sonst lasse "questions" weg.'
 
 async function callOpenRouter(model: string, key: string, system: string, imageBase64: string, hint?: string) {
   const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
@@ -108,7 +113,8 @@ export default async (req: Request): Promise<Response> => {
   if (exhausted) return exhausted
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
-  const system = SYSTEM[parsed.data.mode]
+  const system =
+    SYSTEM[parsed.data.mode] + (parsed.data.mode === 'label' ? '' : QUESTIONS_INSTRUCTION)
 
   // Ein Retry, falls das Modell mal kein sauberes JSON liefert; nach einem
   // Timeout wird NICHT erneut versucht (sonst wartet der Client bis zu 40 s).
@@ -116,7 +122,9 @@ export default async (req: Request): Promise<Response> => {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const content = await callOpenRouter(model, key, system, parsed.data.imageBase64, parsed.data.hint)
-      const result = AnalyzeResultSchema.parse(extractJson(content))
+      // clampQuestions: überzählige/leere Rückfragen kappen, statt eine sonst
+      // gültige Antwort an der v1.2-Validierung scheitern zu lassen.
+      const result = AnalyzeResultSchema.parse(clampQuestions(extractJson(content)))
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

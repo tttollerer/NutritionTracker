@@ -1,4 +1,4 @@
-import type { LogEntry } from '@/db/types'
+import type { Goal, LogEntry } from '@/db/types'
 import { BENEFIT_KEYS, LIMIT_KEYS, NUTRIENT_BY_KEY, nutrientTarget } from './nutrients'
 
 /**
@@ -27,6 +27,33 @@ export interface DeficitOpts {
   vegan?: boolean
   /** Überschreibt Limit-Grenzen (z. B. strengeres Zucker-Limit bei Diabetes). */
   limitOverrides?: Record<string, number>
+  /** Überschreibt Benefit-Ziele (z. B. übernommenes Coach-Ballaststoff-Ziel, Vertrag v1.2). */
+  benefitOverrides?: Record<string, number>
+}
+
+/**
+ * Übernommene Coach-Ziele (Vertrag v1.2) in die Defizit-Anzeige einspeisen:
+ * Limit-Nährstoffe (sugar/sodium/…) mit max/range-Ziel → limitOverrides,
+ * Benefit-Nährstoffe (fiber/…) mit Min-Ziel → benefitOverrides. Makros (kcal,
+ * protein, carbs, fat) laufen weiter über ihre eigene Zielanzeige.
+ */
+export function overridesFromGoals(goals: Record<string, Goal>): {
+  limitOverrides: Record<string, number>
+  benefitOverrides: Record<string, number>
+} {
+  const limitOverrides: Record<string, number> = {}
+  const benefitOverrides: Record<string, number> = {}
+  for (const key of LIMIT_KEYS) {
+    const g = goals[key]
+    if (g?.active && g.type !== 'min') {
+      limitOverrides[key] = g.type === 'range' ? (g.targetMax ?? g.target) : g.target
+    }
+  }
+  for (const key of BENEFIT_KEYS) {
+    const g = goals[key]
+    if (g?.active && g.type !== 'max') benefitOverrides[key] = g.target
+  }
+  return { limitOverrides, benefitOverrides }
 }
 
 /** Mikronährstoff-Summen eines Tages aus den Log-Einträgen. */
@@ -54,7 +81,7 @@ export function computeDayNutrition(logs: LogEntry[], date: string, opts: Defici
 
   for (const key of BENEFIT_KEYS) {
     const def = NUTRIENT_BY_KEY[key]
-    const target = nutrientTarget(def, { sex: opts.sex, vegan: opts.vegan })
+    const target = opts.benefitOverrides?.[key] ?? nutrientTarget(def, { sex: opts.sex, vegan: opts.vegan })
     benefits.push(status(key, def.unit, 'benefit', round2(micros[key] ?? 0), target))
   }
 

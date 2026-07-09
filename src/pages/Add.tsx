@@ -46,6 +46,8 @@ export function Add() {
   // Vorrat-Verzehr über das Mengen-Sheet (Menge + Einheit + Mahlzeit).
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
   const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
+  // Kontext für „Gestern kopieren" (Befund 11): Zähler der gewählten Mahlzeit.
+  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(todayKey(), meal), [meal]) ?? 0
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
   const [ack, setAck] = useState(false)
 
@@ -101,8 +103,12 @@ export function Add() {
     navigate(`/capture?mode=portion&meal=${meal}&hint=${encodeURIComponent(food.name)}`)
   }
 
-  async function copyFromYesterday() {
-    const copied = await copyYesterday()
+  /**
+   * „Gestern kopieren" respektiert die Mahlzeit-Wahl (Befund 11): standardmäßig
+   * wird nur die oben gewählte Mahlzeit kopiert, die Zweitaktion holt den ganzen Tag.
+   */
+  async function copyFromYesterday(wholeDay = false) {
+    const copied = await copyYesterday(wholeDay ? undefined : meal)
     if (copied.length === 0) return
     showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
       await Promise.all(copied.map((c) => deleteLog(c.id)))
@@ -221,11 +227,29 @@ export function Add() {
         </section>
       )}
 
-      {/* Gestern kopieren */}
+      {/* Gestern kopieren — kontextbezogen auf die gewählte Mahlzeit (Befund 11) */}
       {!searching && yesterdayCount > 0 && (
-        <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday()}>
-          <History size={18} /> {t('add.copyYesterday')}
-        </Button>
+        <div className="space-y-1">
+          {yesterdayMealCount > 0 ? (
+            <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday(false)}>
+              <History size={18} /> {t('add.copyYesterdayMeal', { meal: t(`today.meals.${meal}`) })}
+            </Button>
+          ) : (
+            <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday(true)}>
+              <History size={18} /> {t('add.copyYesterdayAll')}
+            </Button>
+          )}
+          {/* Zweitaktion „ganzen Tag" nur, wenn sie mehr kopiert als die Mahlzeit allein. */}
+          {yesterdayMealCount > 0 && yesterdayCount > yesterdayMealCount && (
+            <button
+              type="button"
+              onClick={() => void copyFromYesterday(true)}
+              className="focus-ring mx-auto flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground"
+            >
+              {t('add.copyYesterdayAll')}
+            </button>
+          )}
+        </div>
       )}
 
       {/* Zuletzt benutzt */}

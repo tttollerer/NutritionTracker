@@ -58,10 +58,22 @@ export function Capture() {
     setErrorKey(null)
     setBusy(true)
     try {
-      const result = await analyzeImage(mode, preview, hint.trim() || undefined)
+      const trimmedHint = hint.trim() || undefined
+      const result = await analyzeImage(mode, preview, trimmedHint)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
       // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
-      setReview({ items: result.items, meal, source: 'ai', photo: mode === 'meal' ? preview : undefined, notes: result.notes })
+      // mode/hint/imageBase64/questions: Verfeinerungsschleife („Neu schätzen" im Review).
+      setReview({
+        items: result.items,
+        meal,
+        source: 'ai',
+        photo: mode === 'meal' ? preview : undefined,
+        notes: result.notes,
+        mode,
+        hint: trimmedHint,
+        imageBase64: preview,
+        questions: result.questions,
+      })
       navigate('/review')
     } catch (err) {
       setErrorKey(toApiError(err).i18nKey)

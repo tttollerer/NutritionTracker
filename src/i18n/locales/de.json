@@ -12,6 +12,7 @@
   "today": {
     "title": "Heute",
     "kcalLeft": "{{count}} kcal übrig",
+    "kcalOver": "{{count}} kcal über Ziel",
     "kcalToGoal": "noch {{count}} kcal bis Ziel",
     "kcalReached": "Ziel erreicht 💪",
     "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
@@ -124,6 +125,8 @@
     "favToggle": "{{name}} als Favorit",
     "portionPhoto": "Menge von {{name}} per Foto schätzen",
     "copyYesterday": "Gestern kopieren",
+    "copyYesterdayMeal": "{{meal}} von gestern kopieren",
+    "copyYesterdayAll": "Ganzen Tag von gestern kopieren",
     "copiedYesterday_one": "1 Eintrag von gestern kopiert",
     "copiedYesterday_other": "{{count}} Einträge von gestern kopiert",
     "pantry": "Mein Vorrat",
@@ -322,7 +325,16 @@
       "motivating": "Motivierend",
       "casual": "Locker",
       "strict": "Streng"
-    }
+    },
+    "likes": "Mag ich",
+    "likesPh": "z. B. Skyr, Linsen, scharfes Essen",
+    "dislikes": "Mag ich nicht",
+    "dislikesPh": "z. B. Rosenkohl, Innereien",
+    "likesHint": "Kommagetrennt — der Coach nutzt deine Vorlieben für passendere Vorschläge.",
+    "goalByCoach": "Coach",
+    "goalInactive": "Pausiert",
+    "goalReset": "{{name}}-Ziel auf Basiswert zurücksetzen",
+    "goalActiveToggle": "{{name}}-Ziel aktiv"
   },
   "trends": {
     "title": "Verlauf & Messwerte",
@@ -478,7 +490,35 @@
     "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren.",
     "toPantry": "Nur in den Vorrat",
     "pantrySaved_one": "1 Produkt im Vorrat",
-    "pantrySaved_other": "{{count}} Produkte im Vorrat"
+    "pantrySaved_other": "{{count}} Produkte im Vorrat",
+    "refineTitle": "Schätzung verbessern",
+    "refineHint": "Gib der KI eine Zusatzinfo — sie schätzt das Bild damit neu.",
+    "refinePlaceholder": "z. B. Das ist Joghurtsauce, nicht Mayo",
+    "refineCta": "Neu schätzen",
+    "refining": "Wird neu geschätzt …",
+    "refineConfirm": "Ja, neu schätzen",
+    "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut."
+  },
+  "food": {
+    "edit": {
+      "open": "Bearbeiten",
+      "title": "Produkt bearbeiten",
+      "name": "Name",
+      "per": "Basis (g/ml)",
+      "values": "Nährwerte je 100 {{unit}}",
+      "micros": "Mikronährstoffe ({{count}})",
+      "portionTitle": "Übliche Portion",
+      "portionAmount": "Menge ({{unit}})",
+      "portionLabel": "Bezeichnung",
+      "portionLabelPh": "z. B. Tasse",
+      "photos": "Fotos",
+      "addPhoto": "Foto aufnehmen",
+      "addFromGallery": "Foto aus der Galerie wählen",
+      "removePhoto": "Foto löschen",
+      "save": "Speichern",
+      "saved": "Gespeichert",
+      "invalid": "Bitte prüfe die markierten Felder — Zahlen dürfen nicht negativ sein."
+    }
   },
   "pwa": {
     "updateAvailable": "Update verfügbar",
@@ -500,6 +540,7 @@
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "undo": "Rückgängig",
-    "back": "Zurück"
+    "back": "Zurück",
+    "close": "Schließen"
   }
 }

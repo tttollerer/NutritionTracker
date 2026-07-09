@@ -3,6 +3,8 @@ import { db } from './index'
 import type { CoachMemory, FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Measurement, Profile, Settings, Unit } from './types'
 import { computeTargets, kcalFloor } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
+import { clearChat } from '@/lib/chatStore'
+import { clearReview } from '@/lib/reviewStore'
 
 const now = () => Date.now()
 
@@ -143,6 +145,39 @@ export async function getActiveGoalsMap() {
   return Object.fromEntries(goals.map((g) => [g.nutrient, g]))
 }
 
+/** ALLE (nicht gelöschten) Ziele — auch deaktivierte, für die Ziel-Verwaltung im Profil. */
+export async function getGoals(): Promise<Goal[]> {
+  return db.goals.filter((g) => !g.deletedAt).toArray()
+}
+
+/** Ziel aktivieren/deaktivieren (Profil-Screen, Befund 3). */
+export async function setGoalActive(id: string, active: boolean) {
+  await db.goals.update(id, { active, updatedAt: now() })
+}
+
+/**
+ * Coach-Anpassung eines Ziels zurücknehmen (Befund 3 „Einbahnstraße"):
+ * alle Ziele des Nährstoffs werden getombstoned und — falls es ein
+ * Basis-Nährstoff ist (kcal/protein/carbs/fat) — das Basis-Ziel aus dem
+ * Profil neu abgeleitet (gleiche Ableitung wie saveOnboarding/updateProfile).
+ * Für reine Coach-Nährstoffe (z. B. sugar) bleibt danach schlicht kein Ziel:
+ * die Anzeige fällt auf die Katalog-Referenz (nutrients.ts) zurück.
+ */
+export async function resetGoalToBase(nutrient: string): Promise<void> {
+  await db.transaction('rw', db.profile, db.goals, async () => {
+    const stale = await db.goals.filter((g) => g.nutrient === nutrient && !g.deletedAt).toArray()
+    for (const g of stale) {
+      await db.goals.update(g.id, { active: false, deletedAt: now(), updatedAt: now() })
+    }
+    const profile = await db.profile.get('me')
+    if (!profile) return
+    const base = baseGoals(profile).find((g) => g.nutrient === nutrient)
+    // put überschreibt ggf. den soeben getombstoneten `base-<nutrient>`-Datensatz
+    // mit einem frischen aktiven Basis-Ziel (createdBy 'user').
+    if (base) await db.goals.put(base)
+  })
+}
+
 export interface NewFoodInput {
   name: string
   per: 'g' | 'ml'
@@ -158,9 +193,24 @@ export interface NewFoodInput {
 }
 
 /**
+ * Quellen-Hierarchie für den Upsert (Erwartungs-Audit Befund 6): gepflegte
+ * Werte dürfen nicht von schlechteren Quellen überschrieben werden —
+ * manual > openfoodfacts/usda (Datenbank) > ai (Schätzung).
+ */
+const SOURCE_RANK: Record<FoodItem['source'], number> = {
+  manual: 3,
+  openfoodfacts: 2,
+  usda: 2,
+  ai: 1,
+}
+
+/**
  * Lebensmittel im Katalog anlegen — mit Dedupe: existiert bereits ein Eintrag mit
  * gleichem Barcode (oder ersatzweise gleichem Namen), wird dieser aktualisiert
  * (Upsert) statt ein Duplikat zu erzeugen. defaultPortion des Treffers bleibt erhalten.
+ * Werte werden nur überschrieben, wenn die neue Quelle in der Hierarchie
+ * mindestens gleichwertig ist (SOURCE_RANK) — ein KI-Scan lässt z. B. ein
+ * OFF-/manuell gepflegtes Item unangetastet und loggt mit dessen Werten.
  */
 export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   const name = input.name.trim()
@@ -185,6 +235,12 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   }
 
   if (existing) {
+    // Quellen-Hierarchie: schlechtere Quelle (z. B. 'ai' auf OFF-/manuellen
+    // Bestand) überschreibt NICHTS — der Aufrufer loggt mit den gepflegten
+    // Bestandswerten weiter. Ohne explizite Quelle gilt der Input als manuell.
+    if (SOURCE_RANK[input.source ?? 'manual'] < SOURCE_RANK[existing.source]) {
+      return existing
+    }
     // Spread-Reihenfolge bewusst: nur Name/Nährwerte/Quelle werden aktualisiert —
     // nutzergepflegte Felder des Bestands-Items (favorite, pantry, defaultPortion,
     // price) bleiben erhalten, weil `values` sie nie enthält.
@@ -331,12 +387,16 @@ export async function applyGoalSuggestion(s: {
   }
 }
 
-/** Vom Coach vorgeschlagene Challenge als aktiv anlegen. */
-export async function applyChallengeSuggestion(s: { title: string; period: 'day' | 'week' }) {
+/**
+ * Vom Coach vorgeschlagene Challenge als aktiv anlegen. `rule` (Vertrag v1.2,
+ * Format von parseChallengeRule in src/lib/challenges.ts) wird persistiert und
+ * macht die Challenge automatisch auswertbar; ohne rule bleibt sie manuell.
+ */
+export async function applyChallengeSuggestion(s: { title: string; period: 'day' | 'week'; rule?: unknown }) {
   await db.challenges.put({
     id: uuid(),
     title: s.title,
-    rule: {},
+    rule: s.rule ?? {},
     period: s.period,
     status: 'active',
     createdBy: 'coach',
@@ -643,12 +703,16 @@ function previousDayKey(dateKey: string): string {
   return todayKey(dt)
 }
 
-/** Anzahl gestriger (nicht gelöschter) Einträge — steuert den „Gestern kopieren"-Button. */
-export async function yesterdayLogCount(targetDate = todayKey()): Promise<number> {
+/**
+ * Anzahl gestriger (nicht gelöschter) Einträge — steuert den „Gestern kopieren"-
+ * Button. Mit `meal` nur die Einträge dieser Mahlzeit (Befund 11: der Button
+ * kopiert kontextbezogen die gewählte Mahlzeit).
+ */
+export async function yesterdayLogCount(targetDate = todayKey(), meal?: Meal): Promise<number> {
   return db.logs
     .where('date')
     .equals(previousDayKey(targetDate))
-    .filter((l) => !l.deletedAt)
+    .filter((l) => !l.deletedAt && (!meal || l.meal === meal))
     .count()
 }
 
@@ -719,9 +783,16 @@ export async function undoLastWater(date = todayKey()) {
   if (last) await db.water.delete(last.id)
 }
 
-/** ALLE Stores leeren (kompletter Reset, z. B. „Onboarding erneut"). */
+/**
+ * ALLE Stores leeren (kompletter Reset, z. B. „Onboarding erneut").
+ * Zusätzlich die sessionStorage-Zwischenstände räumen (Befund 13): Coach-Chat
+ * (chatStore) und Prüf-Screen-Payload (reviewStore) würden sonst den Reset
+ * überleben und den „frischen" Zustand mit Altdaten füllen.
+ */
 export async function resetAllData() {
   await db.transaction('rw', db.tables, async () => {
     await Promise.all(db.tables.map((t) => t.clear()))
   })
+  clearChat()
+  clearReview()
 }

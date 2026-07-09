@@ -12,6 +12,7 @@ import { Chip } from '@/components/ui/Chip'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
 import { sendCoachStream, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
+import type { CoachChallengeSuggestion } from '@/lib/apiContract'
 import { toApiError } from '@/lib/apiError'
 import { loadChat, saveChat } from '@/lib/chatStore'
 import { downscaleImage } from '@/lib/image'
@@ -391,6 +392,15 @@ function Suggestions({
     return `${nutrientLabel(g.nutrient)}: ${detail}`
   }
 
+  /**
+   * Challenge-Vorschlag inkl. `rule` (Vertrag v1.2) übernehmen — die Regel
+   * macht die Challenge automatisch auswertbar (parseChallengeRule).
+   */
+  async function applyChallenge(i: number, c: CoachChallengeSuggestion) {
+    await applyChallengeSuggestion(c)
+    onApplied(`c${i}`, true)
+  }
+
   async function applyLog(i: number, meal: Meal) {
     const l = s.logs![i]
     const per: 'g' | 'ml' = l.unit === 'ml' ? 'ml' : 'g'
@@ -428,10 +438,7 @@ function Suggestions({
           label={c.title}
           action={t('coach.applyChallenge')}
           done={done(`c${i}`)}
-          onClick={async () => {
-            await applyChallengeSuggestion(c)
-            onApplied(`c${i}`, true)
-          }}
+          onClick={() => applyChallenge(i, c)}
         />
       ))}
       {s.logs?.map((l, i) => (

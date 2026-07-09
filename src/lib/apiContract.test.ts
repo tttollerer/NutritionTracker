@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   API_ERROR_CODES,
   API_ERROR_STATUS,
+  AnalyzeResultSchema,
   ApiErrorSchema,
   apiError,
   COACH_NUTRIENTS,
@@ -46,6 +47,33 @@ describe('ApiErrorSchema (Fehler-Envelope v1.1)', () => {
       code: 'RATE_LIMITED',
       error: 'Zu viele Anfragen.',
     })
+  })
+})
+
+describe('AnalyzeResultSchema v1.2 — optionales questions-Feld (Paket B)', () => {
+  const item = {
+    name: 'Pommes',
+    amount: 150,
+    unit: 'g',
+    per100: { kcal: 290, protein: 3.5, carbs: 40, fat: 13 },
+  }
+
+  it('parst OHNE questions (abwärtskompatibel, Feld fehlt einfach)', () => {
+    const parsed = AnalyzeResultSchema.parse({ items: [item], notes: 'geschätzt' })
+    expect(parsed.questions).toBeUndefined()
+  })
+
+  it('parst MIT bis zu 2 kurzen Rückfragen', () => {
+    const parsed = AnalyzeResultSchema.parse({
+      items: [item],
+      questions: ['Joghurtsauce oder Mayo?', 'Frittiert oder aus dem Ofen?'],
+    })
+    expect(parsed.questions).toHaveLength(2)
+  })
+
+  it('lehnt mehr als 2 Fragen und leere Strings ab', () => {
+    expect(AnalyzeResultSchema.safeParse({ items: [item], questions: ['a?', 'b?', 'c?'] }).success).toBe(false)
+    expect(AnalyzeResultSchema.safeParse({ items: [item], questions: [''] }).success).toBe(false)
   })
 })
 

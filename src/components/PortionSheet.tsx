@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
+import { Pencil } from 'lucide-react'
 import type { FoodItem, LogEntry, Meal, Unit } from '@/db/types'
 import { computeCost, logFood, setFoodPrice } from '@/db/repo'
 import { parsePositiveNumber, formatEuro } from '@/lib/money'
@@ -9,6 +10,7 @@ import { todayKey } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Field, Input } from '@/components/ui/Input'
+import { FoodDetailSheet } from '@/components/FoodDetailSheet'
 
 interface Props {
   food: FoodItem | null
@@ -57,8 +59,12 @@ export function PortionSheet({ food, initialMeal, onClose, onLogged }: Props) {
   )
 }
 
-function PortionForm({ food, initialMeal, onClose, onLogged }: Props & { food: FoodItem }) {
+function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Props & { food: FoodItem }) {
   const { t } = useTranslation()
+  // Lokale Produkt-Kopie: der Editor (FoodDetailSheet) kann Name/Portion/Preis
+  // ändern — onSaved zieht diese Kopie nach, damit das Sheet nichts Veraltetes
+  // zurückschreibt (z. B. den alten Packungspreis beim Loggen).
+  const [food, setFood] = useState(initialFood)
   const dp = food.defaultPortion
   const [amountText, setAmountText] = useState(String(dp?.amount ?? 100))
   const [unit, setUnit] = useState<Unit>(dp?.unit ?? food.per)
@@ -67,6 +73,7 @@ function PortionForm({ food, initialMeal, onClose, onLogged }: Props & { food: F
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
   const [packText, setPackText] = useState(food.price ? String(food.price.per) : '')
   const [saving, setSaving] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const amount = Number.parseFloat(amountText.replace(',', '.'))
   const valid = Number.isFinite(amount) && amount > 0
@@ -107,7 +114,17 @@ function PortionForm({ food, initialMeal, onClose, onLogged }: Props & { food: F
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">{food.name}</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">{food.name}</h2>
+        {/* Einstieg Produkt-Editor (Paket B): Nährwerte, Portion, Preis, Fotos */}
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="focus-ring flex min-h-[48px] shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-primary"
+        >
+          <Pencil size={16} aria-hidden="true" /> {t('food.edit.open')}
+        </button>
+      </div>
 
       <div className="flex items-end gap-2">
         <Field label={t('today.edit.amount')}>
@@ -194,6 +211,18 @@ function PortionForm({ food, initialMeal, onClose, onLogged }: Props & { food: F
           {t('add.pantryLog')}
         </Button>
       </div>
+
+      {/* Produkt-Editor über dem PortionSheet; onSaved zieht die lokale Kopie
+          + die Preisfelder nach, damit save() den neuen Stand nicht zurückdreht. */}
+      <FoodDetailSheet
+        food={editing ? food : null}
+        onClose={() => setEditing(false)}
+        onSaved={(updated) => {
+          setFood(updated)
+          setPriceText(updated.price ? String(updated.price.amount).replace('.', ',') : '')
+          setPackText(updated.price ? String(updated.price.per) : '')
+        }}
+      />
     </div>
   )
 }

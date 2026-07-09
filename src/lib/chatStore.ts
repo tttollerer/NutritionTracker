@@ -17,6 +17,11 @@ export function loadChat(): ChatMessage[] {
   }
 }
 
+/** Chat-Verlauf komplett räumen — Teil des App-Resets (repo.resetAllData, Befund 13). */
+export function clearChat() {
+  sessionStorage.removeItem(KEY)
+}
+
 export function saveChat(messages: ChatMessage[]) {
   try {
     sessionStorage.setItem(KEY, JSON.stringify(messages))

@@ -7,7 +7,7 @@ import { getActiveGoalsMap } from '@/db/repo'
 import { sumsByDate } from '@/lib/gamification'
 import { lastNDayKeys, macroWeek, weeklyGoalHits, type GoalHits } from '@/lib/insights'
 import { macroColor, type MacroKey } from '@/lib/macroColor'
-import { todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
 import { costByDate, formatEuro } from '@/lib/money'
 import { TrendChart, type ChartSeries } from '@/components/TrendChart'
 import { Card } from '@/components/ui/Card'
@@ -28,7 +28,7 @@ const WEEK_HIT_THRESHOLD = 5 / 7
 export function NutritionHistory() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const today = todayKey()
+  const today = useTodayKey() // reaktiv über Mitternacht (Befund 1)
   const days14 = lastNDayKeys(today, CHART_DAYS)
   const start = days14[0]
 
