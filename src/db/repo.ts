@@ -438,16 +438,21 @@ export async function savePhoto(dataUrl: string): Promise<string> {
   return id
 }
 
-/** Eine Portion eines Lebensmittels für einen Tag/Mahlzeit loggen. */
+/**
+ * Eine Portion eines Lebensmittels für einen Tag/Mahlzeit loggen.
+ * `date` ist optional (Default heute) — beim Nachtragen (Kalender) ist es der
+ * Zieltag; `loggedAt` bleibt immer der Jetzt-Zeitpunkt der Erfassung.
+ */
 export async function logFood(args: {
   food: FoodItem
-  date: string
+  date?: string
   meal: Meal
   amount: number
   unit: Unit
   photoBlobId?: string
 }): Promise<LogEntry> {
-  const { food, date, meal, amount, unit, photoBlobId } = args
+  const { food, meal, amount, unit, photoBlobId } = args
+  const date = args.date ?? todayKey()
 
   const entry: LogEntry = {
     id: uuid(),
@@ -539,6 +544,15 @@ export async function updateLog(
     await db.logs.put(updated)
     return updated
   })
+}
+
+/**
+ * Log-Eintrag auf einen anderen Tag verschieben. Wird beim Nachtragen für
+ * Speicherpfade gebraucht, die selbst fest mit todayKey() loggen (PortionSheet):
+ * der Aufrufer verschiebt den frisch angelegten Eintrag direkt auf den Zieltag.
+ */
+export async function setLogDate(id: string, date: string) {
+  await db.logs.update(id, { date, updatedAt: now() })
 }
 
 /** Soft-Delete eines Log-Eintrags (sync-freundlich). */

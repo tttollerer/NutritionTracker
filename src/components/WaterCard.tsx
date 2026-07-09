@@ -9,10 +9,15 @@ import { Card } from '@/components/ui/Card'
 
 const PRESETS = [250, 500]
 
-/** Wasser-Tracking-Widget fürs Dashboard (PLAN.md §9 Komfort). */
-export function WaterCard({ weightKg }: { weightKg?: number }) {
+/**
+ * Wasser-Tracking-Widget fürs Dashboard (PLAN.md §9 Komfort).
+ * Optionales `date` (Tages-Navigation/Nachtragen): Anzeige UND +250/+500/Undo
+ * wirken dann auf diesen Tag; ohne Prop wie bisher reaktiv auf heute.
+ */
+export function WaterCard({ weightKg, date: dateProp }: { weightKg?: number; date?: string }) {
   const { t } = useTranslation()
-  const date = useTodayKey() // reaktiv über Mitternacht (Befund 1)
+  const today = useTodayKey() // reaktiv über Mitternacht (Befund 1)
+  const date = dateProp ?? today
   const entries = useLiveQuery(() => db.water.where('date').equals(date).toArray(), [date])
   const total = (entries ?? []).reduce((a, w) => a + w.ml, 0)
   const goal = waterGoalMl(weightKg)
@@ -42,7 +47,7 @@ export function WaterCard({ weightKg }: { weightKg?: number }) {
           <motion.button
             key={ml}
             whileTap={{ scale: 0.94 }}
-            onClick={() => addWater(ml)}
+            onClick={() => addWater(ml, date)}
             className="focus-ring flex-1 rounded-md bg-secondary py-2.5 text-sm font-medium text-secondary-foreground"
           >
             +{ml} ml
@@ -50,7 +55,7 @@ export function WaterCard({ weightKg }: { weightKg?: number }) {
         ))}
         <motion.button
           whileTap={{ scale: 0.94 }}
-          onClick={() => undoLastWater()}
+          onClick={() => undoLastWater(date)}
           aria-label={t('today.water.undo')}
           disabled={total === 0}
           className="focus-ring flex w-12 items-center justify-center rounded-md bg-muted text-muted-foreground disabled:opacity-40"

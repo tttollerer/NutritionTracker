@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Trash2, Trophy, Wallet } from 'lucide-react'
+import { CalendarDays, CalendarPlus, ChevronLeft, ChevronRight, Trash2, Trophy, Wallet } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Photo } from '@/db/types'
 import { deleteLog, getActiveGoalsMap, getAllergies, getSettings, restoreLog } from '@/db/repo'
@@ -13,6 +14,8 @@ import { activeChallenges, evaluateChallenge } from '@/lib/challenges'
 import { sumsByDate } from '@/lib/gamification'
 import { overridesFromGoals } from '@/lib/deficit'
 import { useTodayKey } from '@/hooks/useTodayKey'
+import { formatDayLong, formatDayShort, setActiveDate, shiftDayKey, useActiveDate } from '@/lib/dayContext'
+import { CalendarSheet } from '@/components/CalendarSheet'
 import { formatEuro, sumCost } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
 import { macroColor } from '@/lib/macroColor'
@@ -24,14 +27,28 @@ import { DueMeasurements } from '@/components/DueMeasurements'
 import { NudgeCard } from '@/components/NudgeCard'
 import { CaptureCta } from '@/components/CaptureCta'
 import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/PageHeader'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 export function Today() {
   const { t } = useTranslation()
-  const date = useTodayKey() // reaktiv über Mitternacht (Befund 1)
+  const navigate = useNavigate()
+  const today = useTodayKey() // reaktiv über Mitternacht (Befund 1)
+  // Angezeigter Tag: dayContext-Override (Kalender/Pfeile) oder heute. Steht der
+  // Nutzer auf „heute", folgt die Ansicht weiter dem Mitternachtswechsel — nur
+  // ein manuell gewählter Tag bleibt stehen.
+  const date = useActiveDate()
+  const isToday = date === today
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const { showUndo } = useOverlays()
   const [editing, setEditing] = useState<LogEntry | null>(null)
+
+  // ▶ springt vom Vortag von heute direkt zurück in den „heute folgen"-Modus.
+  function goNext() {
+    const next = shiftDayKey(date, 1)
+    setActiveDate(next >= today ? null : next)
+  }
 
   const logs = useLiveQuery(
     () => db.logs.where('date').equals(date).filter((l) => !l.deletedAt).toArray(),
@@ -119,23 +136,74 @@ export function Today() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('today.title')} />
+      {/* Tages-Navigation: Datum antippen → Kalender; Pfeile blättern tageweise. */}
+      <PageHeader title={t('today.title')}>
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={() => setActiveDate(shiftDayKey(date, -1))}
+            aria-label={t('today.dayNav.prev')}
+            className="focus-ring flex h-12 w-12 items-center justify-center rounded-full text-muted-foreground"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setCalendarOpen(true)}
+            aria-label={t('today.dayNav.openCalendar', { date: formatDayLong(date) })}
+            className="focus-ring flex min-h-[48px] items-center gap-1.5 rounded-md px-1.5 text-sm font-medium tabular-nums"
+          >
+            <CalendarDays size={18} className="text-primary" aria-hidden="true" />
+            {formatDayShort(date)}
+          </button>
+          <button
+            type="button"
+            onClick={goNext}
+            disabled={isToday}
+            aria-label={t('today.dayNav.next')}
+            className="focus-ring flex h-12 w-12 items-center justify-center rounded-full text-muted-foreground disabled:opacity-40"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      </PageHeader>
 
-      <CaptureCta />
+      {/* Vergangenheits-Tag: dezenter Hinweis + Rückweg. Ring/Makros/Listen
+          unten zeigen die Werte DES Tages; Editieren/Löschen geht dort genauso. */}
+      {!isToday && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/10 py-2 pl-3 pr-1">
+          <p className="min-w-0 truncate text-sm font-medium">
+            {t('today.dayNav.viewing', { date: formatDayLong(date) })}
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveDate(null)}
+            className="focus-ring min-h-[48px] shrink-0 rounded-md px-3 text-sm font-semibold text-primary"
+          >
+            {t('today.dayNav.backToToday')}
+          </button>
+        </div>
+      )}
 
-      <DueMeasurements />
+      {/* „Jetzt erfassen"/Fälligkeiten/Nudges sind Jetzt-Momente — nur auf heute. */}
+      {isToday && <CaptureCta />}
 
-      <NudgeCard
-        logs={logs}
-        date={date}
-        proteinTarget={goals.protein?.target}
-        sex={profile?.sex}
-        vegan={profile?.dietForms.includes('vegan')}
-        allergies={allergies}
-        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
-        limitOverrides={limitOverrides}
-        benefitOverrides={benefitOverrides}
-      />
+      {isToday && <DueMeasurements />}
+
+      {/* Nudges sind tageszeitbezogene „Jetzt"-Hinweise — auf Vergangenheits-Tagen ausblenden. */}
+      {isToday && (
+        <NudgeCard
+          logs={logs}
+          date={date}
+          proteinTarget={goals.protein?.target}
+          sex={profile?.sex}
+          vegan={profile?.dietForms.includes('vegan')}
+          allergies={allergies}
+          sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
+          limitOverrides={limitOverrides}
+          benefitOverrides={benefitOverrides}
+        />
+      )}
 
       {/* Aktive Coach-Challenges kompakt anzeigen (Details & Aktionen: Erfolge). */}
       {challenges && challenges.length > 0 && (
@@ -220,7 +288,7 @@ export function Today() {
         {dayCost > 0 && (
           <p className="flex items-center justify-between border-t border-border pt-3 text-sm">
             <span className="flex items-center gap-1.5 text-muted-foreground">
-              <Wallet size={16} aria-hidden="true" /> {t('today.foodCost')}
+              <Wallet size={16} aria-hidden="true" /> {t(isToday ? 'today.foodCost' : 'today.foodCostDay')}
             </span>
             <span className="tabular-nums font-medium">{formatEuro(dayCost)}</span>
           </p>
@@ -241,11 +309,11 @@ export function Today() {
 
       {settings?.bloodSugar && <GlucoseCard unit={settings.glucoseUnit} date={date} />}
 
-      <WaterCard weightKg={profile?.weightKg} />
+      <WaterCard weightKg={profile?.weightKg} date={date} />
 
       {logs.length === 0 ? (
         <p className="rounded-lg bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-          {t('today.empty')}
+          {t(isToday ? 'today.empty' : 'today.emptyPast')}
         </p>
       ) : (
         <div className="space-y-4">
@@ -307,10 +375,28 @@ export function Today() {
         </div>
       )}
 
+      {/* Nachtragen: das aktive Zieldatum steht bereits im dayContext —
+          die Erfassen-Seite loggt alle Speicherpfade auf diesen Tag. */}
+      {!isToday && (
+        <Button variant="secondary" className="w-full" onClick={() => navigate('/add')}>
+          <CalendarPlus size={18} aria-hidden="true" /> {t('today.dayNav.addForDay')}
+        </Button>
+      )}
+
       <EditLogSheet
         entry={editing}
         food={editing ? foods.get(editing.foodId) : undefined}
         onClose={() => setEditing(null)}
+      />
+
+      <CalendarSheet
+        open={calendarOpen}
+        selectedDate={date}
+        onSelect={(d) => {
+          setActiveDate(d) // normalisiert d === heute automatisch auf „heute folgen"
+          setCalendarOpen(false)
+        }}
+        onClose={() => setCalendarOpen(false)}
       />
     </div>
   )

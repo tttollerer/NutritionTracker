@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
+import { Camera, ScanText, ScanBarcode, CalendarDays, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
 import {
   copyYesterday,
   createFood,
@@ -16,6 +16,7 @@ import {
   recentFoods,
   savePhoto,
   searchFoods,
+  setLogDate,
   setPantry,
   toggleFavorite,
   yesterdayLogCount,
@@ -26,7 +27,8 @@ import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
 import { downscaleImage } from '@/lib/image'
-import { todayKey } from '@/lib/utils'
+import { formatDayLong, getActiveDate, setActiveDate, useActiveDate } from '@/lib/dayContext'
+import { useTodayKey } from '@/hooks/useTodayKey'
 import { describePortion } from '@/lib/portion'
 import { PageHeader } from '@/components/PageHeader'
 import { PortionSheet } from '@/components/PortionSheet'
@@ -40,14 +42,21 @@ export function Add() {
   const navigate = useNavigate()
   const { showUndo } = useOverlays()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
+  // Nachtragen (dayContext): aktives Zieldatum — alle Speicherpfade dieser Seite
+  // loggen darauf. In Handlern wird bewusst frisch getActiveDate() gelesen
+  // (kein eingefrorener Render-Wert über Mitternacht).
+  const today = useTodayKey()
+  const activeDate = useActiveDate()
+  const backdating = activeDate !== today
   const recents = useLiveQuery(() => recentFoods(), [])
   const favorites = useLiveQuery(() => favoriteFoods(), [])
   const pantry = useLiveQuery(() => pantryFoods(), [])
   // Vorrat-Verzehr über das Mengen-Sheet (Menge + Einheit + Mahlzeit).
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
-  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
+  // „Vortag kopieren" ist relativ zum Zieltag (beim Nachtragen: dessen Vortag).
+  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(activeDate), [activeDate]) ?? 0
   // Kontext für „Gestern kopieren" (Befund 11): Zähler der gewählten Mahlzeit.
-  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(todayKey(), meal), [meal]) ?? 0
+  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(activeDate, meal), [activeDate, meal]) ?? 0
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
   const [ack, setAck] = useState(false)
 
@@ -81,7 +90,7 @@ export function Add() {
   async function logCatalog(id: string) {
     const c = FOOD_CATALOG.find((f) => f.id === id)
     if (!c) return
-    const entry = await quickLogCatalog(c, meal)
+    const entry = await quickLogCatalog(c, meal, getActiveDate())
     showUndo(t('capture.added', { name: c.name }), () => deleteLog(entry.id))
     navigate('/')
   }
@@ -89,7 +98,7 @@ export function Add() {
   async function quickLog(food: FoodItem) {
     const entry = await logFood({
       food,
-      date: todayKey(),
+      date: getActiveDate(),
       meal,
       amount: food.defaultPortion?.amount ?? 100,
       unit: food.defaultPortion?.unit ?? (food.per as 'g' | 'ml'),
@@ -108,9 +117,12 @@ export function Add() {
    * wird nur die oben gewählte Mahlzeit kopiert, die Zweitaktion holt den ganzen Tag.
    */
   async function copyFromYesterday(wholeDay = false) {
-    const copied = await copyYesterday(wholeDay ? undefined : meal)
+    // Beim Nachtragen wird der Vortag DES ZIELTAGS auf den Zieltag kopiert.
+    const target = getActiveDate()
+    const copied = await copyYesterday(wholeDay ? undefined : meal, target)
     if (copied.length === 0) return
-    showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
+    const key = target === today ? 'add.copiedYesterday' : 'add.copiedPrevDay'
+    showUndo(t(key, { count: copied.length }), async () => {
       await Promise.all(copied.map((c) => deleteLog(c.id)))
     })
     navigate('/')
@@ -133,7 +145,7 @@ export function Add() {
       fat: Number(fat) || 0,
     })
     const photoBlobId = photo ? await savePhoto(photo) : undefined
-    const entry = await logFood({ food, date: todayKey(), meal, amount: Number(amount) || 100, unit: per, photoBlobId })
+    const entry = await logFood({ food, date: getActiveDate(), meal, amount: Number(amount) || 100, unit: per, photoBlobId })
     showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
     navigate('/')
   }
@@ -146,6 +158,24 @@ export function Add() {
     <div className="space-y-6">
       <PageHeader title={t('add.title')} />
 
+      {/* Nachtragen-Banner: alle Speicherpfade loggen auf das Zieldatum; X = zurück zu heute. */}
+      {backdating && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/10 py-1.5 pl-3 pr-1">
+          <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+            <CalendarDays size={16} className="shrink-0 text-primary" aria-hidden="true" />
+            <span className="truncate">{t('add.forDate', { date: formatDayLong(activeDate) })}</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveDate(null)}
+            aria-label={t('add.forDateReset')}
+            className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-muted-foreground"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
       {/* Mahlzeit-Auswahl */}
       <div className="flex flex-wrap gap-2">
         {MEALS.map((m) => (
@@ -153,20 +183,24 @@ export function Add() {
         ))}
       </div>
 
-      {/* KI- & Barcode-Erfassung — der schnellste Weg zuerst (PLAN §7.2) */}
-      <div className="grid grid-cols-3 gap-3">
-        {captureOptions.map(({ icon: Icon, key, to }) => (
-          <motion.button
-            key={key}
-            whileTap={{ scale: 0.96 }}
-            onClick={() => navigate(to)}
-            className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4"
-          >
-            <Icon size={26} className="text-primary" />
-            <span className="text-xs">{t(`add.${key}`)}</span>
-          </motion.button>
-        ))}
-      </div>
+      {/* KI- & Barcode-Erfassung — der schnellste Weg zuerst (PLAN §7.2).
+          Beim Nachtragen ausgeblendet: Capture-/Barcode-Flows loggen fest auf
+          heute (Review-Flow); fürs Nachtragen gibt es Suche/Vorrat/Manuell. */}
+      {!backdating && (
+        <div className="grid grid-cols-3 gap-3">
+          {captureOptions.map(({ icon: Icon, key, to }) => (
+            <motion.button
+              key={key}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => navigate(to)}
+              className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-card p-4"
+            >
+              <Icon size={26} className="text-primary" />
+              <span className="text-xs">{t(`add.${key}`)}</span>
+            </motion.button>
+          ))}
+        </div>
+      )}
 
       {/* Katalog-Suche über die eigenen Lebensmittel */}
       <section className="space-y-2">
@@ -185,7 +219,7 @@ export function Add() {
           results.length > 0 ? (
             <div className="space-y-2">
               {results.map((f) => (
-                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={backdating ? undefined : () => portionPhoto(f)} />
               ))}
             </div>
           ) : (
@@ -221,7 +255,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('add.favorites')}</h2>
           <div className="space-y-2">
             {favorites.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={backdating ? undefined : () => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -232,11 +266,12 @@ export function Add() {
         <div className="space-y-1">
           {yesterdayMealCount > 0 ? (
             <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday(false)}>
-              <History size={18} /> {t('add.copyYesterdayMeal', { meal: t(`today.meals.${meal}`) })}
+              <History size={18} />{' '}
+              {t(backdating ? 'add.copyPrevDayMeal' : 'add.copyYesterdayMeal', { meal: t(`today.meals.${meal}`) })}
             </Button>
           ) : (
             <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday(true)}>
-              <History size={18} /> {t('add.copyYesterdayAll')}
+              <History size={18} /> {t(backdating ? 'add.copyPrevDayAll' : 'add.copyYesterdayAll')}
             </Button>
           )}
           {/* Zweitaktion „ganzen Tag" nur, wenn sie mehr kopiert als die Mahlzeit allein. */}
@@ -246,7 +281,7 @@ export function Add() {
               onClick={() => void copyFromYesterday(true)}
               className="focus-ring mx-auto flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground"
             >
-              {t('add.copyYesterdayAll')}
+              {t(backdating ? 'add.copyPrevDayAll' : 'add.copyYesterdayAll')}
             </button>
           )}
         </div>
@@ -258,7 +293,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('entry.recent')}</h2>
           <div className="space-y-2">
             {recentsWithoutFavs.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={backdating ? undefined : () => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -368,6 +403,10 @@ export function Add() {
         initialMeal={meal}
         onClose={() => setPortionFood(null)}
         onLogged={(entry, food) => {
+          // Nachtragen: das Sheet loggt selbst fest auf heute — den frischen
+          // Eintrag deshalb direkt auf das aktive Zieldatum verschieben.
+          const target = getActiveDate()
+          if (entry.date !== target) void setLogDate(entry.id, target)
           showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
           navigate('/')
         }}

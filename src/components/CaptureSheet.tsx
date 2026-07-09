@@ -162,14 +162,6 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               <SheetTile icon={ScanBarcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
             </div>
 
-            {/* Dezenter Einstieg: Einkauf scannen → Vorrat (Batch-Scan ohne Loggen) */}
-            <button
-              onClick={() => go('/barcode?pantry=1')}
-              className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md text-sm text-muted-foreground"
-            >
-              <ShoppingBasket size={16} aria-hidden="true" /> {t('capture.pantryEntry')}
-            </button>
-
             {/* Zuletzt benutzt: 1 Tipp */}
             {recents && recents.length > 0 && (
               <div className="mt-4">
@@ -195,6 +187,24 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             >
               <PencilLine size={16} /> {t('add.manual')}
             </button>
+
+            {/* Zweiter Weg, klar abgesetzt: „Ich habe eingekauft" → Vorrat.
+                Getrenntes mentales Modell zum Verzehr-Block darüber. */}
+            <div className="mt-5 border-t border-border pt-3">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('capture.pantrySection')}
+              </p>
+              <button
+                onClick={() => go('/pantry')}
+                className="focus-ring flex min-h-[56px] w-full items-center gap-3 rounded-lg border border-border bg-background p-3 text-left"
+              >
+                <ShoppingBasket size={24} aria-hidden="true" className="shrink-0 text-primary" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{t('capture.pantryTile')}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{t('capture.pantryTileHint')}</span>
+                </span>
+              </button>
+            </div>
           </motion.div>
 
           {/* Versteckte Datei-Eingaben: Kamera (capture) + Galerie */}

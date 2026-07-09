@@ -35,7 +35,24 @@
     },
     "entryDeleted": "{{name}} gelöscht",
     "foodCost": "Essenskosten heute",
+    "foodCostDay": "Essenskosten",
+    "emptyPast": "An diesem Tag wurde nichts erfasst.",
     "challenges": "Deine Challenges",
+    "dayNav": {
+      "prev": "Vortag",
+      "next": "Folgetag",
+      "openCalendar": "Kalender öffnen — angezeigt wird {{date}}",
+      "viewing": "Du siehst {{date}}",
+      "backToToday": "Zurück zu heute",
+      "addForDay": "Für diesen Tag nachtragen"
+    },
+    "calendar": {
+      "title": "Tag auswählen",
+      "prevMonth": "Voriger Monat",
+      "nextMonth": "Nächster Monat",
+      "dayLabel_one": "{{date}}, 1 Eintrag",
+      "dayLabel_other": "{{date}}, {{count}} Einträge"
+    },
     "edit": {
       "title": "Eintrag bearbeiten",
       "open": "{{name}} bearbeiten",
@@ -129,6 +146,12 @@
     "copyYesterdayAll": "Ganzen Tag von gestern kopieren",
     "copiedYesterday_one": "1 Eintrag von gestern kopiert",
     "copiedYesterday_other": "{{count}} Einträge von gestern kopiert",
+    "copyPrevDayMeal": "{{meal}} vom Vortag kopieren",
+    "copyPrevDayAll": "Ganzen Vortag kopieren",
+    "copiedPrevDay_one": "1 Eintrag vom Vortag kopiert",
+    "copiedPrevDay_other": "{{count}} Einträge vom Vortag kopiert",
+    "forDate": "Eintrag für {{date}}",
+    "forDateReset": "Nachtragen beenden — zurück zu heute",
     "pantry": "Mein Vorrat",
     "pantryToggle": "{{name}} im Vorrat",
     "pantryAmount": "Menge von {{name}} wählen",
@@ -471,7 +494,14 @@
     "pantryEntry": "Einkauf scannen → Vorrat",
     "pantrySaved": "Im Vorrat: {{name}}",
     "priceSave": "Preis speichern",
-    "priceSkip": "Ohne Preis"
+    "priceSkip": "Ohne Preis",
+    "pantrySection": "Einkauf",
+    "pantryTile": "Einkauf einräumen",
+    "pantryTileHint": "Scannen & in den Vorrat legen — ohne zu loggen",
+    "pantryScanTitle": "Einkauf scannen",
+    "pantryCount_one": "1 Produkt eingeräumt",
+    "pantryCount_other": "{{count}} Produkte eingeräumt",
+    "pantryDone": "Fertig — zum Vorrat"
   },
   "review": {
     "title": "Ergebnis prüfen",
@@ -519,6 +549,15 @@
       "saved": "Gespeichert",
       "invalid": "Bitte prüfe die markierten Felder — Zahlen dürfen nicht negativ sein."
     }
+  },
+  "pantry": {
+    "title": "Mein Vorrat",
+    "scan": "Einkauf scannen",
+    "labelPhoto": "Nährwerttabelle fotografieren",
+    "emptyBody": "Scanne deinen Einkauf — beim Essen trackst du dann in 2 Taps.",
+    "pricePerPack": "{{price}}/Packung",
+    "remove": "{{name}} aus dem Vorrat entfernen",
+    "removed": "{{name}} aus dem Vorrat entfernt"
   },
   "pwa": {
     "updateAvailable": "Update verfügbar",

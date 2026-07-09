@@ -49,6 +49,8 @@ export function Barcode() {
   const [target, setTarget] = useState<'log' | 'pantry'>(params.get('pantry') ? 'pantry' : 'log')
   const targetRef = useRef(target)
   targetRef.current = target
+  // Fortschrittsgefühl beim Batch-Scan: in dieser Session eingeräumte Produkte.
+  const [pantryCount, setPantryCount] = useState(0)
   // Preis-Nachtrag (Haushaltskasse) zum zuletzt gescannten Vorrat-Produkt.
   const [lastPantry, setLastPantry] = useState<LastPantryItem | null>(null)
   const [priceText, setPriceText] = useState('')
@@ -130,10 +132,14 @@ export function Barcode() {
         })
         lastMissRef.current = { code: trimmed, at: Date.now() } // nicht sofort erneut ablegen
         setLastPantry({ foodId: food.id, name: food.name })
+        setPantryCount((c) => c + 1)
         // Preis-Felder fürs neue Produkt vorbelegen: Packungsgröße aus OFF, falls vorhanden.
         setPriceText(food.price ? String(food.price.amount).replace('.', ',') : '')
         setPackText(food.price ? String(food.price.per) : product.packageSize ? String(product.packageSize) : '')
-        showUndo(t('capture.pantrySaved', { name: food.name }), () => setPantry(food.id, false))
+        showUndo(t('capture.pantrySaved', { name: food.name }), async () => {
+          await setPantry(food.id, false)
+          setPantryCount((c) => Math.max(0, c - 1)) // Zähler bleibt ehrlich
+        })
         return
       }
       setReview({
@@ -178,15 +184,26 @@ export function Barcode() {
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)} aria-label={t('common.back')} className="text-muted-foreground">
-          <ChevronLeft size={24} />
-        </button>
-        <h1 className="text-2xl font-bold">{t('capture.barcodeTitle')}</h1>
+      <header className="space-y-1">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(-1)}
+            aria-label={t('common.back')}
+            className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground"
+          >
+            <ChevronLeft size={24} />
+          </button>
+          {/* Titel folgt dem mentalen Modell: „Einkauf scannen" statt „Barcode scannen". */}
+          <h1 className="text-2xl font-bold">
+            {target === 'pantry' ? t('capture.pantryScanTitle') : t('capture.barcodeTitle')}
+          </h1>
+        </div>
+        {target === 'pantry' && <p className="pl-14 text-sm text-muted-foreground">{t('capture.pantryHint')}</p>}
       </header>
 
-      {/* Ziel-Umschalter: Mahlzeit loggen vs. Einkauf in den Vorrat (Batch-Scan). */}
-      <div role="group" aria-label={t('capture.targetToggle')} className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
+      {/* Ziel-Umschalter als Segmented Control: „Ich habe gegessen" vs.
+          „Ich habe eingekauft" — Icons tragen die Unterscheidung mit. */}
+      <div role="group" aria-label={t('capture.targetToggle')} className="grid grid-cols-2 gap-1 rounded-md bg-muted p-1">
         {(
           [
             { key: 'log', icon: UtensilsCrossed, label: t('capture.targetLog') },
@@ -198,15 +215,14 @@ export function Barcode() {
             type="button"
             aria-pressed={target === key}
             onClick={() => setTarget(key)}
-            className={`focus-ring flex min-h-[48px] items-center justify-center gap-2 rounded-sm text-sm font-medium ${
-              target === key ? 'bg-card shadow-sm' : 'text-muted-foreground'
+            className={`focus-ring flex min-h-[48px] items-center justify-center gap-2 rounded-sm text-sm font-medium transition-colors ${
+              target === key ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'
             }`}
           >
-            <Icon size={18} aria-hidden="true" /> {label}
+            <Icon size={18} aria-hidden="true" className={target === key ? 'text-primary' : undefined} /> {label}
           </button>
         ))}
       </div>
-      {target === 'pantry' && <p className="text-xs text-muted-foreground">{t('capture.pantryHint')}</p>}
 
       <div className="relative overflow-hidden rounded-lg bg-black">
         <video ref={videoRef} className="aspect-square w-full object-cover" muted playsInline />
@@ -257,6 +273,23 @@ export function Barcode() {
               {t('capture.priceSave')}
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Batch-Abschluss: dezenter Session-Zähler + „Fertig" führt zum Vorrat.
+          replace: true, damit Zurück vom Vorrat nicht wieder im Scanner landet. */}
+      {target === 'pantry' && (
+        <div className="flex items-center justify-between gap-3">
+          <p aria-live="polite" className="min-w-0 truncate text-sm text-muted-foreground">
+            {pantryCount > 0 ? t('capture.pantryCount', { count: pantryCount }) : ''}
+          </p>
+          <Button
+            variant="secondary"
+            className="shrink-0"
+            onClick={() => navigate('/pantry', { replace: true })}
+          >
+            {t('capture.pantryDone')}
+          </Button>
         </div>
       )}
 

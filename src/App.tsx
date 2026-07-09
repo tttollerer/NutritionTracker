@@ -19,6 +19,7 @@ const Review = lazy(() => import('@/pages/Review').then((m) => ({ default: m.Rev
 const Coach = lazy(() => import('@/pages/Coach').then((m) => ({ default: m.Coach })))
 const Awards = lazy(() => import('@/pages/Awards').then((m) => ({ default: m.Awards })))
 const Trends = lazy(() => import('@/pages/Trends').then((m) => ({ default: m.Trends })))
+const Pantry = lazy(() => import('@/pages/Pantry').then((m) => ({ default: m.Pantry })))
 
 function PageSkeleton() {
   return (
@@ -66,6 +67,7 @@ const router = createBrowserRouter([
       { path: 'coach', element: lazyPage(<Coach />) },
       { path: 'awards', element: lazyPage(<Awards />) },
       { path: 'trends', element: lazyPage(<Trends />) },
+      { path: 'pantry', element: lazyPage(<Pantry />) },
       { path: 'profile', element: <Profile onReset={() => undefined} /> },
     ],
   },
