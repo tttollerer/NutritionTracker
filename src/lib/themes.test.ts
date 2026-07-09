@@ -11,7 +11,7 @@ describe('themes registry', () => {
   it('hat mindestens das vital-Theme mit vollständigem Swatch', () => {
     const vital = THEMES.find((t) => t.id === 'vital')
     expect(vital).toBeDefined()
-    expect(vital?.label).toBeTruthy()
+    expect(vital?.labelKey).toBe('profile.themes.vital')
     expect(vital?.swatch.primary).toMatch(/^#[0-9a-fA-F]{6}$/)
     expect(vital?.swatch.accent).toMatch(/^#[0-9a-fA-F]{6}$/)
   })
@@ -19,7 +19,7 @@ describe('themes registry', () => {
   it('hat das classic-Theme (Original-Design) mit vollständigem Swatch', () => {
     const classic = THEMES.find((t) => t.id === 'classic')
     expect(classic).toBeDefined()
-    expect(classic?.label).toBeTruthy()
+    expect(classic?.labelKey).toBe('profile.themes.classic')
     expect(classic?.swatch.primary).toMatch(/^#[0-9a-fA-F]{6}$/)
     expect(classic?.swatch.accent).toMatch(/^#[0-9a-fA-F]{6}$/)
   })
@@ -32,7 +32,7 @@ describe('themes registry', () => {
     const ids = THEMES.map((t) => t.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const t of THEMES) {
-      expect(t.label).toBeTruthy()
+      expect(t.labelKey).toBeTruthy()
       expect(t.swatch.primary).toBeTruthy()
       expect(t.swatch.accent).toBeTruthy()
     }

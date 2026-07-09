@@ -41,11 +41,11 @@ export function BottomTabBar() {
           <button
             onClick={openCapture}
             aria-label={t('add.title')}
-            className="flex min-h-[64px] min-w-[56px] flex-col items-center justify-center"
+            className="focus-ring flex min-h-[64px] min-w-[56px] flex-col items-center justify-center rounded-md"
           >
             <motion.span
               whileTap={{ scale: 0.88 }}
-              className="flex h-14 w-14 -translate-y-3 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30"
+              className="flex h-14 w-14 -translate-y-3 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-glow"
             >
               <Plus size={28} strokeWidth={2.5} />
             </motion.span>
@@ -67,7 +67,7 @@ function TabItem({ tab }: { tab: Tab }) {
       <NavLink
         to={tab.to}
         aria-label={t(`nav.${tab.key}`)}
-        className="flex min-h-[64px] min-w-[56px] flex-col items-center justify-center gap-1"
+        className="focus-ring flex min-h-[64px] min-w-[56px] flex-col items-center justify-center gap-1 rounded-md"
       >
         {({ isActive }) => (
           <motion.span

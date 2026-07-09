@@ -10,7 +10,8 @@ export default defineConfig(({ mode }) => {
   const name = env.VITE_BRAND_NAME || 'NutriScan'
   const short = env.VITE_BRAND_SHORT || 'NutriScan'
   const description = env.VITE_BRAND_DESCRIPTION || 'Kalorien, Makros & Mineralstoffe tracken – mit KI-Unterstützung.'
-  const themeColor = env.VITE_BRAND_THEME_COLOR || '#16a34a'
+  // Default-Theme „vital": primary #10B981 (themes.css / Theme-Spec 2026-06-28).
+  const themeColor = env.VITE_BRAND_THEME_COLOR || '#10b981'
 
   return {
     plugins: [
@@ -32,7 +33,8 @@ export default defineConfig(({ mode }) => {
           short_name: short,
           description,
           theme_color: themeColor,
-          background_color: '#0b0f0c',
+          // Splash-Hintergrund = „vital"-Light-Background (#F6F7F9, Theme-Spec).
+          background_color: '#f6f7f9',
           display: 'standalone',
           orientation: 'portrait',
           start_url: '/',
@@ -49,12 +51,41 @@ export default defineConfig(({ mode }) => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+          runtimeCaching: [
+            {
+              // Open-Food-Facts-Produktabfragen: frisch bevorzugt, offline
+              // fällt der Barcode-Lookup auf zuletzt gesehene Produkte zurück.
+              urlPattern: /^https:\/\/world\.openfoodfacts\.org\/.*/i,
+              handler: 'NetworkFirst',
+              options: {
+                cacheName: 'off-products',
+                networkTimeoutSeconds: 5,
+                expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+                cacheableResponse: { statuses: [0, 200] },
+              },
+            },
+          ],
         },
       }),
     ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+      },
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          // Vendor-Split: hält jeden Chunk unter ~350 kB (Abschlussplan Paket 5)
+          // und verbessert Cache-Trefferquote bei App-Updates.
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-motion': ['framer-motion'],
+            'vendor-db': ['dexie', 'dexie-react-hooks'],
+            'vendor-i18n': ['i18next', 'react-i18next'],
+            'vendor-zod': ['zod'],
+          },
+        },
       },
     },
     test: {

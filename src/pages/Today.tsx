@@ -1,10 +1,15 @@
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Trophy } from 'lucide-react'
 import { db } from '@/db'
-import { deleteLog, getActiveGoalsMap, getAllergies, getSettings } from '@/db/repo'
+import type { FoodItem, LogEntry, Photo } from '@/db/types'
+import { deleteLog, getActiveGoalsMap, getAllergies, getSettings, restoreLog } from '@/db/repo'
+import { useOverlays } from '@/lib/overlays-context'
+import { EditLogSheet } from '@/components/EditLogSheet'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
+import { activeChallenges, evaluateChallenge } from '@/lib/challenges'
 import { todayKey } from '@/lib/utils'
 import { MEALS } from '@/lib/meal'
 import { macroColor } from '@/lib/macroColor'
@@ -22,17 +27,31 @@ import { Skeleton } from '@/components/ui/Skeleton'
 export function Today() {
   const { t } = useTranslation()
   const date = todayKey()
+  const { showUndo } = useOverlays()
+  const [editing, setEditing] = useState<LogEntry | null>(null)
 
   const logs = useLiveQuery(
     () => db.logs.where('date').equals(date).filter((l) => !l.deletedAt).toArray(),
     [date],
   )
-  const foods = useLiveQuery(() => db.foods.toArray(), [])
+  // Gezielt nur die Foods/Fotos der Tages-Logs laden (bulkGet) statt alle Stores.
+  const foods = useLiveQuery(async () => {
+    if (!logs) return undefined
+    const ids = [...new Set(logs.map((l) => l.foodId))]
+    const items = await db.foods.bulkGet(ids)
+    return new Map(items.filter((f): f is FoodItem => !!f).map((f) => [f.id, f]))
+  }, [logs])
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
   const profile = useLiveQuery(() => db.profile.get('me'), [])
-  const photos = useLiveQuery(() => db.photos.toArray(), [])
+  const photos = useLiveQuery(async () => {
+    if (!logs) return undefined
+    const ids = [...new Set(logs.flatMap((l) => (l.photoBlobId ? [l.photoBlobId] : [])))]
+    const items = await db.photos.bulkGet(ids)
+    return new Map(items.filter((p): p is Photo => !!p).map((p) => [p.id, p.dataUrl]))
+  }, [logs])
   const allergies = useLiveQuery(() => getAllergies(), [])
   const settings = useLiveQuery(() => getSettings(), [])
+  const challenges = useLiveQuery(() => activeChallenges(), [])
 
   if (logs === undefined || foods === undefined || goals === undefined) {
     return (
@@ -44,8 +63,14 @@ export function Today() {
     )
   }
 
-  const foodName = (id: string) => foods.find((f) => f.id === id)?.name ?? '—'
-  const photoUrl = (id?: string) => (id ? photos?.find((p) => p.id === id)?.dataUrl : undefined)
+  const foodName = (id: string) => foods.get(id)?.name ?? '—'
+  const photoUrl = (id?: string) => (id ? photos?.get(id) : undefined)
+
+  // Soft-Delete mit Undo-Snackbar: der Eintrag ist per restoreLog wiederherstellbar.
+  function handleDelete(l: LogEntry) {
+    void deleteLog(l.id)
+    showUndo(t('today.entryDeleted', { name: foodName(l.foodId) }), () => restoreLog(l.id))
+  }
 
   const sum = logs.reduce(
     (a, l) => ({
@@ -92,6 +117,42 @@ export function Today() {
         sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
       />
 
+      {/* Aktive Coach-Challenges kompakt anzeigen (Details & Aktionen: Erfolge). */}
+      {challenges && challenges.length > 0 && (
+        <Card className="space-y-2 p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Trophy size={16} className="text-warning" aria-hidden />
+            {t('today.challenges')}
+          </h2>
+          {challenges.map((c) => {
+            const p = evaluateChallenge(c, { [date]: sum }, date)
+            const dayProgress = p?.kind === 'day' ? p : null
+            return (
+              <div key={c.id} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{c.title}</span>
+                  {dayProgress && (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {dayProgress.current} / {dayProgress.target} {dayProgress.unit ?? ''}
+                    </span>
+                  )}
+                </div>
+                {dayProgress && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <motion.div
+                      className={`h-full rounded-full ${dayProgress.met ? 'bg-success' : 'bg-brand-gradient'}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${dayProgress.pct * 100}%` }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </Card>
+      )}
+
       <div className="flex flex-col items-center">
         <ProgressRing
           value={sum.kcal}
@@ -114,13 +175,13 @@ export function Today() {
                 <span className="text-muted-foreground">
                   {t(`today.macros.${m.key}`)}
                   {isProtein && weightKg ? (
-                    <span className="ml-1 text-xs text-muted-foreground/70">· {(m.value / weightKg).toFixed(1)} g/kg</span>
+                    <span className="ml-1 text-xs text-muted-foreground">· {(m.value / weightKg).toFixed(1)} g/kg</span>
                   ) : null}
                 </span>
                 <span className="tabular-nums">
                   {Math.round(m.value)}
                   {m.target ? ` / ${m.target}` : ''} g
-                  {reached && over >= 1 && <span className="ml-1 font-medium text-success">+{Math.round(over)}</span>}
+                  {reached && over >= 1 && <span className="ml-1 font-medium text-success-text">+{Math.round(over)}</span>}
                 </span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -151,7 +212,7 @@ export function Today() {
       <WaterCard weightKg={profile?.weightKg} />
 
       {logs.length === 0 ? (
-        <p className="rounded-2xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-lg bg-muted/50 p-6 text-center text-sm text-muted-foreground">
           {t('today.empty')}
         </p>
       ) : (
@@ -177,9 +238,13 @@ export function Today() {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3"
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
                     >
-                      <span className="flex min-w-0 items-center gap-3">
+                      <button
+                        onClick={() => setEditing(l)}
+                        aria-label={t('today.edit.open', { name: foodName(l.foodId) })}
+                        className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
+                      >
                         {photoUrl(l.photoBlobId) && (
                           <img
                             src={photoUrl(l.photoBlobId)}
@@ -190,14 +255,14 @@ export function Today() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{foodName(l.foodId)}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {l.amount} {l.unit} · {Math.round(l.computed.kcal)} kcal
+                            {l.amount} {l.unit === 'portion' ? t('today.edit.unitPortion') : l.unit} · {Math.round(l.computed.kcal)} kcal
                           </span>
                         </span>
-                      </span>
+                      </button>
                       <button
                         aria-label={t('common.delete')}
-                        onClick={() => deleteLog(l.id)}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+                        onClick={() => handleDelete(l)}
+                        className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
                       >
                         <Trash2 size={18} />
                       </button>
@@ -209,6 +274,12 @@ export function Today() {
           })}
         </div>
       )}
+
+      <EditLogSheet
+        entry={editing}
+        food={editing ? foods.get(editing.foodId) : undefined}
+        onClose={() => setEditing(null)}
+      />
     </div>
   )
 }

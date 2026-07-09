@@ -22,6 +22,12 @@ export interface FoodItem {
   micros?: Micros
   allergens?: string[] // OFF-Allergen-Tags (enthält) — für Warnungen über alle Log-Pfade
   traces?: string[] // OFF-Spuren-Tags („kann Spuren enthalten")
+  /**
+   * Favoriten-Stern (1-Tap-Wiederholung, PLAN §7.2). Bewusst NICHT indiziert —
+   * Abfragen laufen über .filter(), daher braucht das optionale Feld keine
+   * neue Dexie-Schemaversion.
+   */
+  favorite?: boolean
   defaultPortion?: { amount: number; unit: Unit }
   createdAt: number
   updatedAt: number
@@ -96,6 +102,12 @@ export interface GamificationState {
   level: number
   streaks: Record<string, number>
   freezeTokens: number
+  /**
+   * Lückentage ('YYYY-MM-DD'), die bereits mit einem Freeze-Token überbrückt
+   * wurden. Macht den Token-Verbrauch idempotent: derselbe Lückentag kostet
+   * nie zweimal. Optionales, nicht indiziertes Feld — keine Dexie-Migration nötig.
+   */
+  frozenDates?: string[]
   unlocked: string[]
   companion?: { type: string; stage: number; mood: 'happy' | 'ok' | 'sad' }
   updatedAt: number
@@ -117,6 +129,8 @@ export interface WaterLog {
   date: string
   ml: number
   loggedAt: number
+  updatedAt: number
+  deletedAt?: number
 }
 
 /** Lokal gespeichertes Mahlzeitenfoto (verkleinertes JPEG als Data-URL). */
@@ -124,6 +138,8 @@ export interface Photo {
   id: string
   dataUrl: string
   createdAt: number
+  updatedAt: number
+  deletedAt?: number
 }
 
 /** App-Einstellungen / optionale Gesundheits-Module (wie Allergien: nicht für jeden). */

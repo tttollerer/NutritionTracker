@@ -3,13 +3,14 @@ export type BrandTheme = 'vital' | 'classic'
 
 export interface ThemeMeta {
   id: BrandTheme
-  label: string
+  /** i18n-Key des Anzeigenamens (de.json `profile.themes.*`) — Auflösung in der UI-Schicht. */
+  labelKey: string
   swatch: { primary: string; accent: string }
 }
 
 export const THEMES: ThemeMeta[] = [
-  { id: 'vital', label: 'Vital', swatch: { primary: '#10b981', accent: '#06b6d4' } },
-  { id: 'classic', label: 'Klassisch', swatch: { primary: '#16a34a', accent: '#f97316' } },
+  { id: 'vital', labelKey: 'profile.themes.vital', swatch: { primary: '#10b981', accent: '#06b6d4' } },
+  { id: 'classic', labelKey: 'profile.themes.classic', swatch: { primary: '#16a34a', accent: '#f97316' } },
 ]
 
 export const DEFAULT_MODE: ThemeMode = 'system'

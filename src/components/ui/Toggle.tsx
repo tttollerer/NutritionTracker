@@ -16,7 +16,7 @@ export function Toggle({ checked, onChange, icon, label, hint }: ToggleProps) {
       onClick={() => onChange(!checked)}
       role="switch"
       aria-checked={checked}
-      className="flex w-full items-center justify-between gap-3 p-4 text-left"
+      className="focus-ring flex w-full items-center justify-between gap-3 rounded-md p-4 text-left"
     >
       <span className="flex items-center gap-3">
         {icon && <span className="text-muted-foreground">{icon}</span>}
@@ -28,10 +28,12 @@ export function Toggle({ checked, onChange, icon, label, hint }: ToggleProps) {
       <span
         className={cn(
           'flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors',
-          checked ? 'bg-primary' : 'bg-muted',
+          // Aus-Zustand: bewusst kräftiger Slate-Track (bg-muted war ~1.05:1, unsichtbar).
+          // An-Zustand: primary-fill statt primary — dunkler, damit der Knopf ≥ 3:1 absetzt.
+          checked ? 'bg-primary-fill' : 'bg-muted-foreground',
         )}
       >
-        <motion.span layout className="h-6 w-6 rounded-full bg-white shadow" style={{ marginLeft: checked ? 'auto' : 0 }} />
+        <motion.span layout className="h-6 w-6 rounded-full bg-card shadow-sm" style={{ marginLeft: checked ? 'auto' : 0 }} />
       </span>
     </button>
   )

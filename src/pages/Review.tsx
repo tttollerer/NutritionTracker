@@ -2,20 +2,19 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Trash2, Check, ChevronDown } from 'lucide-react'
+import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Info } from 'lucide-react'
 import type { AiItem } from '@/lib/ai'
-import { getReview, clearReview } from '@/lib/reviewStore'
+import { getReview, clearReview, presetsFor, presetLabel, amountForUnitSwitch } from '@/lib/reviewStore'
 import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
-import { createFood, getAllergies, logFood, savePhoto } from '@/db/repo'
+import { createFood, findFoodByName, getAllergies, logFood, savePhoto } from '@/db/repo'
+import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
-import { PageHeader } from '@/components/PageHeader'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
-
-const AMOUNT_PRESETS = [50, 100, 150, 200]
+import { Spinner } from '@/components/ui/Spinner'
 
 export function Review() {
   const { t } = useTranslation()
@@ -23,10 +22,46 @@ export function Review() {
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
   const [ack, setAck] = useState(false)
+  const [busy, setBusy] = useState(false)
+  // Lernschleife: Namen (lowercase), die beim Laden im Katalog gefunden und
+  // mit der gemerkten üblichen Portion vorbelegt wurden.
+  const [knownNames, setKnownNames] = useState<Set<string>>(new Set())
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
 
   useEffect(() => {
     if (!payload) navigate('/add', { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Lernschleife/Vorausfüllen: bekannte Lebensmittel (Namens-Match gegen den
+  // Katalog) bekommen ihre gemerkte defaultPortion als vorausgefüllte Menge.
+  // Läuft einmal beim Laden — spätere Nutzer-Eingaben werden nie überschrieben.
+  useEffect(() => {
+    let cancelled = false
+    async function prefill() {
+      const initial = payload?.items ?? []
+      const found = new Set<string>()
+      const portions = new Map<string, { amount: number; unit: Unit }>()
+      for (const it of initial) {
+        const match = await findFoodByName(it.name)
+        if (match?.defaultPortion) {
+          found.add(it.name.trim().toLowerCase())
+          portions.set(it.name.trim().toLowerCase(), match.defaultPortion)
+        }
+      }
+      if (cancelled || found.size === 0) return
+      setKnownNames(found)
+      setItems((prev) =>
+        prev.map((it) => {
+          const p = portions.get(it.name.trim().toLowerCase())
+          return p ? { ...it, amount: p.amount, unit: p.unit } : it
+        }),
+      )
+    }
+    void prefill()
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -58,40 +93,73 @@ export function Review() {
   const hasContains = items.some((it) => allergyHit(it.name).contains.length > 0)
 
   async function confirm() {
-    if (hasContains && !ack) return
-    const date = todayKey()
-    // Mahlzeitenfoto einmal speichern, ID an alle Einträge hängen.
-    const photoBlobId = payload!.photo ? await savePhoto(payload!.photo) : undefined
-    for (const it of items) {
-      const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
-      const food = await createFood({
-        name: it.name,
-        per,
-        kcal: it.per100.kcal,
-        protein: it.per100.protein,
-        carbs: it.per100.carbs,
-        fat: it.per100.fat,
-        micros: it.per100.micros,
-        allergens: payload!.allergens,
-        traces: payload!.traces,
-        source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
-        barcode: payload!.barcode,
-      })
-      await logFood({ food, date, meal: payload!.meal, amount: it.amount || 100, unit: it.unit, photoBlobId })
+    if (busy || (hasContains && !ack)) return
+    setBusy(true) // Doppel-Tap-Schutz: Button disabled + früher Guard oben
+    try {
+      const date = todayKey()
+      // Mahlzeitenfoto einmal speichern, ID an alle Einträge hängen.
+      const photoBlobId = payload!.photo ? await savePhoto(payload!.photo) : undefined
+      for (const it of items) {
+        const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
+        // createFood upsertet per Barcode/Name (Dedupe seit Welle 2) — bekannte
+        // Produkte werden aktualisiert statt dupliziert; logFood merkt sich
+        // anschließend die Menge als defaultPortion (Lernschleife).
+        const food = await createFood({
+          name: it.name,
+          per,
+          kcal: it.per100.kcal,
+          protein: it.per100.protein,
+          carbs: it.per100.carbs,
+          fat: it.per100.fat,
+          micros: it.per100.micros,
+          allergens: payload!.allergens,
+          traces: payload!.traces,
+          source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
+          barcode: payload!.barcode,
+        })
+        await logFood({ food, date, meal: payload!.meal, amount: it.amount || (it.unit === 'portion' ? 1 : 100), unit: it.unit, photoBlobId })
+      }
+      clearReview()
+      navigate('/')
+    } finally {
+      setBusy(false)
     }
-    clearReview()
-    navigate('/')
   }
 
   return (
     <div className="space-y-5">
-      <PageHeader title={t('review.title')} />
+      {/* Lokaler Header mit Zurück-Pfeil (PageHeader hat bewusst keinen Back-Slot). */}
+      <header className="flex items-center gap-1">
+        <button
+          onClick={() => navigate(-1)}
+          aria-label={t('common.back')}
+          className="focus-ring -ml-2 flex h-12 w-10 items-center justify-center rounded-md text-muted-foreground"
+        >
+          <ChevronLeft size={24} />
+        </button>
+        <h1 className="text-2xl font-bold">{t('review.title')}</h1>
+      </header>
       <p className="text-xs text-muted-foreground">{t('review.estimate')}</p>
 
-      {items.length === 0 ? (
-        <p className="rounded-2xl bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-          {t('review.empty')}
+      {/* Hinweiszeile der KI (AnalyzeResult.notes) — dezent über den Items. */}
+      {payload.notes && (
+        <p className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          <Info size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
+          <span>
+            <span className="font-medium">{t('review.aiNotes')}: </span>
+            {payload.notes}
+          </span>
         </p>
+      )}
+
+      {items.length === 0 ? (
+        /* Empty-State mit genau EINER offensichtlichen Aktion: neu fotografieren. */
+        <div className="space-y-4 rounded-lg bg-muted/50 p-6 text-center">
+          <p className="text-sm text-muted-foreground">{t('review.empty')}</p>
+          <Button className="w-full" onClick={() => navigate(-1)}>
+            <Camera size={20} /> {t('review.retake')}
+          </Button>
+        </div>
       ) : (
         items.map((it, i) => {
           const { contains, traces } = allergyHit(it.name)
@@ -104,11 +172,15 @@ export function Review() {
                 <button
                   aria-label={t('common.delete')}
                   onClick={() => remove(i)}
-                  className="flex h-12 w-10 items-center justify-center text-muted-foreground hover:text-destructive"
+                  className="focus-ring flex h-12 w-10 items-center justify-center rounded-md text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 size={18} />
                 </button>
               </div>
+
+              {knownNames.has(it.name.trim().toLowerCase()) && (
+                <p className="text-xs text-primary">{t('review.knownFood')}</p>
+              )}
 
               {it.confidence != null && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -126,47 +198,55 @@ export function Review() {
                 </p>
               )}
               {traces.length > 0 && (
-                <p className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-xs font-medium text-warning">
+                <p className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-2 text-xs font-medium text-warning-text">
                   ⚠️ {t('review.allergyTraces', { list: allergenNames(traces) })}
                 </p>
               )}
 
-              {/* Menge + Presets */}
+              {/* Menge + Presets. 'portion' ist eine sichtbare dritte Einheit:
+                  Liefert die KI unit='portion', zeigt der Toggle das aktiv an und
+                  die Presets sind Portionszähler (¼–2) statt Gramm-Werte — sonst
+                  würde der Preset „100" 100 Portionen (~10.000 g) loggen. */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Input
                     type="number"
-                    inputMode="numeric"
+                    inputMode="decimal"
+                    step={it.unit === 'portion' ? 0.25 : 1}
                     value={it.amount}
                     onChange={(e) => patch(i, { amount: Number(e.target.value) })}
                     className="w-24"
                   />
-                  <div className="flex gap-1 rounded-xl bg-muted p-1">
-                    {(['g', 'ml'] as const).map((u) => (
+                  <div role="group" aria-label={t('entry.unitToggle')} className="flex gap-1 rounded-md bg-muted p-1">
+                    {(['g', 'ml', 'portion'] as const).map((u) => (
                       <button
                         key={u}
-                        onClick={() => patch(i, { unit: u })}
-                        className={`min-h-[40px] rounded-lg px-3 text-sm ${it.unit === u ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}
+                        type="button"
+                        aria-pressed={it.unit === u}
+                        onClick={() => patch(i, { unit: u, amount: amountForUnitSwitch(it.amount, u) })}
+                        className={`focus-ring min-h-[40px] rounded-sm px-3 text-sm ${it.unit === u ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}
                       >
-                        {u}
+                        {u === 'portion' ? t('today.edit.unitPortion') : u}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {AMOUNT_PRESETS.map((a) => (
-                    <Chip key={a} label={`${a}`} selected={it.amount === a} onClick={() => patch(i, { amount: a })} />
+                  {presetsFor(it.unit).map((a) => (
+                    <Chip key={a} label={presetLabel(a)} selected={it.amount === a} onClick={() => patch(i, { amount: a })} />
                   ))}
                 </div>
               </div>
 
-              {/* Nährwerte je 100 */}
+              {/* Nährwerte je 100 (bei 'portion' bezogen auf 100 g Basis) */}
               <div>
                 <p className="mb-1 text-xs text-muted-foreground">{t('review.perInfo', { unit: it.unit === 'ml' ? 'ml' : 'g' })}</p>
                 <div className="grid grid-cols-4 gap-2">
                   {(['kcal', 'protein', 'carbs', 'fat'] as const).map((k) => (
                     <label key={k} className="space-y-1">
-                      <span className="block text-center text-[10px] uppercase text-muted-foreground">{k}</span>
+                      <span className="block truncate text-center text-[10px] uppercase text-muted-foreground">
+                        {k === 'kcal' ? 'kcal' : t(`today.macros.${k}`)}
+                      </span>
                       <Input
                         type="number"
                         inputMode="decimal"
@@ -201,8 +281,8 @@ export function Review() {
               <span>{t('review.allergyAck')}</span>
             </label>
           )}
-          <Button className="w-full" onClick={confirm} disabled={hasContains && !ack}>
-            <Check size={20} /> {t('review.confirm')}
+          <Button className="w-full" onClick={confirm} disabled={busy || (hasContains && !ack)}>
+            {busy ? <Spinner size={20} /> : <Check size={20} />} {busy ? t('review.saving') : t('review.confirm')}
           </Button>
         </div>
       )}
@@ -219,7 +299,11 @@ function ItemMicros({ micros, onChange }: { micros: Record<string, number>; onCh
   if (keys.length === 0) return null
   return (
     <div className="border-t border-border pt-3">
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="focus-ring flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground"
+      >
         <ChevronDown size={14} className={open ? 'rotate-180' : ''} />
         {t('review.microsTitle', { count: keys.length })}
       </button>
