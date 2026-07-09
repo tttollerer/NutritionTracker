@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History } from 'lucide-react'
+import { Camera, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
 import {
   copyYesterday,
   createFood,
@@ -11,10 +11,12 @@ import {
   favoriteFoods,
   getAllergies,
   logFood,
+  pantryFoods,
   quickLogCatalog,
   recentFoods,
   savePhoto,
   searchFoods,
+  setPantry,
   toggleFavorite,
   yesterdayLogCount,
 } from '@/db/repo'
@@ -25,7 +27,9 @@ import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
 import { downscaleImage } from '@/lib/image'
 import { todayKey } from '@/lib/utils'
+import { describePortion } from '@/lib/portion'
 import { PageHeader } from '@/components/PageHeader'
+import { PortionSheet } from '@/components/PortionSheet'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Input'
@@ -38,6 +42,9 @@ export function Add() {
   const [meal, setMeal] = useState<Meal>(defaultMeal())
   const recents = useLiveQuery(() => recentFoods(), [])
   const favorites = useLiveQuery(() => favoriteFoods(), [])
+  const pantry = useLiveQuery(() => pantryFoods(), [])
+  // Vorrat-Verzehr über das Mengen-Sheet (Menge + Einheit + Mahlzeit).
+  const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
   const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
   const [ack, setAck] = useState(false)
@@ -181,6 +188,27 @@ export function Add() {
         )}
       </section>
 
+      {/* Mein Vorrat — täglicher Warenkorb: 1-Tap-Log mit gemerkter Portion
+          oder Mengen-Sheet (Menge + Einheit + Mahlzeit) in 2-3 Taps. */}
+      {!searching && pantry && pantry.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <ShoppingBasket size={16} aria-hidden="true" /> {t('add.pantry')}
+          </h2>
+          <div className="space-y-2">
+            {pantry.map((f) => (
+              <FoodRow
+                key={f.id}
+                food={f}
+                onLog={() => void quickLog(f)}
+                onPickAmount={() => setPortionFood(f)}
+                showFavorite={false}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Favoriten — 1-Tap-Wiederholung, immer vor „zuletzt benutzt" */}
       {!searching && favorites && favorites.length > 0 && (
         <section className="space-y-2">
@@ -309,24 +337,42 @@ export function Add() {
           {t('entry.save')}
         </Button>
       </Card>
+
+      {/* Mengen-Sheet für den Verzehr aus dem Vorrat */}
+      <PortionSheet
+        food={portionFood}
+        initialMeal={meal}
+        onClose={() => setPortionFood(null)}
+        onLogged={(entry, food) => {
+          showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+          navigate('/')
+        }}
+      />
     </div>
   )
 }
 
 /**
- * Lebensmittel-Zeile mit 1-Tap-Log (gemerkte Portion), „Menge per Foto"
- * (Capture mode 'portion') und Favoriten-Stern (48-px-Targets, aria-pressed).
+ * Lebensmittel-Zeile mit 1-Tap-Log (gemerkte Portion), optional „Menge per Foto"
+ * (Capture mode 'portion') bzw. Mengen-Sheet (Vorrat), Vorrat-Toggle und
+ * Favoriten-Stern (48-px-Targets, aria-pressed).
  */
 function FoodRow({
   food,
   onLog,
   onPortionPhoto,
+  onPickAmount,
+  showFavorite = true,
 }: {
   food: FoodItem
   onLog: () => void
-  onPortionPhoto: () => void
+  onPortionPhoto?: () => void
+  /** Öffnet das Mengen-Sheet (Vorrat-Zeilen). */
+  onPickAmount?: () => void
+  showFavorite?: boolean
 }) {
   const { t } = useTranslation()
+  const dp = food.defaultPortion
   return (
     <div className="flex items-center gap-1 rounded-lg border border-border bg-card p-2">
       <motion.button
@@ -336,30 +382,56 @@ function FoodRow({
       >
         <span className="min-w-0">
           <span className="block truncate font-medium">{food.name}</span>
-          <span className="block text-xs text-muted-foreground">
+          <span className="block truncate text-xs text-muted-foreground">
             {food.kcal} kcal / 100 {food.per}
+            {dp ? ` · ${describePortion(dp, t('today.edit.unitPortion'))}` : ''}
           </span>
         </span>
       </motion.button>
+      {onPickAmount && (
+        <button
+          type="button"
+          onClick={onPickAmount}
+          aria-label={t('add.pantryAmount', { name: food.name })}
+          className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground"
+        >
+          <Scale size={20} />
+        </button>
+      )}
+      {onPortionPhoto && (
+        <button
+          type="button"
+          onClick={onPortionPhoto}
+          aria-label={t('add.portionPhoto', { name: food.name })}
+          className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground"
+        >
+          <Camera size={20} />
+        </button>
+      )}
       <button
         type="button"
-        onClick={onPortionPhoto}
-        aria-label={t('add.portionPhoto', { name: food.name })}
-        className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground"
-      >
-        <Camera size={20} />
-      </button>
-      <button
-        type="button"
-        onClick={() => void toggleFavorite(food.id)}
-        aria-pressed={!!food.favorite}
-        aria-label={t('add.favToggle', { name: food.name })}
+        onClick={() => void setPantry(food.id, !food.pantry)}
+        aria-pressed={!!food.pantry}
+        aria-label={t('add.pantryToggle', { name: food.name })}
         className={`focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md ${
-          food.favorite ? 'text-primary' : 'text-muted-foreground'
+          food.pantry ? 'text-primary' : 'text-muted-foreground'
         }`}
       >
-        <Star size={20} fill={food.favorite ? 'currentColor' : 'none'} />
+        <ShoppingBasket size={20} />
       </button>
+      {showFavorite && (
+        <button
+          type="button"
+          onClick={() => void toggleFavorite(food.id)}
+          aria-pressed={!!food.favorite}
+          aria-label={t('add.favToggle', { name: food.name })}
+          className={`focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md ${
+            food.favorite ? 'text-primary' : 'text-muted-foreground'
+          }`}
+        >
+          <Star size={20} fill={food.favorite ? 'currentColor' : 'none'} />
+        </button>
+      )}
     </div>
   )
 }

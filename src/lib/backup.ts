@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { db } from '@/db'
+import { isBrandTheme, isThemeMode } from './themes'
+import { MODE_KEY, VARIANT_KEY, THEME_RESTORED_EVENT } from './theme-context'
 
 /**
  * Backup-Export/Import (PLAN.md §A3).
@@ -10,6 +12,9 @@ import { db } from '@/db'
  *   Tabellen, die in der Datei fehlen (z. B. `measurements` in v1-Dateien), werden
  *   beim Import NICHT geleert — so verliert ein Restore keine Daten, die das alte
  *   Format nie erfasst hat.
+ * - v2 (additiv): optionales `theme`-Feld (Modus/Variante aus localStorage), damit
+ *   die Darstellung ein Backup übersteht. Alte Dateien ohne das Feld importieren
+ *   unverändert; unbekannte Werte werden beim Import ignoriert.
  */
 export const BACKUP_VERSION = 2
 
@@ -36,9 +41,15 @@ const TABLES = [
 const recordSchema = z.object({ id: z.string().min(1) }).passthrough()
 const tableSchema = z.array(recordSchema).optional()
 
+/** Theme-Zustand (nicht in Dexie, sondern localStorage) — optional & tolerant. */
+const themeSchema = z
+  .object({ mode: z.string().optional(), variant: z.string().optional() })
+  .optional()
+
 const backupSchema = z.object({
   version: z.number().int().positive(),
   exportedAt: z.number().optional(),
+  theme: themeSchema,
   foods: tableSchema,
   logs: tableSchema,
   goals: tableSchema,
@@ -70,8 +81,44 @@ export async function exportBackup(): Promise<Blob> {
     version: BACKUP_VERSION,
     exportedAt: Date.now(),
   }
+  const theme = readThemeForBackup()
+  if (theme) data.theme = theme
   for (const name of TABLES) data[name] = await db.table(name).toArray()
   return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+}
+
+/** Theme-Modus/-Variante aus localStorage fürs Backup (fehlt, wenn nie gesetzt). */
+function readThemeForBackup(): { mode?: string; variant?: string } | undefined {
+  try {
+    const mode = localStorage.getItem(MODE_KEY) ?? undefined
+    const variant = localStorage.getItem(VARIANT_KEY) ?? undefined
+    return mode || variant ? { mode, variant } : undefined
+  } catch {
+    return undefined // localStorage blockiert → Backup bleibt trotzdem gültig
+  }
+}
+
+/**
+ * Theme-Werte aus dem Backup zurückschreiben. Nur bekannte Werte landen im
+ * Storage; danach informiert THEME_RESTORED_EVENT den ThemeProvider, damit die
+ * Darstellung ohne Reload umschaltet.
+ */
+function restoreTheme(theme?: { mode?: string; variant?: string }) {
+  if (!theme) return
+  try {
+    let changed = false
+    if (isThemeMode(theme.mode)) {
+      localStorage.setItem(MODE_KEY, theme.mode)
+      changed = true
+    }
+    if (isBrandTheme(theme.variant)) {
+      localStorage.setItem(VARIANT_KEY, theme.variant)
+      changed = true
+    }
+    if (changed && typeof window !== 'undefined') window.dispatchEvent(new Event(THEME_RESTORED_EVENT))
+  } catch {
+    /* localStorage blockiert — der Datenimport bleibt davon unberührt */
+  }
 }
 
 /**
@@ -107,6 +154,9 @@ export async function importBackup(json: string): Promise<void> {
       }
     },
   )
+
+  // Nach erfolgreichem Daten-Import: Theme wiederherstellen (falls im Backup).
+  restoreTheme(data.theme)
 }
 
 export function downloadBackup(blob: Blob) {

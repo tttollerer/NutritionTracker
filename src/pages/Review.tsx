@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Info } from 'lucide-react'
+import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Info, ShoppingBasket } from 'lucide-react'
 import type { AiItem } from '@/lib/ai'
 import { getReview, clearReview, presetsFor, presetLabel, amountForUnitSwitch } from '@/lib/reviewStore'
 import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
-import { createFood, findFoodByName, getAllergies, logFood, savePhoto } from '@/db/repo'
+import { useOverlays } from '@/lib/overlays-context'
+import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry, setPantry } from '@/db/repo'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -19,6 +20,7 @@ import { Spinner } from '@/components/ui/Spinner'
 export function Review() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { showUndo } = useOverlays()
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
   const [ack, setAck] = useState(false)
@@ -121,6 +123,31 @@ export function Review() {
       }
       clearReview()
       navigate('/')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * „Nur in den Vorrat": geprüfte Items als FoodItems upserten (pantry=true,
+   * eingestellte Menge als übliche Portion) — OHNE LogEntries. Undo nimmt das
+   * Vorrat-Flag wieder zurück.
+   */
+  async function toPantry() {
+    if (busy || (hasContains && !ack)) return
+    setBusy(true)
+    try {
+      const foods = await saveReviewToPantry(items, {
+        source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
+        barcode: payload!.barcode,
+        allergens: payload!.allergens,
+        traces: payload!.traces,
+      })
+      clearReview()
+      showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
+        await Promise.all(foods.map((f) => setPantry(f.id, false)))
+      })
+      navigate('/add')
     } finally {
       setBusy(false)
     }
@@ -283,6 +310,10 @@ export function Review() {
           )}
           <Button className="w-full" onClick={confirm} disabled={busy || (hasContains && !ack)}>
             {busy ? <Spinner size={20} /> : <Check size={20} />} {busy ? t('review.saving') : t('review.confirm')}
+          </Button>
+          {/* Sekundär: als Einkauf in den Vorrat — speichert ohne zu loggen. */}
+          <Button variant="secondary" className="w-full" onClick={() => void toPantry()} disabled={busy || (hasContains && !ack)}>
+            <ShoppingBasket size={20} /> {t('review.toPantry')}
           </Button>
         </div>
       )}

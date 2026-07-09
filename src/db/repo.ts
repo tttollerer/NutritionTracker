@@ -185,6 +185,9 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   }
 
   if (existing) {
+    // Spread-Reihenfolge bewusst: nur Name/Nährwerte/Quelle werden aktualisiert —
+    // nutzergepflegte Felder des Bestands-Items (favorite, pantry, defaultPortion,
+    // price) bleiben erhalten, weil `values` sie nie enthält.
     const updated: FoodItem = {
       ...existing,
       ...values,
@@ -395,14 +398,24 @@ export async function logFood(args: {
     amount,
     unit,
     computed: computeLogValues(food, amount, unit),
+    // Kosten-Snapshot (EUR) — nur wenn ein Packungspreis hinterlegt ist.
+    cost: computeCost(food, amount, unit),
     photoBlobId,
     updatedAt: now(),
   }
+  if (entry.cost === undefined) delete entry.cost // kein Leer-Feld persistieren
   await db.logs.put(entry)
   // Übliche Portion nur für konkrete Mengen (g/ml) merken — eine 'portion'-Menge
   // würde sonst beim nächsten Loggen erneut mit der Portionsgröße multipliziert.
+  // Das Portions-Label bleibt nur erhalten, wenn Menge & Einheit unverändert
+  // sind („1 Tasse (80 g)" wäre bei 50 g nicht mehr wahr).
   if (unit !== 'portion') {
-    await db.foods.update(food.id, { defaultPortion: { amount, unit }, updatedAt: now() })
+    const prev = food.defaultPortion
+    const keepLabel = prev?.label && prev.amount === amount && prev.unit === unit
+    await db.foods.update(food.id, {
+      defaultPortion: { amount, unit, ...(keepLabel ? { label: prev.label } : {}) },
+      updatedAt: now(),
+    })
   }
   return entry
 }
@@ -422,6 +435,18 @@ function computeLogValues(food: FoodItem, amount: number, unit: Unit): LogEntry[
     fat: round1(food.fat * factor),
     micros: scaleMicros(food.micros, factor),
   }
+}
+
+/**
+ * Kosten (EUR) einer verzehrten Menge aus dem Packungspreis des Lebensmittels —
+ * Menge / Packungsgröße * Packungspreis, auf Cent gerundet. Ohne (gültigen)
+ * Preis: undefined — die Haushaltskasse ist strikt optional.
+ */
+export function computeCost(food: FoodItem, amount: number, unit: Unit): number | undefined {
+  const price = food.price
+  if (!price || !(price.per > 0) || !(price.amount >= 0)) return undefined
+  const grams = unit === 'portion' ? (food.defaultPortion?.amount ?? 100) * amount : amount
+  return Math.round((grams / price.per) * price.amount * 100) / 100
 }
 
 /**
@@ -447,8 +472,10 @@ export async function updateLog(
       // Ohne Food (sollte nicht vorkommen) bleibt der alte Snapshot stehen,
       // statt Werte aus der Luft zu greifen.
       computed: food ? computeLogValues(food, amount, unit) : entry.computed,
+      cost: food ? computeCost(food, amount, unit) : entry.cost,
       updatedAt: now(),
     }
+    if (updated.cost === undefined) delete updated.cost // kein Leer-Feld persistieren
     await db.logs.put(updated)
     return updated
   })
@@ -491,6 +518,100 @@ export async function toggleFavorite(foodId: string): Promise<boolean> {
 export async function favoriteFoods(): Promise<FoodItem[]> {
   const foods = await db.foods.filter((f) => !f.deletedAt && !!f.favorite).toArray()
   return foods.sort((a, b) => a.name.localeCompare(b.name, 'de'))
+}
+
+// ---- „Mein Vorrat" (Pantry/Warenkorb) + Haushaltskasse ----
+
+/**
+ * Vorrat-Flag setzen/entfernen. Wie beim Favoriten-Stern: nicht indiziert,
+ * beim Abwählen wird das Feld ganz gelöscht (Dexie entfernt undefined-Properties),
+ * damit die Datensätze sync-sauber bleiben.
+ */
+export async function setPantry(foodId: string, on: boolean): Promise<void> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return
+  await db.foods.update(foodId, { pantry: on || undefined, updatedAt: now() })
+}
+
+/** Alle Vorrats-Lebensmittel, zuletzt aktualisierte zuerst (frischer Einkauf oben). */
+export async function pantryFoods(): Promise<FoodItem[]> {
+  const foods = await db.foods.filter((f) => !f.deletedAt && !!f.pantry).toArray()
+  return foods.sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/**
+ * Packungspreis (Haushaltskasse) setzen oder mit `undefined` entfernen —
+ * additiv/optional, ohne Preis wird schlicht kein Kostenwert berechnet.
+ */
+export async function setFoodPrice(foodId: string, price?: { amount: number; per: number }): Promise<void> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return
+  const valid = price && price.amount >= 0 && price.per > 0
+  await db.foods.update(foodId, { price: valid ? price : undefined, updatedAt: now() })
+}
+
+/**
+ * Einkauf in den Vorrat legen: Katalog-Upsert (createFood-Dedupe per Barcode/Name)
+ * + pantry=true — bewusst OHNE LogEntry. Optional wird eine übliche Portion
+ * gemerkt (nur konkrete g/ml-Mengen, gleiche Regel wie logFood).
+ */
+export async function addToPantry(
+  input: NewFoodInput,
+  portion?: { amount: number; unit: Unit; label?: string },
+): Promise<FoodItem> {
+  const food = await createFood(input)
+  const patch: Partial<FoodItem> = { pantry: true, updatedAt: now() }
+  if (portion && portion.unit !== 'portion' && portion.amount > 0) {
+    patch.defaultPortion = {
+      amount: portion.amount,
+      unit: portion.unit,
+      ...(portion.label?.trim() ? { label: portion.label.trim() } : {}),
+    }
+  }
+  await db.foods.update(food.id, patch)
+  return { ...food, ...patch }
+}
+
+/** Geprüftes Item aus dem Review-Screen (strukturkompatibel zu AiItem). */
+export interface PantryReviewItem {
+  name: string
+  amount: number
+  unit: Unit
+  per100: { kcal: number; protein: number; carbs: number; fat: number; micros?: Record<string, number> }
+}
+
+/**
+ * „Nur in den Vorrat" (Label-/Foto-Flow): alle geprüften Items als FoodItems
+ * upserten (pantry=true), die eingestellte Menge als defaultPortion merken —
+ * es entstehen KEINE LogEntries. Gibt die Foods zurück (Undo: Vorrat-Flag weg).
+ */
+export async function saveReviewToPantry(
+  items: PantryReviewItem[],
+  meta: { source?: FoodItem['source']; barcode?: string; allergens?: string[]; traces?: string[] } = {},
+): Promise<FoodItem[]> {
+  const out: FoodItem[] = []
+  for (const it of items) {
+    const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
+    out.push(
+      await addToPantry(
+        {
+          name: it.name,
+          per,
+          kcal: it.per100.kcal,
+          protein: it.per100.protein,
+          carbs: it.per100.carbs,
+          fat: it.per100.fat,
+          micros: it.per100.micros,
+          allergens: meta.allergens,
+          traces: meta.traces,
+          source: meta.source,
+          barcode: meta.barcode,
+        },
+        { amount: it.amount, unit: it.unit },
+      ),
+    )
+  }
+  return out
 }
 
 /**

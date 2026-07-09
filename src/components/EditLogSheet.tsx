@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { FoodItem, LogEntry, Meal, Unit } from '@/db/types'
 import { updateLog } from '@/db/repo'
 import { MEALS } from '@/lib/meal'
+import { amountForUnitSwitch } from '@/lib/reviewStore'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Field, Input } from '@/components/ui/Input'
@@ -69,6 +70,15 @@ function EditForm({ entry, food, onClose }: { entry: LogEntry; food?: FoodItem; 
 
   const unitLabel = (u: Unit) => (u === 'portion' ? t('today.edit.unitPortion') : u)
 
+  // Beim Einheitenwechsel die Menge plausibel halten (Audit-Befund 9):
+  // "1 Portion" → g wird 100 g statt 1 g; "150 g" → Portion wird 1 Portion.
+  // Gleiche Heuristik wie im Prüf-Screen (reviewStore.amountForUnitSwitch).
+  function switchUnit(u: Unit) {
+    if (u === unit) return
+    setUnit(u)
+    if (valid) setAmountText(String(amountForUnitSwitch(amount, u)))
+  }
+
   async function save() {
     if (!valid || saving) return
     setSaving(true)
@@ -103,7 +113,7 @@ function EditForm({ entry, food, onClose }: { entry: LogEntry; food?: FoodItem; 
               <button
                 key={u}
                 type="button"
-                onClick={() => setUnit(u)}
+                onClick={() => switchUnit(u)}
                 aria-pressed={unit === u}
                 className={`focus-ring min-h-[48px] rounded-xl border px-4 text-sm font-medium transition-colors ${
                   unit === u

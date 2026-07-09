@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, PencilLine, Check } from 'lucide-react'
+import { Camera, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { logFood, recentFoods, deleteLog } from '@/db/repo'
 import { defaultMeal, MEALS } from '@/lib/meal'
@@ -28,6 +28,12 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const recents = useLiveQuery(() => recentFoods(6), [])
   const sheetRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
+
+  // Mahlzeit bei JEDEM Öffnen neu anhand der Uhrzeit vorschlagen — der
+  // useState-Initialwert läuft nur einmal beim App-Start (Audit-Befund 5).
+  useEffect(() => {
+    if (open) setMeal(defaultMeal())
+  }, [open])
 
   // Fokus-Management: beim Öffnen Fokus ins Sheet, beim Schließen zurück zum Auslöser.
   useEffect(() => {
@@ -130,6 +136,14 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               <SheetTile icon={ScanText} label={t('add.label')} onClick={() => go(`/capture?mode=label&meal=${meal}`)} />
               <SheetTile icon={ScanBarcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
             </div>
+
+            {/* Dezenter Einstieg: Einkauf scannen → Vorrat (Batch-Scan ohne Loggen) */}
+            <button
+              onClick={() => go('/barcode?pantry=1')}
+              className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md text-sm text-muted-foreground"
+            >
+              <ShoppingBasket size={16} aria-hidden="true" /> {t('capture.pantryEntry')}
+            </button>
 
             {/* Zuletzt benutzt: 1 Tipp */}
             {recents && recents.length > 0 && (

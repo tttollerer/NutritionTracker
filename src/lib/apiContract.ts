@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /**
- * API-Vertrag v1.1 zwischen Client (src/) und Netlify Functions
+ * API-Vertrag v1.2 zwischen Client (src/) und Netlify Functions
  * (netlify/functions/analyze.mts, coach.mts) — die EINE Quelle für
  * Fehler-Envelope, Fehlercodes und Request-/Response-Schemata.
  *
@@ -9,9 +9,15 @@ import { z } from 'zod'
  * Umstellung des Clients (ai.ts/coach.ts importieren von hier): Paket 7.
  * Bis dahin definiert diese Datei den SOLL-Vertrag; bestehende Dateien
  * bleiben unverändert.
+ *
+ * v1.2 (Erwartungs-Audit Befund 4 + 8, nur additiv):
+ * - Ziel-Vorschläge: `nutrient` ist ein Enum statt beliebiger String —
+ *   nur Nährstoffe, die die App auch anzeigen/auswerten kann.
+ * - Challenge-Vorschläge: optionales `rule`-Feld im Format von
+ *   parseChallengeRule (src/lib/challenges.ts) für die Auto-Auswertung.
  */
 
-export const API_CONTRACT_VERSION = '1.1'
+export const API_CONTRACT_VERSION = '1.2'
 
 // ---------------------------------------------------------------------------
 // Fehler-Envelope (gilt für ALLE Nicht-200-Antworten beider Endpunkte)
@@ -117,40 +123,95 @@ export type CoachRequest = z.infer<typeof CoachRequestSchema>
 export const COACH_SENTINEL = '###SUGGESTIONS###'
 
 /**
+ * v1.2 (Befund 4): Erlaubte Nährstoffe für Coach-Ziele UND Challenge-Regeln.
+ * Nur was die App real anzeigen/auswerten kann:
+ * - kcal/protein/carbs/fat → Makro-Ringe + Goal-/Challenge-Auswertung
+ *   (src/lib/challenges.ts TRACKED, src/lib/gamification.ts goalMet).
+ * - sugar/fiber/sodium → getrackte micros-Schlüssel aus dem Katalog
+ *   (src/lib/nutrients.ts), angezeigt im NutrientPanel; sugar/sodium sind
+ *   Limits mit limitOverrides-Mechanik (src/lib/deficit.ts:29).
+ * BEWUSST NICHT enthalten: 'salt' — der Katalog trackt 'sodium' (mg), ein
+ * "salt"-Ziel hätte keinen computed-Wert. Ebenso keine weiteren Mikros
+ * (vitaminC, iron, …), solange die App dafür keine Zielanzeige hat.
+ */
+export const COACH_NUTRIENTS = ['kcal', 'protein', 'carbs', 'fat', 'sugar', 'fiber', 'sodium'] as const
+export const CoachNutrientSchema = z.enum(COACH_NUTRIENTS)
+export type CoachNutrient = z.infer<typeof CoachNutrientSchema>
+
+/** Ziel-Vorschlag (v1.2: nutrient als Enum statt beliebigem String). */
+export const CoachGoalSuggestionSchema = z.object({
+  nutrient: CoachNutrientSchema,
+  type: z.enum(['min', 'max', 'range']),
+  target: z.number(),
+  targetMax: z.number().optional(),
+  unit: z.string(),
+  reason: z.string().optional(),
+})
+export type CoachGoalSuggestion = z.infer<typeof CoachGoalSuggestionSchema>
+
+/**
+ * v1.2 (Befund 8): Auto-auswertbare Challenge-Regel — exakt das Format, das
+ * parseChallengeRule (src/lib/challenges.ts:33) akzeptiert: nutrient aus dem
+ * Enum, type min|max, target > 0, optional unit und (nur period 'week')
+ * days 1–7 als geforderte Erfolgstage.
+ */
+export const CoachChallengeRuleSchema = z.object({
+  nutrient: CoachNutrientSchema,
+  type: z.enum(['min', 'max']),
+  target: z.number().positive(),
+  unit: z.string().optional(),
+  days: z.number().int().min(1).max(7).optional(),
+})
+export type CoachChallengeRule = z.infer<typeof CoachChallengeRuleSchema>
+
+/**
+ * Challenge-Vorschlag. `rule` ist optional (v1.1-Form { title, period } bleibt
+ * gültig); ohne rule ist die Challenge manuell abschließbar statt automatisch
+ * ausgewertet. `rule.days` ist nur bei period 'week' erlaubt.
+ */
+export const CoachChallengeSuggestionSchema = z
+  .object({
+    title: z.string(),
+    period: z.enum(['day', 'week']),
+    rule: CoachChallengeRuleSchema.optional(),
+  })
+  .superRefine((c, ctx) => {
+    if (c.period !== 'week' && c.rule?.days != null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'rule.days ist nur bei period "week" erlaubt',
+        path: ['rule', 'days'],
+      })
+    }
+  })
+export type CoachChallengeSuggestion = z.infer<typeof CoachChallengeSuggestionSchema>
+
+/** Log-Vorschlag (unverändert seit v1.1). */
+export const CoachLogSuggestionSchema = z.object({
+  name: z.string(),
+  amount: z.number(),
+  unit: z.enum(['g', 'ml', 'portion']),
+  per100: z.object({
+    kcal: z.number(),
+    protein: z.number(),
+    carbs: z.number(),
+    fat: z.number(),
+  }),
+})
+export type CoachLogSuggestion = z.infer<typeof CoachLogSuggestionSchema>
+
+/**
  * Vorschlags-Schema der Suggestions-Zeile. v1.1: wird SERVERSEITIG validiert
  * (Paket 2) — eine ungültige Zeile wird verworfen und erreicht den Client nie.
+ * v1.2: Der Server verwirft zusätzlich EINZELNE ungültige Einträge (Ziel mit
+ * nicht erlaubtem nutrient → Ziel weg, kaputte Challenge-rule → rule weg,
+ * Challenge bleibt) statt die ganze Zeile zu opfern — siehe
+ * sanitizeSuggestions in netlify/functions/lib/coachShared.ts.
  */
 export const CoachSuggestionsSchema = z.object({
-  goals: z
-    .array(
-      z.object({
-        nutrient: z.string(),
-        type: z.enum(['min', 'max', 'range']),
-        target: z.number(),
-        targetMax: z.number().optional(),
-        unit: z.string(),
-        reason: z.string().optional(),
-      }),
-    )
-    .optional(),
-  challenges: z
-    .array(z.object({ title: z.string(), period: z.enum(['day', 'week']) }))
-    .optional(),
-  logs: z
-    .array(
-      z.object({
-        name: z.string(),
-        amount: z.number(),
-        unit: z.enum(['g', 'ml', 'portion']),
-        per100: z.object({
-          kcal: z.number(),
-          protein: z.number(),
-          carbs: z.number(),
-          fat: z.number(),
-        }),
-      }),
-    )
-    .optional(),
+  goals: z.array(CoachGoalSuggestionSchema).optional(),
+  challenges: z.array(CoachChallengeSuggestionSchema).optional(),
+  logs: z.array(CoachLogSuggestionSchema).optional(),
 })
 export type CoachSuggestions = z.infer<typeof CoachSuggestionsSchema>
 

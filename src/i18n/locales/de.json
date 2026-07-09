@@ -33,6 +33,7 @@
       "undo": "Letztes rückgängig"
     },
     "entryDeleted": "{{name}} gelöscht",
+    "foodCost": "Essenskosten heute",
     "challenges": "Deine Challenges",
     "edit": {
       "title": "Eintrag bearbeiten",
@@ -124,7 +125,15 @@
     "portionPhoto": "Menge von {{name}} per Foto schätzen",
     "copyYesterday": "Gestern kopieren",
     "copiedYesterday_one": "1 Eintrag von gestern kopiert",
-    "copiedYesterday_other": "{{count}} Einträge von gestern kopiert"
+    "copiedYesterday_other": "{{count}} Einträge von gestern kopiert",
+    "pantry": "Mein Vorrat",
+    "pantryToggle": "{{name}} im Vorrat",
+    "pantryAmount": "Menge von {{name}} wählen",
+    "pantryLog": "Eintragen",
+    "pantryPriceTitle": "Haushaltskasse (optional)",
+    "pantryPrice": "Preis (€)",
+    "pantryPackSize": "Packung ({{unit}})",
+    "pantryCost": "Kostet ca. {{cost}}"
   },
   "coach": {
     "title": "Coach",
@@ -148,6 +157,9 @@
     "photoDefaultMsg": "Was sagst du zu diesem Essen?",
     "pickMeal": "Als welche Mahlzeit eintragen?",
     "loggedTo": "{{name}} → {{meal}} eingetragen",
+    "goalMin": "mind. {{value}} {{unit}}",
+    "goalMax": "max. {{value}} {{unit}}",
+    "goalRange": "{{min}}–{{max}} {{unit}}",
     "starters": {
       "today": "Was soll ich heute noch essen?",
       "protein": "Wie treffe ich mein Eiweißziel?",
@@ -336,11 +348,21 @@
         "fat": "Fett"
       }
     },
+    "budget": {
+      "title": "Haushaltskasse",
+      "avgPerDay": "Essenskosten pro Tag",
+      "weekSum": "Letzte 7 Tage",
+      "days_one": "Basis: 1 Tag mit Preisdaten",
+      "days_other": "Basis: {{count}} Tage mit Preisdaten"
+    },
     "valuePh": "Wert ({{unit}})",
     "add": "Eintragen",
     "noData": "Noch kein Wert erfasst.",
     "tooFew": "Mehr Werte nötig für ein Diagramm.",
     "week": "Woche",
+    "history": "Letzte Werte",
+    "deleted": "Wert gelöscht",
+    "deleteValue": "Wert vom {{date}} ({{value}}) löschen",
     "dueTitle": "Messwerte fällig",
     "bloodPressure": "Blutdruck",
     "start": "Start",
@@ -385,6 +407,7 @@
     "context": "Kontext",
     "save": "Eintragen",
     "empty": "Noch keine Messwerte heute.",
+    "deleted": "Messwert gelöscht",
     "contexts": {
       "fasting": "Nüchtern",
       "before": "Vor Mahlzeit",
@@ -428,7 +451,15 @@
     "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein.",
     "consentTitle": "Foto an KI senden?",
     "consentBody": "Zum Erkennen wird das Bild einmalig an unseren KI-Dienst (OpenRouter) übertragen und dort nicht dauerhaft gespeichert. Es wird kein Bild ohne dein Zutun gesendet.",
-    "consentAccept": "Verstanden & fortfahren"
+    "consentAccept": "Verstanden & fortfahren",
+    "targetToggle": "Scan-Ziel wählen",
+    "targetLog": "Mahlzeit loggen",
+    "targetPantry": "In den Vorrat",
+    "pantryHint": "Scanne deinen Einkauf — alles landet im Vorrat, ohne geloggt zu werden.",
+    "pantryEntry": "Einkauf scannen → Vorrat",
+    "pantrySaved": "Im Vorrat: {{name}}",
+    "priceSave": "Preis speichern",
+    "priceSkip": "Ohne Preis"
   },
   "review": {
     "title": "Ergebnis prüfen",
@@ -444,7 +475,10 @@
     "microsTitle": "Mikronährstoffe – geschätzt ({{count}})",
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
     "allergyTraces": "Kann Spuren enthalten: {{list}}",
-    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
+    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren.",
+    "toPantry": "Nur in den Vorrat",
+    "pantrySaved_one": "1 Produkt im Vorrat",
+    "pantrySaved_other": "{{count}} Produkte im Vorrat"
   },
   "pwa": {
     "updateAvailable": "Update verfügbar",

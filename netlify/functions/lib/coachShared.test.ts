@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import 'fake-indexeddb/auto' // src/lib/challenges importiert die Dexie-Instanz (@/db)
+import { describe, it, expect, vi } from 'vitest'
+import { parseChallengeRule } from '../../../src/lib/challenges'
 import {
   API_ERROR_STATUS,
   ApiErrorSchema,
@@ -13,6 +15,7 @@ import {
   errorResponse,
   isAbortError,
   parseCoachRequest,
+  sanitizeSuggestions,
   validateSuggestionsLine,
 } from './coachShared'
 
@@ -103,6 +106,112 @@ describe('validateSuggestionsLine (Vertrag §3: serverseitige Validierung)', () 
 
   it('verwirft Leerstring', () => {
     expect(validateSuggestionsLine('   ')).toBeNull()
+  })
+})
+
+describe('sanitizeSuggestions (v1.2, Befund 4: Nutrient-Enum für Ziele)', () => {
+  it('verwirft NUR das Ziel mit fremdem nutrient und loggt es — der Rest bleibt', () => {
+    const warn = vi.fn()
+    const out = sanitizeSuggestions(
+      {
+        goals: [
+          { nutrient: 'vitaminC', type: 'min', target: 90, unit: 'mg' }, // nicht darstellbar → weg
+          { nutrient: 'protein', type: 'min', target: 120, unit: 'g' },
+        ],
+        challenges: [{ title: '3x Gemüse', period: 'day' }],
+      },
+      warn,
+    )
+    expect(out).toEqual({
+      goals: [{ nutrient: 'protein', type: 'min', target: 120, unit: 'g' }],
+      challenges: [{ title: '3x Gemüse', period: 'day' }],
+    })
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('vitaminC')
+  })
+
+  it('erlaubt getrackte Limit-/Micro-Ziele (sugar/fiber/sodium)', () => {
+    const out = sanitizeSuggestions({
+      goals: [{ nutrient: 'sugar', type: 'max', target: 25, unit: 'g' }],
+    })
+    expect(out?.goals).toHaveLength(1)
+  })
+
+  it('liefert null, wenn nach dem Aufräumen nichts übrig ist', () => {
+    const warn = vi.fn()
+    expect(sanitizeSuggestions({ goals: [{ nutrient: 'salt', type: 'max', target: 6, unit: 'g' }] }, warn)).toBeNull()
+    expect(warn).toHaveBeenCalled()
+  })
+})
+
+describe('sanitizeSuggestions (v1.2, Befund 8: Challenge-rule)', () => {
+  const weekRule = { nutrient: 'protein', type: 'min', target: 120, unit: 'g', days: 5 }
+
+  it('reicht eine gültige rule durch — und parseChallengeRule kann sie auswerten (Roundtrip)', () => {
+    const out = sanitizeSuggestions({
+      challenges: [{ title: 'Protein-Woche', period: 'week', rule: weekRule }],
+    })
+    expect(out?.challenges?.[0]).toEqual({ title: 'Protein-Woche', period: 'week', rule: weekRule })
+    // Exakt das Format, das die Fortschritts-Engine (src/lib/challenges.ts) erwartet:
+    expect(parseChallengeRule(out!.challenges![0].rule)).toEqual({
+      nutrient: 'protein',
+      type: 'min',
+      target: 120,
+      targetMax: undefined,
+      unit: 'g',
+      days: 5,
+    })
+  })
+
+  it('kaputte rule → Challenge bleibt OHNE rule erhalten (manuell abschließbar), geloggt', () => {
+    const warn = vi.fn()
+    const out = sanitizeSuggestions(
+      {
+        challenges: [
+          { title: 'Weniger Zucker', period: 'day', rule: { nutrient: 'zucker', type: 'max', target: 0 } },
+        ],
+      },
+      warn,
+    )
+    expect(out?.challenges).toEqual([{ title: 'Weniger Zucker', period: 'day' }])
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('rule')
+  })
+
+  it('strippt days bei period "day" still, statt die rule zu opfern', () => {
+    const out = sanitizeSuggestions({
+      challenges: [
+        { title: 'Protein heute', period: 'day', rule: { nutrient: 'protein', type: 'min', target: 30, days: 3 } },
+      ],
+    })
+    expect(out?.challenges?.[0].rule).toEqual({ nutrient: 'protein', type: 'min', target: 30 })
+  })
+
+  it('Challenge ohne title/period wird verworfen, gültige daneben bleiben', () => {
+    const warn = vi.fn()
+    const out = sanitizeSuggestions(
+      { challenges: [{ period: 'day' }, { title: 'Ok', period: 'week', rule: weekRule }] },
+      warn,
+    )
+    expect(out?.challenges).toEqual([{ title: 'Ok', period: 'week', rule: weekRule }])
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
+
+  it('validateSuggestionsLine nutzt die Rettung: gemischte Zeile kommt bereinigt an', () => {
+    const warn = vi.fn()
+    const line = JSON.stringify({
+      goals: [
+        { nutrient: 'iron', type: 'min', target: 12, unit: 'mg' },
+        { nutrient: 'fiber', type: 'min', target: 30, unit: 'g' },
+      ],
+      challenges: [{ title: 'Ballaststoff-Woche', period: 'week', rule: { nutrient: 'fiber', type: 'min', target: 30, days: 4 } }],
+    })
+    const out = validateSuggestionsLine(line, warn)
+    expect(out).not.toBeNull()
+    const parsed = JSON.parse(out!)
+    expect(parsed.goals).toEqual([{ nutrient: 'fiber', type: 'min', target: 30, unit: 'g' }])
+    expect(parsed.challenges[0].rule).toEqual({ nutrient: 'fiber', type: 'min', target: 30, days: 4 })
+    expect(warn).toHaveBeenCalledTimes(1) // nur das iron-Ziel
   })
 })
 

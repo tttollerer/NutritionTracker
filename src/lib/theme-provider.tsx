@@ -3,6 +3,7 @@ import { type BrandTheme, type ThemeMode } from './themes'
 import {
   MODE_KEY,
   VARIANT_KEY,
+  THEME_RESTORED_EVENT,
   ThemeContext,
   resolveMode,
   readStoredMode,
@@ -40,6 +41,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (mq.removeEventListener) mq.removeEventListener('change', onChange)
       else mq.removeListener(onChange)
     }
+  }, [])
+
+  // Extern gesetzte Theme-Werte übernehmen (Backup-Import schreibt localStorage
+  // und feuert THEME_RESTORED_EVENT) — ohne Reload sofort sichtbar.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onRestore = () => {
+      setModeState(readStoredMode())
+      setVariantState(readStoredVariant())
+    }
+    window.addEventListener(THEME_RESTORED_EVENT, onRestore)
+    return () => window.removeEventListener(THEME_RESTORED_EVENT, onRestore)
   }, [])
 
   const resolvedMode = resolveMode(mode, systemDark)

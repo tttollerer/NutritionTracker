@@ -1,12 +1,18 @@
 import {
   API_ERROR_STATUS,
   COACH_SENTINEL,
+  CoachChallengeRuleSchema,
+  CoachChallengeSuggestionSchema,
+  CoachGoalSuggestionSchema,
+  CoachLogSuggestionSchema,
   CoachRequestSchema,
   CoachSuggestionsSchema,
   apiError,
   type ApiError,
   type ApiErrorCode,
+  type CoachChallengeRule,
   type CoachRequest,
+  type CoachSuggestions,
 } from '../../../src/lib/apiContract'
 
 /**
@@ -108,16 +114,108 @@ export function buildUpstreamMessages(
 // Serverseitige Suggestions-Validierung (Vertrag §3, v1.1)
 // ---------------------------------------------------------------------------
 
+/** Kurzer, sicherer Log-Auszug eines verworfenen Eintrags (nie Rohtext-Fluten). */
+function preview(value: unknown): string {
+  try {
+    return JSON.stringify(value)?.slice(0, 120) ?? String(value)
+  } catch {
+    return '<nicht serialisierbar>'
+  }
+}
+
+/**
+ * v1.2 (Befund 4 + 8): Vorschläge EINZELN retten statt die ganze Zeile zu
+ * verwerfen.
+ * - Ziel mit nicht erlaubtem/ungültigem nutrient → Ziel verworfen (onWarn),
+ *   damit es beim Nutzer nicht als "Übernommen ins Nichts" endet.
+ * - Challenge mit kaputter rule → rule entfernt, Challenge bleibt (manuell
+ *   abschließbar); rule.days wird bei period 'day' still gestrippt.
+ * - Kaputter Log-Vorschlag → Eintrag verworfen (onWarn).
+ * Liefert null, wenn nach dem Aufräumen nichts Übernehmbares übrig ist.
+ */
+export function sanitizeSuggestions(
+  parsed: unknown,
+  onWarn: (msg: string) => void = () => {},
+): CoachSuggestions | null {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const src = parsed as Record<string, unknown>
+  const out: CoachSuggestions = {}
+
+  if (Array.isArray(src.goals)) {
+    const goals = []
+    for (const g of src.goals) {
+      const r = CoachGoalSuggestionSchema.safeParse(g)
+      if (r.success) goals.push(r.data)
+      else onWarn(`coach: Ziel-Vorschlag verworfen (nutrient nicht erlaubt/ungültig): ${preview(g)}`)
+    }
+    if (goals.length) out.goals = goals
+  }
+
+  if (Array.isArray(src.challenges)) {
+    const challenges = []
+    for (const c of src.challenges) {
+      if (!c || typeof c !== 'object') {
+        onWarn(`coach: Challenge-Vorschlag verworfen (kein Objekt): ${preview(c)}`)
+        continue
+      }
+      const { rule, ...base } = c as Record<string, unknown>
+      const baseParsed = CoachChallengeSuggestionSchema.safeParse(base)
+      if (!baseParsed.success) {
+        onWarn(`coach: Challenge-Vorschlag verworfen (title/period ungültig): ${preview(c)}`)
+        continue
+      }
+      let cleanRule: CoachChallengeRule | undefined
+      if (rule !== undefined) {
+        // days ist nur bei period 'week' sinnvoll — bei 'day' still strippen,
+        // statt eine sonst gültige rule zu opfern.
+        const candidate =
+          baseParsed.data.period !== 'week' && rule && typeof rule === 'object'
+            ? (() => {
+                const rest = { ...(rule as Record<string, unknown>) }
+                delete rest.days
+                return rest
+              })()
+            : rule
+        const ruleParsed = CoachChallengeRuleSchema.safeParse(candidate)
+        if (ruleParsed.success) cleanRule = ruleParsed.data
+        else onWarn(`coach: kaputte Challenge-rule entfernt (Challenge bleibt manuell): ${preview(rule)}`)
+      }
+      challenges.push(cleanRule ? { ...baseParsed.data, rule: cleanRule } : baseParsed.data)
+    }
+    if (challenges.length) out.challenges = challenges
+  }
+
+  if (Array.isArray(src.logs)) {
+    const logs = []
+    for (const l of src.logs) {
+      const r = CoachLogSuggestionSchema.safeParse(l)
+      if (r.success) logs.push(r.data)
+      else onWarn(`coach: Log-Vorschlag verworfen (ungültig): ${preview(l)}`)
+    }
+    if (logs.length) out.logs = logs
+  }
+
+  if (!out.goals?.length && !out.challenges?.length && !out.logs?.length) return null
+  // Abschluss-Gate: das Ergebnis MUSS den Vertrag erfüllen (Defense in Depth).
+  const final = CoachSuggestionsSchema.safeParse(out)
+  return final.success ? final.data : null
+}
+
 /**
  * Suggestions-Rohtext (alles nach dem Sentinel) validieren. Liefert die
  * normalisierte JSON-Zeile oder null, wenn sie verworfen werden muss —
- * kaputtes JSON erreicht den Client nie.
+ * kaputtes JSON erreicht den Client nie. v1.2: einzelne ungültige Einträge
+ * werden über sanitizeSuggestions gerettet/verworfen (onWarn loggt).
  */
-export function validateSuggestionsLine(raw: string): string | null {
+export function validateSuggestionsLine(
+  raw: string,
+  onWarn: (msg: string) => void = () => {},
+): string | null {
   const line = raw.trim().replace(/^```json\s*/i, '').replace(/```$/, '').trim()
   if (!line) return null
   try {
-    return JSON.stringify(CoachSuggestionsSchema.parse(JSON.parse(line)))
+    const clean = sanitizeSuggestions(JSON.parse(line), onWarn)
+    return clean == null ? null : JSON.stringify(clean)
   } catch {
     return null
   }
@@ -147,8 +245,9 @@ export interface SuggestionsFilter {
  * Streaming-Filter: Text vor dem Sentinel fließt live durch, alles ab dem
  * Sentinel wird gepuffert und erst nach Validierung (oder gar nicht)
  * weitergegeben. Erkennt den Sentinel auch über Chunk-Grenzen hinweg.
+ * `onWarn` (v1.2) bekommt je einzeln verworfenem Vorschlag eine Log-Zeile.
  */
-export function createSuggestionsFilter(): SuggestionsFilter {
+export function createSuggestionsFilter(onWarn?: (msg: string) => void): SuggestionsFilter {
   let held = ''
   let afterSentinel = false
   let suggestions = ''
@@ -178,7 +277,7 @@ export function createSuggestionsFilter(): SuggestionsFilter {
         held = ''
         return { text, dropped: false }
       }
-      const valid = validateSuggestionsLine(suggestions)
+      const valid = validateSuggestionsLine(suggestions, onWarn)
       if (valid == null) return { text: '', dropped: suggestions.trim().length > 0 }
       return { text: `${COACH_SENTINEL}\n${valid}`, dropped: false }
     },

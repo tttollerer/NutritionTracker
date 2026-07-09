@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db'
-import { measurementsByType, updateProfile } from '@/db/repo'
+import { measurementsByType, updateCoachMemory, updateProfile } from '@/db/repo'
 import type { Persona, Profile } from '@/db/types'
-import { computeTargets, proteinPerKg, DIET_FORMS, PERSONA_KEYS } from '@/lib/nutrition'
+import { computeTargets, proteinPerKg, COMMON_ALLERGENS, DIET_FORMS, PERSONA_KEYS } from '@/lib/nutrition'
 import { latestValue } from '@/lib/measurements'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -16,12 +16,25 @@ export function EditProfile({ onClose }: { onClose: () => void }) {
   const profile = useLiveQuery(() => db.profile.get('me'), [])
   // Aktuelles Gewicht aus dem jüngsten Messwert (fällt sonst auf Profilwert zurück).
   const lastWeight = useLiveQuery(async () => latestValue(await measurementsByType('weight'))?.value, [])
+  // Allergien liegen im Coach-Gedächtnis (wie beim Onboarding erfasst) —
+  // undefined = Query lädt noch, [] = keine Memory/keine Allergien.
+  const allergies = useLiveQuery(async () => (await db.coachMemory.get('me'))?.allergies ?? [], [])
 
-  if (!profile) return null
-  return <EditForm profile={profile} initialWeight={lastWeight ?? profile.weightKg} onClose={onClose} />
+  if (!profile || allergies === undefined) return null
+  return <EditForm profile={profile} initialWeight={lastWeight ?? profile.weightKg} initialAllergies={allergies} onClose={onClose} />
 }
 
-function EditForm({ profile, initialWeight, onClose }: { profile: Profile; initialWeight: number; onClose: () => void }) {
+function EditForm({
+  profile,
+  initialWeight,
+  initialAllergies,
+  onClose,
+}: {
+  profile: Profile
+  initialWeight: number
+  initialAllergies: string[]
+  onClose: () => void
+}) {
   const { t } = useTranslation()
   const [sex, setSex] = useState<Profile['sex']>(profile.sex)
   const [age, setAge] = useState(String(profile.age))
@@ -31,10 +44,12 @@ function EditForm({ profile, initialWeight, onClose }: { profile: Profile; initi
   const [goal, setGoal] = useState<Profile['goal']>(profile.goal)
   const [persona, setPersona] = useState<Persona>(profile.persona)
   const [diets, setDiets] = useState<string[]>(profile.dietForms)
+  const [allergies, setAllergies] = useState<string[]>(initialAllergies)
   const [protein, setProtein] = useState(profile.proteinPerKgOverride ? String(profile.proteinPerKgOverride) : '')
   const [saving, setSaving] = useState(false)
 
   const toggleDiet = (v: string) => setDiets((d) => (d.includes(v) ? d.filter((x) => x !== v) : [...d, v]))
+  const toggleAllergy = (v: string) => setAllergies((a) => (a.includes(v) ? a.filter((x) => x !== v) : [...a, v]))
 
   // Live-Vorschau der neuen Tagesziele.
   const draft: Profile = {
@@ -65,6 +80,8 @@ function EditForm({ profile, initialWeight, onClose }: { profile: Profile; initi
       dietForms: diets,
       proteinPerKgOverride: protein ? Number(protein) : undefined,
     })
+    // Allergien leben im Coach-Gedächtnis (Quelle der Allergen-Warnungen).
+    await updateCoachMemory({ allergies })
     onClose()
   }
 
@@ -130,6 +147,16 @@ function EditForm({ profile, initialWeight, onClose }: { profile: Profile; initi
         <div className="flex flex-wrap gap-2">
           {DIET_FORMS.map((d) => (
             <Chip key={d} label={t(`onboarding.diets.${d}`)} selected={diets.includes(d)} onClick={() => toggleDiet(d)} />
+          ))}
+        </div>
+      </div>
+
+      {/* Allergien nachträglich änderbar — gleiche Chips wie im Onboarding (Audit-Befund 2). */}
+      <div className="space-y-2">
+        <span className="text-sm font-medium text-muted-foreground">{t('onboarding.allergies')}</span>
+        <div className="flex flex-wrap gap-2">
+          {COMMON_ALLERGENS.map((a) => (
+            <Chip key={a} label={t(`onboarding.allergens.${a}`)} selected={allergies.includes(a)} onClick={() => toggleAllergy(a)} />
           ))}
         </div>
       </div>
