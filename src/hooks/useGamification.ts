@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import confetti from 'canvas-confetti'
 import { db } from '@/db'
 import { getActiveGoalsMap } from '@/db/repo'
-import { todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
 import {
   BADGES,
   companionFrom,
@@ -54,7 +54,7 @@ export function useGamification(opts: { celebrate?: boolean } = {}): Gamificatio
   const prevBadges = useRef<number | null>(null)
 
   const ready = logs && foods && goals && achievements && challenges && gamiState !== undefined
-  const today = todayKey()
+  const today = useTodayKey() // reaktiv über Mitternacht (Befund 1)
 
   // Reaktive Auswertung (rein).
   const computed = ready

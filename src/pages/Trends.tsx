@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Plus, Trash2, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { History, Plus, Trash2, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { db } from '@/db'
 import { addMeasurement, deleteMeasurement, getSettings } from '@/db/repo'
+import { useOverlays } from '@/lib/overlays-context'
 import type { Measurement } from '@/db/types'
 import {
   GROUP_ORDER,
@@ -119,16 +120,29 @@ function stats(series: Measurement[]) {
 
 function MetricRow({ def, series, today }: { def: MetricDef; series: Measurement[]; today: string }) {
   const { t } = useTranslation()
+  const { showUndo } = useOverlays()
   const [value, setValue] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
   const latest = latestValue(series)
   const st = stats(series)
   const fmt = (n: number) => n.toFixed(def.decimals)
+  // Letzte ~10 Werte, neueste zuerst — löschbar pro Zeile (Audit-Befund 10).
+  const recent = series.slice(-10).reverse()
 
   async function add() {
     const v = Number(value.replace(',', '.'))
     if (value === '' || Number.isNaN(v)) return
     await addMeasurement(def.key, clampValue(def, v), def.unit, today)
     setValue('')
+  }
+
+  // Soft-Delete + Undo statt sofortigem Löschen; Restore entfernt den
+  // deletedAt-Tombstone (Dexie löscht Props, die auf undefined gesetzt werden).
+  async function remove(m: Measurement) {
+    await deleteMeasurement(m.id)
+    showUndo(t('trends.deleted'), async () => {
+      await db.measurements.update(m.id, { deletedAt: undefined, updatedAt: Date.now() })
+    })
   }
 
   const chartSeries: ChartSeries[] = [{ points: series.map((m) => ({ date: m.date, value: m.value })), color: PRIMARY, label: def.key }]
@@ -176,16 +190,38 @@ function MetricRow({ def, series, today }: { def: MetricDef; series: Measurement
         <Button className="px-4" onClick={add} disabled={value === ''} aria-label={t('trends.add')}>
           <Plus size={18} />
         </Button>
-        {latest && (
+        {series.length > 0 && (
           <button
-            onClick={() => deleteMeasurement(latest.id)}
-            aria-label={t('common.delete')}
-            className="flex h-12 w-10 items-center justify-center text-muted-foreground hover:text-destructive"
+            onClick={() => setShowHistory((s) => !s)}
+            aria-label={t('trends.history')}
+            aria-expanded={showHistory}
+            className={`flex h-12 w-10 items-center justify-center ${showHistory ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
           >
-            <Trash2 size={18} />
+            <History size={18} />
           </button>
         )}
       </div>
+
+      {/* Aufklappbare Liste der letzten Werte — einzelne Einträge löschen mit Undo. */}
+      {showHistory && recent.length > 0 && (
+        <ul className="space-y-1" aria-label={t('trends.history')}>
+          {recent.map((m) => (
+            <li key={m.id} className="flex items-center justify-between rounded-lg bg-muted/40 pl-3 text-sm">
+              <span className="tabular-nums">
+                {fmt(m.value)} {def.unit}
+                <span className="ml-2 text-xs text-muted-foreground">{m.date}</span>
+              </span>
+              <button
+                onClick={() => remove(m)}
+                aria-label={t('trends.deleteValue', { date: m.date, value: `${fmt(m.value)} ${def.unit}` })}
+                className="flex h-12 w-12 shrink-0 items-center justify-center text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 size={16} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Card>
   )
 }

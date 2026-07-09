@@ -7,6 +7,7 @@ import { db } from '@/db'
 import { addGlucose, deleteGlucose } from '@/db/repo'
 import type { GlucoseContext } from '@/db/types'
 import { classifyGlucose, fromMgdl, glucoseWarning, toMgdl, type GlucoseLevel } from '@/lib/glucose'
+import { useOverlays } from '@/lib/overlays-context'
 import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +25,7 @@ const LEVEL_COLOR: Record<GlucoseLevel, string> = {
 /** Optionales Diabetes-Modul: manuelle Blutzucker-Messwerte + Warner. */
 export function GlucoseCard({ unit, date }: { unit: 'mg/dl' | 'mmol/l'; date: string }) {
   const { t } = useTranslation()
+  const { showUndo } = useOverlays()
   const [value, setValue] = useState('')
   const [context, setContext] = useState<GlucoseContext>('fasting')
 
@@ -41,6 +43,15 @@ export function GlucoseCard({ unit, date }: { unit: 'mg/dl' | 'mmol/l'; date: st
   }
 
   const warn = sorted.map((r) => glucoseWarning(r.mgdl, r.context)).find(Boolean)
+
+  // Soft-Delete + Undo-Snackbar statt sofortigem, endgültigem Löschen (Audit-Befund 10).
+  // Restore = deletedAt-Tombstone wieder entfernen (Dexie löscht undefined-Props).
+  async function remove(id: string) {
+    await deleteGlucose(id)
+    showUndo(t('glucose.deleted'), async () => {
+      await db.glucose.update(id, { deletedAt: undefined, updatedAt: Date.now() })
+    })
+  }
 
   return (
     <Card className="space-y-3 p-4">
@@ -93,7 +104,11 @@ export function GlucoseCard({ unit, date }: { unit: 'mg/dl' | 'mmol/l'; date: st
                     {t(`glucose.contexts.${r.context}`)} · {t(`glucose.levels.${level}`)}
                   </span>
                 </span>
-                <button onClick={() => deleteGlucose(r.id)} aria-label={t('common.delete')} className="text-muted-foreground hover:text-destructive">
+                <button
+                  onClick={() => remove(r.id)}
+                  aria-label={t('common.delete')}
+                  className="-my-2 -mr-1 flex h-12 w-12 shrink-0 items-center justify-center text-muted-foreground hover:text-destructive"
+                >
                   <Trash2 size={16} />
                 </button>
               </motion.div>

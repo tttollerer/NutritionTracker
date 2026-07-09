@@ -20,10 +20,24 @@ interface Props {
   vegan?: boolean
   allergies?: string[]
   sugarLimit?: number
+  /** Übernommene Coach-Limit-Ziele (sugar/sodium, Vertrag v1.2) — s. overridesFromGoals. */
+  limitOverrides?: Record<string, number>
+  /** Übernommene Coach-Min-Ziele (fiber, Vertrag v1.2) — s. overridesFromGoals. */
+  benefitOverrides?: Record<string, number>
 }
 
 /** Nährstoff-Defizite, Limit-„Laster" und deterministische Essens-Empfehlungen. */
-export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies, sugarLimit }: Props) {
+export function NutrientPanel({
+  logs,
+  date,
+  proteinTarget,
+  sex,
+  vegan,
+  allergies,
+  sugarLimit,
+  limitOverrides,
+  benefitOverrides,
+}: Props) {
   const { t } = useTranslation()
   const { showUndo } = useOverlays()
   const [showAll, setShowAll] = useState(false)
@@ -33,11 +47,16 @@ export function NutrientPanel({ logs, date, proteinTarget, sex, vegan, allergies
     showUndo(t('capture.added', { name }), () => deleteLog(entry.id))
   }
 
+  // Coach-Ziele + Diabetes-Zucker-Warner mergen; bei beidem gilt das strengere Limit.
+  const mergedLimits: Record<string, number> = { ...limitOverrides }
+  if (sugarLimit) mergedLimits.sugar = Math.min(sugarLimit, mergedLimits.sugar ?? Infinity)
+
   const day = computeDayNutrition(logs, date, {
     proteinTarget,
     sex,
     vegan,
-    limitOverrides: sugarLimit ? { sugar: sugarLimit } : undefined,
+    limitOverrides: Object.keys(mergedLimits).length ? mergedLimits : undefined,
+    benefitOverrides,
   })
   const deficits = rankDeficits(day)
   const recs = recommendFoods(deficits, { vegan, allergies, limit: 3 })

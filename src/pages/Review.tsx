@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Info } from 'lucide-react'
-import type { AiItem } from '@/lib/ai'
-import { getReview, clearReview, presetsFor, presetLabel, amountForUnitSwitch } from '@/lib/reviewStore'
+import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Info, ShoppingBasket, Sparkles } from 'lucide-react'
+import { analyzeImage, type AiItem } from '@/lib/ai'
+import { toApiError } from '@/lib/apiError'
+import { getReview, setReview, clearReview, presetsFor, presetLabel, amountForUnitSwitch } from '@/lib/reviewStore'
 import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
-import { createFood, findFoodByName, getAllergies, logFood, savePhoto } from '@/db/repo'
+import { useOverlays } from '@/lib/overlays-context'
+import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry, setPantry } from '@/db/repo'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -19,10 +21,18 @@ import { Spinner } from '@/components/ui/Spinner'
 export function Review() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { showUndo } = useOverlays()
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
   const [ack, setAck] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Verfeinerungsschleife (Paket B): Zusatzinfo → Neu-Schätzung mit demselben Bild.
+  const [refineText, setRefineText] = useState('')
+  const [refining, setRefining] = useState(false)
+  const [refineErrorKey, setRefineErrorKey] = useState<string | null>(null)
+  // Nutzer hat Items angefasst → vor dem Ersetzen einmal bestätigen lassen.
+  const [touched, setTouched] = useState(false)
+  const [confirmReplace, setConfirmReplace] = useState(false)
   // Lernschleife: Namen (lowercase), die beim Laden im Katalog gefunden und
   // mit der gemerkten üblichen Portion vorbelegt wurden.
   const [knownNames, setKnownNames] = useState<Set<string>>(new Set())
@@ -68,12 +78,15 @@ export function Review() {
   if (!payload) return null
 
   function patch(i: number, p: Partial<AiItem>) {
+    setTouched(true)
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...p } : it)))
   }
   function patchPer(i: number, p: Partial<AiItem['per100']>) {
+    setTouched(true)
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, per100: { ...it.per100, ...p } } : it)))
   }
   function patchMicro(i: number, key: string, value: number) {
+    setTouched(true)
     setItems((prev) =>
       prev.map((it, idx) =>
         idx === i ? { ...it, per100: { ...it.per100, micros: { ...(it.per100.micros ?? {}), [key]: value } } } : it,
@@ -81,7 +94,46 @@ export function Review() {
     )
   }
   function remove(i: number) {
+    setTouched(true)
     setItems((prev) => prev.filter((_, idx) => idx !== i))
+  }
+
+  /**
+   * „Neu schätzen": dasselbe (bereits verkleinerte) Bild erneut analysieren —
+   * mit kombiniertem Hint aus dem ursprünglichen Capture-Hint + der Zusatzinfo
+   * (z. B. „Das ist Joghurtsauce, nicht Mayo"). Das Ergebnis ERSETZT die Items;
+   * bei bereits editierten Items verlangt der erste Tap eine Bestätigung.
+   */
+  async function refine() {
+    const p = payload
+    if (!p?.imageBase64 || refining || !refineText.trim()) return
+    if (touched && !confirmReplace) {
+      setConfirmReplace(true)
+      return
+    }
+    setRefineErrorKey(null)
+    setRefining(true)
+    try {
+      // Server-Limit: hint max. 280 Zeichen (AnalyzeRequestSchema).
+      const combinedHint = [p.hint, refineText.trim()].filter(Boolean).join('. ').slice(0, 280)
+      const result = await analyzeImage(p.mode ?? 'meal', p.imageBase64, combinedHint || undefined)
+      setReview({
+        ...p,
+        items: result.items,
+        notes: result.notes,
+        questions: result.questions,
+        hint: combinedHint || undefined,
+      })
+      setItems(result.items)
+      setKnownNames(new Set()) // Vorbelegungs-Badges gelten für die alten Items nicht mehr
+      setRefineText('')
+      setTouched(false)
+      setConfirmReplace(false)
+    } catch (err) {
+      setRefineErrorKey(toApiError(err).i18nKey)
+    } finally {
+      setRefining(false)
+    }
   }
 
   // Echter Abgleich: OFF-Allergen-/Spuren-Tags des Produkts (Primärquelle) +
@@ -121,6 +173,31 @@ export function Review() {
       }
       clearReview()
       navigate('/')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * „Nur in den Vorrat": geprüfte Items als FoodItems upserten (pantry=true,
+   * eingestellte Menge als übliche Portion) — OHNE LogEntries. Undo nimmt das
+   * Vorrat-Flag wieder zurück.
+   */
+  async function toPantry() {
+    if (busy || (hasContains && !ack)) return
+    setBusy(true)
+    try {
+      const foods = await saveReviewToPantry(items, {
+        source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
+        barcode: payload!.barcode,
+        allergens: payload!.allergens,
+        traces: payload!.traces,
+      })
+      clearReview()
+      showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
+        await Promise.all(foods.map((f) => setPantry(f.id, false)))
+      })
+      navigate('/add')
     } finally {
       setBusy(false)
     }
@@ -268,6 +345,53 @@ export function Review() {
         })
       )}
 
+      {/* ── Schätzung verbessern (Paket B): nur mit vorhandenem Analyse-Bild ── */}
+      {payload.imageBase64 && (
+        <Card className="space-y-3 p-4">
+          <p className="flex items-center gap-2 text-sm font-semibold">
+            <Sparkles size={16} aria-hidden="true" className="text-primary" /> {t('review.refineTitle')}
+          </p>
+          <p className="text-xs text-muted-foreground">{t('review.refineHint')}</p>
+
+          {/* Rückfragen der KI als antippbare Chips → Tap füllt das Eingabefeld */}
+          {(payload.questions?.length ?? 0) > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {payload.questions!.map((q) => (
+                <Chip key={q} label={q} selected={refineText === q} onClick={() => setRefineText(q)} />
+              ))}
+            </div>
+          )}
+
+          <Input
+            value={refineText}
+            onChange={(e) => setRefineText(e.target.value)}
+            placeholder={t('review.refinePlaceholder')}
+            aria-label={t('review.refineTitle')}
+          />
+
+          {refineErrorKey && (
+            <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {t(refineErrorKey)}
+            </p>
+          )}
+          {confirmReplace && !refining && (
+            <p className="rounded-lg bg-warning/15 px-3 py-2 text-xs font-medium text-warning-text">
+              {t('review.refineReplaceWarn')}
+            </p>
+          )}
+
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => void refine()}
+            disabled={refining || busy || !refineText.trim()}
+          >
+            {refining ? <Spinner size={18} /> : <Sparkles size={18} />}{' '}
+            {refining ? t('review.refining') : confirmReplace ? t('review.refineConfirm') : t('review.refineCta')}
+          </Button>
+        </Card>
+      )}
+
       {items.length > 0 && (
         <div className="space-y-3">
           {hasContains && (
@@ -281,8 +405,12 @@ export function Review() {
               <span>{t('review.allergyAck')}</span>
             </label>
           )}
-          <Button className="w-full" onClick={confirm} disabled={busy || (hasContains && !ack)}>
+          <Button className="w-full" onClick={confirm} disabled={busy || refining || (hasContains && !ack)}>
             {busy ? <Spinner size={20} /> : <Check size={20} />} {busy ? t('review.saving') : t('review.confirm')}
+          </Button>
+          {/* Sekundär: als Einkauf in den Vorrat — speichert ohne zu loggen. */}
+          <Button variant="secondary" className="w-full" onClick={() => void toPantry()} disabled={busy || refining || (hasContains && !ack)}>
+            <ShoppingBasket size={20} /> {t('review.toPantry')}
           </Button>
         </div>
       )}

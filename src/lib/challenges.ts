@@ -13,7 +13,13 @@ import { lastNDayKeys } from './insights'
  *    Erledigt/Abbrechen-Aktionen, aber ohne berechneten Fortschritt.
  */
 
-export const TRACKED = ['kcal', 'protein', 'carbs', 'fat'] as const
+/**
+ * Auswertbare Nährstoffe (Vertrag v1.2 = COACH_NUTRIENTS in apiContract.ts):
+ * die vier Makros direkt aus DaySums, sugar/fiber/sodium als Summen der
+ * getrackten computed.micros (Schlüssel aus src/lib/nutrients.ts, werden von
+ * sumsByDate mitsummiert).
+ */
+export const TRACKED = ['kcal', 'protein', 'carbs', 'fat', 'sugar', 'fiber', 'sodium'] as const
 export type TrackedNutrient = (typeof TRACKED)[number]
 
 /** Wochen-Challenges gelten als geschafft, wenn die Tagesregel an so vielen Tagen erfüllt ist. */
@@ -92,7 +98,7 @@ export function evaluateChallenge(
   const goal = asGoal(rule)
 
   if (c.period === 'day') {
-    const value = sums[today]?.[rule.nutrient] ?? 0
+    const value = sums[today]?.[rule.nutrient] ?? 0 // Micro-Summen sind optional (DaySums)
     return {
       kind: 'day',
       current: Math.round(value),
@@ -107,7 +113,7 @@ export function evaluateChallenge(
   const days = lastNDayKeys(today, 7)
   const hits = days.filter((d) => {
     const s = sums[d]
-    return !!s && goalMet(goal, s[rule.nutrient])
+    return !!s && goalMet(goal, s[rule.nutrient] ?? 0)
   }).length
   const need = rule.days ?? CHALLENGE_WEEK_DAYS_DEFAULT
   return {

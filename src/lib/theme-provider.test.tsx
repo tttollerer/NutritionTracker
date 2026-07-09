@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ThemeProvider } from './theme-provider'
-import { resolveMode, readStoredMode, useThemeControls } from './theme-context'
+import { THEME_RESTORED_EVENT, resolveMode, readStoredMode, useThemeControls } from './theme-context'
 
 function mockMatchMedia(dark: boolean) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -82,5 +82,19 @@ describe('ThemeProvider', () => {
     act(() => result.current.setVariant('vital'))
     expect(localStorage.getItem('nt-theme-variant')).toBe('vital')
     expect(document.documentElement.dataset.theme).toBe('vital')
+  })
+
+  it('übernimmt extern gesetzte Werte über THEME_RESTORED_EVENT (Backup-Import)', () => {
+    const { result } = renderHook(() => useThemeControls(), { wrapper })
+    // Backup-Import schreibt localStorage direkt und feuert das Event.
+    localStorage.setItem('nt-theme-mode', 'dark')
+    localStorage.setItem('nt-theme-variant', 'classic')
+    act(() => {
+      window.dispatchEvent(new Event(THEME_RESTORED_EVENT))
+    })
+    expect(result.current.mode).toBe('dark')
+    expect(result.current.variant).toBe('classic')
+    expect(document.documentElement.dataset.theme).toBe('classic')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
   })
 })

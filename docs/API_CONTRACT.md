@@ -1,4 +1,4 @@
-# NutriScan API-Vertrag v1.1
+# NutriScan API-Vertrag v1.2
 
 Vertrag zwischen Client (`src/`) und Netlify Functions (`netlify/functions/analyze.mts`,
 `netlify/functions/coach.mts`). Bezug: [PLAN.md](../PLAN.md) §6/§9.3,
@@ -12,7 +12,8 @@ Dokument + apiContract.ts der Soll-Zustand**, der Code der Ist-Zustand.
 | Version | Status |
 |---|---|
 | v1.0 | Ist-Stand im Code (Stand Audit 2026-07-05) |
-| v1.1 | Dieser Vertrag — Error-Envelope, `memory` nullish, Stream-Fehler-Event, serverseitig validierte Suggestions, optionales Coach-Foto |
+| v1.1 | Error-Envelope, `memory` nullish, Stream-Fehler-Event, serverseitig validierte Suggestions, optionales Coach-Foto |
+| v1.2 | Dieser Vertrag — Nutrient-Enum für Coach-Ziele, optionale Challenge-`rule` für die Auto-Auswertung (Erwartungs-Audit Befund 4 + 8), nur additiv zu v1.1 |
 
 ---
 
@@ -138,6 +139,43 @@ normale Tokens). Aufbau des Gesamttexts:
   validiert** (Paket 2). Ungültiges/kaputtes JSON wird verworfen — der Client erhält dann
   nur den Beratungstext, nie eine kaputte Suggestions-Zeile. (v1.0: Validierung nur im
   Client, `src/lib/coach.ts:139–146`.)
+
+### Suggestions v1.2: Nutrient-Enum & Challenge-Regeln (Befund 4 + 8)
+
+**Ziele (`goals[].nutrient`) sind ein Enum** (`CoachNutrientSchema`):
+`"kcal" | "protein" | "carbs" | "fat" | "sugar" | "fiber" | "sodium"`.
+Nur diese Nährstoffe kann die App anzeigen/auswerten (Makro-Ringe bzw.
+getrackte micros mit NutrientPanel/limitOverrides). `"salt"` ist bewusst
+nicht dabei — getrackt wird `sodium` (mg). Ziele mit anderem `nutrient`
+werden **serverseitig einzeln verworfen und geloggt** (statt v1.1: ganze
+Zeile weg oder „Übernommen ins Nichts" beim Nutzer).
+
+**Challenges dürfen eine optionale `rule` tragen** — exakt das Format von
+`parseChallengeRule` (`src/lib/challenges.ts`), damit die Fortschritts-Engine
+sie automatisch auswerten kann:
+
+```jsonc
+{
+  "title": "Protein-Woche",
+  "period": "week",
+  "rule": {                     // optional; ohne rule = manuell abschließbar
+    "nutrient": "protein",      // gleiches Enum wie goals
+    "type": "min" | "max",
+    "target": 120,              // > 0
+    "unit": "g",                // optional
+    "days": 5                   // optional, 1–7, NUR bei period "week"
+  }
+}
+```
+
+Serverseitige Validierung (`sanitizeSuggestions`, coachShared.ts): kaputte
+`rule` → `rule` wird entfernt, die Challenge selbst wird **durchgereicht**
+(manuell abschließbar), nicht verworfen; `rule.days` bei `period: "day"` wird
+still gestrippt. Kaputte Log-Vorschläge werden einzeln verworfen (geloggt).
+
+Client-Verdrahtung (Folgepaket): `repo.applyChallengeSuggestion` muss `rule`
+statt `{}` persistieren; Ziel-Anzeige für `sugar`/`fiber`/`sodium` (z. B. via
+`limitOverrides`).
 
 ### Fehler VOR Streambeginn
 

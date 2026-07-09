@@ -12,6 +12,7 @@
   "today": {
     "title": "Heute",
     "kcalLeft": "{{count}} kcal übrig",
+    "kcalOver": "{{count}} kcal über Ziel",
     "kcalToGoal": "noch {{count}} kcal bis Ziel",
     "kcalReached": "Ziel erreicht 💪",
     "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
@@ -33,6 +34,7 @@
       "undo": "Letztes rückgängig"
     },
     "entryDeleted": "{{name}} gelöscht",
+    "foodCost": "Essenskosten heute",
     "challenges": "Deine Challenges",
     "edit": {
       "title": "Eintrag bearbeiten",
@@ -123,8 +125,18 @@
     "favToggle": "{{name}} als Favorit",
     "portionPhoto": "Menge von {{name}} per Foto schätzen",
     "copyYesterday": "Gestern kopieren",
+    "copyYesterdayMeal": "{{meal}} von gestern kopieren",
+    "copyYesterdayAll": "Ganzen Tag von gestern kopieren",
     "copiedYesterday_one": "1 Eintrag von gestern kopiert",
-    "copiedYesterday_other": "{{count}} Einträge von gestern kopiert"
+    "copiedYesterday_other": "{{count}} Einträge von gestern kopiert",
+    "pantry": "Mein Vorrat",
+    "pantryToggle": "{{name}} im Vorrat",
+    "pantryAmount": "Menge von {{name}} wählen",
+    "pantryLog": "Eintragen",
+    "pantryPriceTitle": "Haushaltskasse (optional)",
+    "pantryPrice": "Preis (€)",
+    "pantryPackSize": "Packung ({{unit}})",
+    "pantryCost": "Kostet ca. {{cost}}"
   },
   "coach": {
     "title": "Coach",
@@ -148,6 +160,9 @@
     "photoDefaultMsg": "Was sagst du zu diesem Essen?",
     "pickMeal": "Als welche Mahlzeit eintragen?",
     "loggedTo": "{{name}} → {{meal}} eingetragen",
+    "goalMin": "mind. {{value}} {{unit}}",
+    "goalMax": "max. {{value}} {{unit}}",
+    "goalRange": "{{min}}–{{max}} {{unit}}",
     "starters": {
       "today": "Was soll ich heute noch essen?",
       "protein": "Wie treffe ich mein Eiweißziel?",
@@ -310,7 +325,16 @@
       "motivating": "Motivierend",
       "casual": "Locker",
       "strict": "Streng"
-    }
+    },
+    "likes": "Mag ich",
+    "likesPh": "z. B. Skyr, Linsen, scharfes Essen",
+    "dislikes": "Mag ich nicht",
+    "dislikesPh": "z. B. Rosenkohl, Innereien",
+    "likesHint": "Kommagetrennt — der Coach nutzt deine Vorlieben für passendere Vorschläge.",
+    "goalByCoach": "Coach",
+    "goalInactive": "Pausiert",
+    "goalReset": "{{name}}-Ziel auf Basiswert zurücksetzen",
+    "goalActiveToggle": "{{name}}-Ziel aktiv"
   },
   "trends": {
     "title": "Verlauf & Messwerte",
@@ -336,11 +360,21 @@
         "fat": "Fett"
       }
     },
+    "budget": {
+      "title": "Haushaltskasse",
+      "avgPerDay": "Essenskosten pro Tag",
+      "weekSum": "Letzte 7 Tage",
+      "days_one": "Basis: 1 Tag mit Preisdaten",
+      "days_other": "Basis: {{count}} Tage mit Preisdaten"
+    },
     "valuePh": "Wert ({{unit}})",
     "add": "Eintragen",
     "noData": "Noch kein Wert erfasst.",
     "tooFew": "Mehr Werte nötig für ein Diagramm.",
     "week": "Woche",
+    "history": "Letzte Werte",
+    "deleted": "Wert gelöscht",
+    "deleteValue": "Wert vom {{date}} ({{value}}) löschen",
     "dueTitle": "Messwerte fällig",
     "bloodPressure": "Blutdruck",
     "start": "Start",
@@ -385,6 +419,7 @@
     "context": "Kontext",
     "save": "Eintragen",
     "empty": "Noch keine Messwerte heute.",
+    "deleted": "Messwert gelöscht",
     "contexts": {
       "fasting": "Nüchtern",
       "before": "Vor Mahlzeit",
@@ -428,7 +463,15 @@
     "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein.",
     "consentTitle": "Foto an KI senden?",
     "consentBody": "Zum Erkennen wird das Bild einmalig an unseren KI-Dienst (OpenRouter) übertragen und dort nicht dauerhaft gespeichert. Es wird kein Bild ohne dein Zutun gesendet.",
-    "consentAccept": "Verstanden & fortfahren"
+    "consentAccept": "Verstanden & fortfahren",
+    "targetToggle": "Scan-Ziel wählen",
+    "targetLog": "Mahlzeit loggen",
+    "targetPantry": "In den Vorrat",
+    "pantryHint": "Scanne deinen Einkauf — alles landet im Vorrat, ohne geloggt zu werden.",
+    "pantryEntry": "Einkauf scannen → Vorrat",
+    "pantrySaved": "Im Vorrat: {{name}}",
+    "priceSave": "Preis speichern",
+    "priceSkip": "Ohne Preis"
   },
   "review": {
     "title": "Ergebnis prüfen",
@@ -444,7 +487,38 @@
     "microsTitle": "Mikronährstoffe – geschätzt ({{count}})",
     "allergyWarn": "Enthält ein hinterlegtes Allergen: {{list}}",
     "allergyTraces": "Kann Spuren enthalten: {{list}}",
-    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren."
+    "allergyAck": "Ich habe die Allergen-Warnung gelesen und möchte trotzdem fortfahren.",
+    "toPantry": "Nur in den Vorrat",
+    "pantrySaved_one": "1 Produkt im Vorrat",
+    "pantrySaved_other": "{{count}} Produkte im Vorrat",
+    "refineTitle": "Schätzung verbessern",
+    "refineHint": "Gib der KI eine Zusatzinfo — sie schätzt das Bild damit neu.",
+    "refinePlaceholder": "z. B. Das ist Joghurtsauce, nicht Mayo",
+    "refineCta": "Neu schätzen",
+    "refining": "Wird neu geschätzt …",
+    "refineConfirm": "Ja, neu schätzen",
+    "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut."
+  },
+  "food": {
+    "edit": {
+      "open": "Bearbeiten",
+      "title": "Produkt bearbeiten",
+      "name": "Name",
+      "per": "Basis (g/ml)",
+      "values": "Nährwerte je 100 {{unit}}",
+      "micros": "Mikronährstoffe ({{count}})",
+      "portionTitle": "Übliche Portion",
+      "portionAmount": "Menge ({{unit}})",
+      "portionLabel": "Bezeichnung",
+      "portionLabelPh": "z. B. Tasse",
+      "photos": "Fotos",
+      "addPhoto": "Foto aufnehmen",
+      "addFromGallery": "Foto aus der Galerie wählen",
+      "removePhoto": "Foto löschen",
+      "save": "Speichern",
+      "saved": "Gespeichert",
+      "invalid": "Bitte prüfe die markierten Felder — Zahlen dürfen nicht negativ sein."
+    }
   },
   "pwa": {
     "updateAvailable": "Update verfügbar",
@@ -466,6 +540,7 @@
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "undo": "Rückgängig",
-    "back": "Zurück"
+    "back": "Zurück",
+    "close": "Schließen"
   }
 }

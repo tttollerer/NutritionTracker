@@ -1,13 +1,14 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Plus, Target } from 'lucide-react'
+import { Plus, Target, Wallet } from 'lucide-react'
 import { db } from '@/db'
 import { getActiveGoalsMap } from '@/db/repo'
 import { sumsByDate } from '@/lib/gamification'
 import { lastNDayKeys, macroWeek, weeklyGoalHits, type GoalHits } from '@/lib/insights'
 import { macroColor, type MacroKey } from '@/lib/macroColor'
-import { todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
+import { costByDate, formatEuro } from '@/lib/money'
 import { TrendChart, type ChartSeries } from '@/components/TrendChart'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -27,7 +28,7 @@ const WEEK_HIT_THRESHOLD = 5 / 7
 export function NutritionHistory() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const today = todayKey()
+  const today = useTodayKey() // reaktiv über Mitternacht (Befund 1)
   const days14 = lastNDayKeys(today, CHART_DAYS)
   const start = days14[0]
 
@@ -70,6 +71,13 @@ export function NutritionHistory() {
   const days7 = days14.slice(-WEEK_DAYS)
   const week = macroWeek(sums, days7)
   const hits = weeklyGoalHits(sums, goals, days7)
+
+  // Haushaltskasse: Kosten-Snapshots der letzten 7 Tage — Karte nur, wenn
+  // überhaupt Preisdaten existieren (Feature bleibt sonst unsichtbar).
+  const costs = costByDate(logs)
+  const costDays7 = days7.filter((d) => costs[d] != null)
+  const weekCost = Math.round(costDays7.reduce((a, d) => a + costs[d], 0) * 100) / 100
+  const avgCost = costDays7.length ? weekCost / costDays7.length : 0
 
   const kcalPoints = days14
     .filter((d) => sums[d])
@@ -136,6 +144,27 @@ export function NutritionHistory() {
           )
         })}
       </Card>
+
+      {/* Haushaltskasse: Ø Essenskosten/Tag + Wochensumme (nur mit Preisdaten) */}
+      {weekCost > 0 && (
+        <Card className="space-y-2 p-4">
+          <p className="flex items-center gap-2 font-medium">
+            <Wallet size={16} aria-hidden className="text-muted-foreground" />
+            {t('trends.budget.title')}
+          </p>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-muted-foreground">{t('trends.budget.avgPerDay')}</span>
+            <span className="tabular-nums font-medium">Ø {formatEuro(avgCost)}</span>
+          </div>
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-muted-foreground">{t('trends.budget.weekSum')}</span>
+            <span className="tabular-nums font-medium">{formatEuro(weekCost)}</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t('trends.budget.days', { count: costDays7.length })}
+          </p>
+        </Card>
+      )}
 
       {/* Wochen-Insights: Ziel an X von 7 Tagen getroffen */}
       <Card className="space-y-3 p-4">

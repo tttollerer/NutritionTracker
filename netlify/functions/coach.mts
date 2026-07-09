@@ -57,7 +57,9 @@ function systemPrompt(context: unknown, memory: unknown, hasImage: boolean): str
     `KONTEXT (aggregiert): ${JSON.stringify(context ?? {})}`,
     `GEDÄCHTNIS: ${JSON.stringify(memory ?? {})}`,
     'AUSGABEFORMAT: Antworte ZUERST mit deiner Beratung als normaler, gut vorlesbarer Text (kurze Sätze, kein Markdown, kein JSON).',
-    'Wenn du Vorschläge hast, hänge DANACH in einer neuen Zeile exakt `###SUGGESTIONS###` an, gefolgt von genau einer Zeile JSON: {"goals"?: [{"nutrient":string,"type":"min"|"max"|"range","target":number,"targetMax"?:number,"unit":string,"reason"?:string}], "challenges"?: [{"title":string,"period":"day"|"week"}], "logs"?: [{"name":string,"amount":number,"unit":"g"|"ml"|"portion","per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}}]}.',
+    'Wenn du Vorschläge hast, hänge DANACH in einer neuen Zeile exakt `###SUGGESTIONS###` an, gefolgt von genau einer Zeile JSON: {"goals"?: [{"nutrient":string,"type":"min"|"max"|"range","target":number,"targetMax"?:number,"unit":string,"reason"?:string}], "challenges"?: [{"title":string,"period":"day"|"week","rule"?:{"nutrient":string,"type":"min"|"max","target":number,"unit"?:string,"days"?:number}}], "logs"?: [{"name":string,"amount":number,"unit":"g"|"ml"|"portion","per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}}]}.',
+    'Für "nutrient" (in goals UND challenges.rule) sind AUSSCHLIESSLICH diese Werte erlaubt: "kcal", "protein", "carbs", "fat", "sugar", "fiber", "sodium". Ziele zu anderen Nährstoffen (z. B. Vitamine, Eisen) gibst du nur als Text-Tipp, NIE als goals-Vorschlag — sie würden verworfen.',
+    'Gib Challenges WENN MÖGLICH eine messbare "rule" mit (target > 0; "days" 1–7 nur bei period "week" = geforderte Erfolgstage). Beispiel: {"title":"Protein-Woche","period":"week","rule":{"nutrient":"protein","type":"min","target":120,"unit":"g","days":5}}. Nur nicht messbare Challenges (z. B. "achtsam essen") lässt du ohne rule.',
     'Ohne Vorschläge lässt du Trenner und JSON komplett weg. Gib das Schema/JSON niemals im Beratungstext aus.',
   ].join('\n')
 }
@@ -121,7 +123,9 @@ export default async (req: Request): Promise<Response> => {
       const reader = upstream.body!.getReader()
       const decoder = new TextDecoder()
       const encoder = new TextEncoder()
-      const filter = createSuggestionsFilter()
+      // v1.2: einzeln verworfene Vorschläge (Ziel mit fremdem nutrient,
+      // kaputte Challenge-rule) landen im Server-Log, nie beim Nutzer.
+      const filter = createSuggestionsFilter((msg) => console.error(msg))
       const emit = (text: string) => {
         if (text) controller.enqueue(encoder.encode(text))
       }

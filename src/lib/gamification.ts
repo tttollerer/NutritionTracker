@@ -6,7 +6,24 @@ import type { Goal, LogEntry } from '@/db/types'
  * nichts doppelt vergeben wird.
  */
 
-export type DaySums = { kcal: number; protein: number; carbs: number; fat: number }
+/**
+ * Tages-Summen. Die vier Makros sind immer gesetzt; sugar/fiber/sodium sind
+ * optionale Summen der getrackten computed.micros (Vertrag v1.2: Coach-
+ * Challenges über diese Nährstoffe) — nur vorhanden, wenn Logs Micro-Werte
+ * dazu liefern. Konsumenten lesen sie deshalb mit `?? 0`.
+ */
+export type DaySums = {
+  kcal: number
+  protein: number
+  carbs: number
+  fat: number
+  sugar?: number
+  fiber?: number
+  sodium?: number
+}
+
+/** In sumsByDate mitsummierte micros-Schlüssel (Katalog src/lib/nutrients.ts). */
+export const TRACKED_MICRO_SUMS = ['sugar', 'fiber', 'sodium'] as const
 export type GoalsMap = Record<string, Goal>
 const NUTRIENTS = ['kcal', 'protein', 'carbs', 'fat'] as const
 
@@ -56,6 +73,10 @@ export function sumsByDate(logs: LogEntry[]): Record<string, DaySums> {
     d.protein += l.computed.protein
     d.carbs += l.computed.carbs
     d.fat += l.computed.fat
+    for (const k of TRACKED_MICRO_SUMS) {
+      const v = l.computed.micros?.[k]
+      if (v) d[k] = (d[k] ?? 0) + v
+    }
   }
   return out
 }

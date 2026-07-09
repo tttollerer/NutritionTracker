@@ -83,3 +83,31 @@ export function extractJson(content: string): unknown {
     throw new Error('Antwort enthielt kein gültiges JSON')
   }
 }
+
+// ---------------------------------------------------------------------------
+// questions-Feld (Vertrag v1.2, Paket B) — Sanitizing VOR der zod-Validierung
+// ---------------------------------------------------------------------------
+
+/** Max. Rückfragen laut Vertrag (AnalyzeResultSchema.questions). */
+export const MAX_QUESTIONS = 2
+
+/**
+ * Kappt das `questions`-Feld einer rohen Modellantwort auf das Vertragsformat,
+ * BEVOR AnalyzeResultSchema.parse läuft: nur nicht-leere Strings, gekürzt auf
+ * 200 Zeichen, maximal MAX_QUESTIONS Einträge; leeres/fremdes Feld wird
+ * entfernt. So kippt ein übermotiviertes Modell (3 Fragen, leere Strings)
+ * nicht die ganze — sonst gültige — Antwort in den UPSTREAM_ERROR.
+ */
+export function clampQuestions(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const obj = raw as Record<string, unknown>
+  if (!('questions' in obj)) return raw
+  const { questions, ...rest } = obj
+  const cleaned = Array.isArray(questions)
+    ? questions
+        .filter((q): q is string => typeof q === 'string' && q.trim().length > 0)
+        .map((q) => q.trim().slice(0, 200))
+        .slice(0, MAX_QUESTIONS)
+    : []
+  return cleaned.length ? { ...rest, questions: cleaned } : rest
+}

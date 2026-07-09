@@ -28,7 +28,29 @@ export interface FoodItem {
    * neue Dexie-Schemaversion.
    */
   favorite?: boolean
-  defaultPortion?: { amount: number; unit: Unit }
+  /**
+   * „Mein Vorrat" (Einkauf gescannt, noch nicht gegessen). Wie `favorite`
+   * bewusst NICHT indiziert — Abfragen laufen über .filter(), daher braucht
+   * das optionale Feld keine neue Dexie-Schemaversion.
+   */
+  pantry?: boolean
+  /**
+   * Gemerkte übliche Portion. `label` ist ein optionaler Anzeige-Name der
+   * Portion (z. B. „Tasse", „Riegel") → UI zeigt „1 Tasse (80 g)".
+   */
+  defaultPortion?: { amount: number; unit: Unit; label?: string }
+  /**
+   * Optionaler Packungspreis (Haushaltskasse): `amount` in EUR für eine
+   * Packung von `per` g bzw. ml. Kosten eines Logs = verzehrte Menge / per
+   * * amount. Nicht indiziert, additiv — keine Dexie-Migration nötig.
+   */
+  price?: { amount: number; per: number }
+  /**
+   * Produktfotos: IDs von Zeilen der bestehenden `photos`-Tabelle (Data-URLs).
+   * Wie `favorite`/`pantry` bewusst NICHT indiziert und optional — additiv,
+   * keine Dexie-Migration nötig. Reihenfolge = Anzeige-Reihenfolge.
+   */
+  photoIds?: string[]
   createdAt: number
   updatedAt: number
   deletedAt?: number
@@ -45,6 +67,12 @@ export interface LogEntry {
   amount: number
   unit: Unit
   computed: { kcal: number; protein: number; carbs: number; fat: number; micros?: Micros }
+  /**
+   * Kosten-Snapshot in EUR (Haushaltskasse), beim Loggen aus FoodItem.price
+   * berechnet. Snapshot statt Live-Berechnung: die Historie bleibt stabil,
+   * auch wenn der Packungspreis später geändert wird. Optional & additiv.
+   */
+  cost?: number
   photoBlobId?: string
   aiRaw?: unknown
   updatedAt: number

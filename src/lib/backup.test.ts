@@ -64,6 +64,7 @@ async function seed() {
 describe('backup export/import', () => {
   beforeEach(async () => {
     await clearAll()
+    localStorage.clear()
   })
 
   it('exportiert measurements und round-trippt alle Stores verlustfrei', async () => {
@@ -85,6 +86,60 @@ describe('backup export/import', () => {
     expect(await db.logs.get('log-1')).toMatchObject(log)
     expect(await db.measurements.get('meas-1')).toMatchObject(measurement)
     expect(await db.water.get('water-1')).toMatchObject(water)
+  })
+
+  it('round-trippt die Vorrat-/Haushaltskassen-Felder (pantry, price, defaultPortion.label, cost)', async () => {
+    // Passthrough-Schema: neue optionale Felder müssen Export/Import verlustfrei überstehen.
+    const pantryFood = {
+      ...food,
+      id: 'food-p',
+      name: 'Haferflocken',
+      pantry: true,
+      price: { amount: 2.49, per: 500 },
+      defaultPortion: { amount: 80, unit: 'g', label: 'Tasse' },
+    }
+    const costLog = { ...log, id: 'log-p', foodId: 'food-p', cost: 0.4 }
+    await db.foods.put(structuredClone(pantryFood) as never)
+    await db.logs.put(structuredClone(costLog) as never)
+
+    const json = await blobText(await exportBackup())
+    await clearAll()
+    await importBackup(json)
+
+    expect(await db.foods.get('food-p')).toMatchObject(pantryFood)
+    expect(await db.logs.get('log-p')).toMatchObject(costLog)
+  })
+
+  it('round-trippt Theme-Modus und -Variante (Audit-Befund 16)', async () => {
+    await seed()
+    localStorage.setItem('nt-theme-mode', 'dark')
+    localStorage.setItem('nt-theme-variant', 'classic')
+
+    const json = await blobText(await exportBackup())
+    const parsed = JSON.parse(json)
+    expect(parsed.theme).toEqual({ mode: 'dark', variant: 'classic' })
+
+    // "Neues Gerät": weder Daten noch Theme vorhanden.
+    await clearAll()
+    localStorage.clear()
+    await importBackup(json)
+
+    expect(localStorage.getItem('nt-theme-mode')).toBe('dark')
+    expect(localStorage.getItem('nt-theme-variant')).toBe('classic')
+    expect(await db.foods.get('food-1')).toMatchObject(food)
+  })
+
+  it('ignoriert unbekannte Theme-Werte und Backups ohne Theme-Feld', async () => {
+    // Ohne gesetztes Theme fehlt das Feld im Export komplett.
+    const json = await blobText(await exportBackup())
+    expect(JSON.parse(json).theme).toBeUndefined()
+    await importBackup(json) // darf nicht werfen
+
+    // Kaputte/fremde Theme-Werte werden nicht in den Storage übernommen.
+    localStorage.setItem('nt-theme-mode', 'light')
+    await importBackup(JSON.stringify({ version: 2, theme: { mode: 'neon', variant: 'rainbow' } }))
+    expect(localStorage.getItem('nt-theme-mode')).toBe('light')
+    expect(localStorage.getItem('nt-theme-variant')).toBeNull()
   })
 
   it('bricht bei kaputtem JSON ohne Datenverlust ab', async () => {

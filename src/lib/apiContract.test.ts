@@ -3,8 +3,11 @@ import { z } from 'zod'
 import {
   API_ERROR_CODES,
   API_ERROR_STATUS,
+  AnalyzeResultSchema,
   ApiErrorSchema,
   apiError,
+  COACH_NUTRIENTS,
+  CoachChallengeRuleSchema,
   CoachRequestSchema,
   CoachSuggestionsSchema,
   encodeCoachStreamError,
@@ -44,6 +47,33 @@ describe('ApiErrorSchema (Fehler-Envelope v1.1)', () => {
       code: 'RATE_LIMITED',
       error: 'Zu viele Anfragen.',
     })
+  })
+})
+
+describe('AnalyzeResultSchema v1.2 — optionales questions-Feld (Paket B)', () => {
+  const item = {
+    name: 'Pommes',
+    amount: 150,
+    unit: 'g',
+    per100: { kcal: 290, protein: 3.5, carbs: 40, fat: 13 },
+  }
+
+  it('parst OHNE questions (abwärtskompatibel, Feld fehlt einfach)', () => {
+    const parsed = AnalyzeResultSchema.parse({ items: [item], notes: 'geschätzt' })
+    expect(parsed.questions).toBeUndefined()
+  })
+
+  it('parst MIT bis zu 2 kurzen Rückfragen', () => {
+    const parsed = AnalyzeResultSchema.parse({
+      items: [item],
+      questions: ['Joghurtsauce oder Mayo?', 'Frittiert oder aus dem Ofen?'],
+    })
+    expect(parsed.questions).toHaveLength(2)
+  })
+
+  it('lehnt mehr als 2 Fragen und leere Strings ab', () => {
+    expect(AnalyzeResultSchema.safeParse({ items: [item], questions: ['a?', 'b?', 'c?'] }).success).toBe(false)
+    expect(AnalyzeResultSchema.safeParse({ items: [item], questions: [''] }).success).toBe(false)
   })
 })
 
@@ -103,6 +133,61 @@ describe('CoachSuggestionsSchema (serverseitig zu validieren, v1.1)', () => {
       CoachSuggestionsSchema.safeParse({ logs: [{ name: 'x', amount: 1, unit: 'Stück', per100: { kcal: 1, protein: 0, carbs: 0, fat: 0 } }] }).success,
     ).toBe(false)
     expect(CoachSuggestionsSchema.safeParse({ logs: [{ name: 'x', amount: 1, unit: 'g' }] }).success).toBe(false)
+  })
+})
+
+describe('CoachSuggestionsSchema v1.2 — Nutrient-Enum für Ziele (Befund 4)', () => {
+  const goal = (nutrient: string) => ({
+    goals: [{ nutrient, type: 'max', target: 25, unit: 'g' }],
+  })
+
+  it('akzeptiert jeden Enum-Wert als Ziel-Nährstoff', () => {
+    for (const n of COACH_NUTRIENTS) {
+      expect(CoachSuggestionsSchema.safeParse(goal(n)).success).toBe(true)
+    }
+  })
+
+  it('lehnt fremde nutrients ab — sie würden beim Nutzer im Nichts landen', () => {
+    for (const bad of ['vitaminC', 'iron', 'salt', 'zucker', 'Protein', '']) {
+      expect(CoachSuggestionsSchema.safeParse(goal(bad)).success).toBe(false)
+    }
+  })
+
+  it('"salt" ist bewusst nicht im Enum — der Katalog trackt "sodium"', () => {
+    expect(COACH_NUTRIENTS).not.toContain('salt')
+    expect(COACH_NUTRIENTS).toContain('sodium')
+  })
+})
+
+describe('CoachSuggestionsSchema v1.2 — Challenge-rule (Befund 8)', () => {
+  const withRule = (rule: unknown, period: 'day' | 'week' = 'week') => ({
+    challenges: [{ title: 'Protein-Woche', period, rule }],
+  })
+
+  it('akzeptiert eine Challenge mit auto-auswertbarer rule (Wochenformat)', () => {
+    const line = withRule({ nutrient: 'protein', type: 'min', target: 120, unit: 'g', days: 5 })
+    expect(CoachSuggestionsSchema.safeParse(line).success).toBe(true)
+  })
+
+  it('akzeptiert eine Tages-rule ohne days und die v1.1-Form ohne rule (abwärtskompatibel)', () => {
+    expect(
+      CoachSuggestionsSchema.safeParse(withRule({ nutrient: 'sugar', type: 'max', target: 25 }, 'day')).success,
+    ).toBe(true)
+    expect(
+      CoachSuggestionsSchema.safeParse({ challenges: [{ title: '3x Gemüse', period: 'day' }] }).success,
+    ).toBe(true)
+  })
+
+  it('lehnt kaputte rules ab: target ≤ 0, fremder nutrient, days außerhalb 1–7, type "range"', () => {
+    expect(CoachChallengeRuleSchema.safeParse({ nutrient: 'protein', type: 'min', target: 0 }).success).toBe(false)
+    expect(CoachChallengeRuleSchema.safeParse({ nutrient: 'vitaminC', type: 'min', target: 90 }).success).toBe(false)
+    expect(CoachChallengeRuleSchema.safeParse({ nutrient: 'kcal', type: 'max', target: 2000, days: 8 }).success).toBe(false)
+    expect(CoachChallengeRuleSchema.safeParse({ nutrient: 'kcal', type: 'range', target: 1800 }).success).toBe(false)
+  })
+
+  it('lehnt days bei period "day" ab (nur Wochen-Challenges zählen Erfolgstage)', () => {
+    const line = withRule({ nutrient: 'protein', type: 'min', target: 30, days: 3 }, 'day')
+    expect(CoachSuggestionsSchema.safeParse(line).success).toBe(false)
   })
 })
 

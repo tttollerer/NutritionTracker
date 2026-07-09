@@ -10,6 +10,8 @@ export interface OffProduct {
   food: NewFoodInput & { barcode: string }
   allergens: string[]
   traces: string[]
+  /** Packungsgröße in g/ml (OFF product_quantity) — Vorbelegung für die Preis-Eingabe. */
+  packageSize?: number
 }
 
 interface OffRaw {
@@ -20,6 +22,10 @@ interface OffRaw {
     allergens_tags?: string[]
     traces_tags?: string[]
     serving_quantity?: number
+    serving_size?: string
+    product_quantity?: number | string
+    product_quantity_unit?: string
+    categories_tags?: string[]
   }
 }
 
@@ -55,7 +61,7 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
       // Kein Anzeige-Text hier: leerer Name wird in der UI-Schicht über
       // i18n (capture.unknownProduct) ersetzt.
       name: p.product_name?.trim() ?? '',
-      per: 'g',
+      per: inferPer(p),
       kcal: Math.round(kcal ?? 0),
       protein: round1(n['proteins_100g'] ?? 0),
       carbs: round1(n['carbohydrates_100g'] ?? 0),
@@ -68,7 +74,50 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
     },
     allergens,
     traces,
+    packageSize: packageSize(p.product_quantity),
   }
+}
+
+/** Einheiten, die eindeutig auf Flüssigkeit (Nährwerte je 100 ml) hindeuten. */
+const LIQUID_UNITS = new Set(['ml', 'cl', 'dl', 'l', 'litre', 'liter', 'litres', 'liters'])
+/** Einheiten, die eindeutig auf Festes (je 100 g) hindeuten. */
+const SOLID_UNITS = new Set(['g', 'kg', 'mg', 'oz', 'lb'])
+
+/**
+ * Getränke nicht als Gramm führen (Audit-Befund 15): Bezugsgröße aus den
+ * OFF-Daten ableiten — explizite Packungs-Einheit vor Portionsangabe vor
+ * Getränke-Kategorien; ohne Signal bleibt der bisherige Fallback 'g'.
+ */
+export function inferPer(
+  p: Pick<NonNullable<OffRaw['product']>, 'product_quantity_unit' | 'serving_size' | 'categories_tags'>,
+): 'g' | 'ml' {
+  const unit = p.product_quantity_unit?.trim().toLowerCase()
+  if (unit) {
+    if (LIQUID_UNITS.has(unit)) return 'ml'
+    if (SOLID_UNITS.has(unit)) return 'g'
+  }
+  // Portionsangabe wie "330 ml" / "25 cl" bzw. "25 g".
+  const serving = p.serving_size?.toLowerCase() ?? ''
+  if (/\d\s*(ml|cl|dl|l)\b/.test(serving)) return 'ml'
+  if (/\d\s*(g|kg)\b/.test(serving)) return 'g'
+  if ((p.categories_tags ?? []).some(isBeverageTag)) return 'ml'
+  return 'g'
+}
+
+/**
+ * OFF-Kategorie-Tags, die Getränke markieren (en:beverages, en:sodas, …).
+ * "…foods-and-beverages" ist eine Sammelkategorie, die auch feste Lebensmittel
+ * enthält — sie zählt bewusst NICHT als Getränke-Signal.
+ */
+function isBeverageTag(tag: string): boolean {
+  if (tag.endsWith('foods-and-beverages')) return false
+  return /(beverages|drinks|juices|waters|sodas|smoothies)$/.test(tag)
+}
+
+/** OFF liefert product_quantity mal als Zahl, mal als String — nur positive Zahlen übernehmen. */
+function packageSize(q: number | string | undefined): number | undefined {
+  const n = typeof q === 'string' ? Number.parseFloat(q) : q
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? n : undefined
 }
 
 function round1(n: number) {

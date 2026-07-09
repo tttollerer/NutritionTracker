@@ -3,9 +3,19 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Upload, RefreshCw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
-import { getActiveGoalsMap, getCoachMemory, getSettings, resetAllData, setCoachTone, updateSettings } from '@/db/repo'
-import type { CoachMemory } from '@/db/types'
+import { Download, Upload, RefreshCw, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
+import {
+  getCoachMemory,
+  getGoals,
+  getSettings,
+  resetAllData,
+  resetGoalToBase,
+  setCoachTone,
+  setGoalActive,
+  updateCoachMemory,
+  updateSettings,
+} from '@/db/repo'
+import type { CoachMemory, Goal } from '@/db/types'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { ThemeSettings } from '@/components/ThemeSettings'
@@ -15,15 +25,26 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Toggle } from '@/components/ui/Toggle'
+import { Field, Input } from '@/components/ui/Input'
+import { cn } from '@/lib/utils'
 
 const COACH_TONES: CoachMemory['tone'][] = ['motivating', 'casual', 'strict']
 
 type PendingAction = { kind: 'import'; json: string } | { kind: 'reset' }
 type Feedback = { kind: 'success' | 'error'; text: string }
 
+/** Anzeige-Reihenfolge der Ziele: Makros zuerst, danach Coach-Nährstoffe (sugar, …). */
+const GOAL_ORDER = ['kcal', 'protein', 'carbs', 'fat']
+
+/** Kommaseparierte Eingabe → getrimmte, deduplizierte Tag-Liste (Befund 14). */
+function parseTags(value: string): string[] {
+  return [...new Set(value.split(',').map((s) => s.trim()).filter(Boolean))]
+}
+
 export function Profile({ onReset }: { onReset: () => void }) {
   const { t } = useTranslation()
-  const goals = useLiveQuery(() => getActiveGoalsMap(), [])
+  // Alle (auch deaktivierte) Ziele — die Liste ist jetzt Verwaltung, nicht nur Anzeige (Befund 3).
+  const goals = useLiveQuery(() => getGoals(), [])
   const settings = useLiveQuery(() => getSettings(), [])
   const coachMemory = useLiveQuery(() => getCoachMemory(), [])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -72,7 +93,14 @@ export function Profile({ onReset }: { onReset: () => void }) {
     }
   }
 
-  const order = ['kcal', 'protein', 'carbs', 'fat']
+  // Makros in fester Reihenfolge, weitere Nährstoffe (Coach-Ziele) dahinter.
+  const sortedGoals = (goals ?? [])
+    .slice()
+    .sort((a, b) => {
+      const ia = GOAL_ORDER.indexOf(a.nutrient)
+      const ib = GOAL_ORDER.indexOf(b.nutrient)
+      return (ia === -1 ? GOAL_ORDER.length : ia) - (ib === -1 ? GOAL_ORDER.length : ib)
+    })
 
   return (
     <div className="space-y-6">
@@ -82,17 +110,9 @@ export function Profile({ onReset }: { onReset: () => void }) {
         <Card className="space-y-2 p-4">
           <h2 className="font-semibold">{t('profile.yourGoals')}</h2>
           <ul className="divide-y divide-border">
-            {order
-              .filter((k) => goals[k])
-              .map((k) => (
-                <li key={k} className="flex justify-between py-2 text-sm">
-                  <span className="text-muted-foreground">{t(`today.macros.${k}`)}</span>
-                  <span className="font-medium tabular-nums">
-                    {goals[k].target}
-                    {goals[k].targetMax ? `–${goals[k].targetMax}` : ''} {goals[k].unit}
-                  </span>
-                </li>
-              ))}
+            {sortedGoals.map((g) => (
+              <GoalRow key={g.id} goal={g} />
+            ))}
           </ul>
         </Card>
       )}
@@ -133,6 +153,26 @@ export function Profile({ onReset }: { onReset: () => void }) {
               onClick={() => void setCoachTone(tone)}
             />
           ))}
+        </div>
+
+        {/* Vorlieben fürs Coach-Gedächtnis (Befund 14): kommasepariert, gespeichert beim Verlassen.
+            key remountet die unkontrollierten Inputs, sobald die Memory geladen ist. */}
+        <div key={coachMemory === undefined ? 'loading' : 'ready'} className="grid gap-3 border-t border-border pt-3">
+          <Field label={t('profile.likes')}>
+            <Input
+              defaultValue={(coachMemory?.likes ?? []).join(', ')}
+              placeholder={t('profile.likesPh')}
+              onBlur={(e) => void updateCoachMemory({ likes: parseTags(e.target.value) })}
+            />
+          </Field>
+          <Field label={t('profile.dislikes')}>
+            <Input
+              defaultValue={(coachMemory?.dislikes ?? []).join(', ')}
+              placeholder={t('profile.dislikesPh')}
+              onBlur={(e) => void updateCoachMemory({ dislikes: parseTags(e.target.value) })}
+            />
+          </Field>
+          <p className="text-xs text-muted-foreground">{t('profile.likesHint')}</p>
         </div>
       </Card>
 
@@ -248,5 +288,71 @@ export function Profile({ onReset }: { onReset: () => void }) {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+/**
+ * Ziel-Zeile mit Herkunfts-Badge, Aktiv-Schalter und — für Coach-Ziele —
+ * „Auf Basiswert zurücksetzen" (Befund 3: Coach-Ziele sind keine Einbahnstraße mehr).
+ */
+function GoalRow({ goal }: { goal: Goal }) {
+  const { t } = useTranslation()
+  const label = GOAL_ORDER.includes(goal.nutrient)
+    ? t(`today.macros.${goal.nutrient}`)
+    : t(`nutrients.names.${goal.nutrient}`, { defaultValue: goal.nutrient })
+
+  return (
+    <li className="flex items-center justify-between gap-2 py-1.5 text-sm">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={cn('truncate', goal.active ? 'text-muted-foreground' : 'text-muted-foreground/60 line-through')}>
+          {label}
+        </span>
+        {goal.createdBy === 'coach' && (
+          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+            {t('profile.goalByCoach')}
+          </span>
+        )}
+        {!goal.active && (
+          <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t('profile.goalInactive')}
+          </span>
+        )}
+      </span>
+      <span className="flex shrink-0 items-center gap-1">
+        <span className={cn('font-medium tabular-nums', !goal.active && 'text-muted-foreground/60')}>
+          {goal.target}
+          {goal.targetMax ? `–${goal.targetMax}` : ''} {goal.unit}
+        </span>
+        {goal.createdBy === 'coach' && (
+          <button
+            onClick={() => void resetGoalToBase(goal.nutrient)}
+            aria-label={t('profile.goalReset', { name: label })}
+            title={t('profile.goalReset', { name: label })}
+            className="focus-ring flex h-12 w-12 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+          >
+            <RotateCcw size={18} />
+          </button>
+        )}
+        <button
+          role="switch"
+          aria-checked={goal.active}
+          aria-label={t('profile.goalActiveToggle', { name: label })}
+          onClick={() => void setGoalActive(goal.id, !goal.active)}
+          className="focus-ring flex h-12 w-12 items-center justify-center"
+        >
+          <span
+            className={cn(
+              'flex h-6 w-10 items-center rounded-full p-0.5 transition-colors',
+              goal.active ? 'bg-primary-fill' : 'bg-muted-foreground',
+            )}
+          >
+            <span
+              className="h-5 w-5 rounded-full bg-card shadow-sm transition-[margin]"
+              style={{ marginLeft: goal.active ? 'auto' : 0 }}
+            />
+          </span>
+        </button>
+      </span>
+    </li>
   )
 }

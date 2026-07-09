@@ -1,4 +1,4 @@
-import type { AiItem } from './ai'
+import type { AiItem, AnalyzeMode } from './ai'
 import type { Meal, Unit } from '@/db/types'
 
 /**
@@ -14,12 +14,44 @@ export interface ReviewPayload {
   allergens?: string[] // OFF-Allergen-Tags (bei Barcode-Produkten)
   traces?: string[] // OFF-Spuren-Tags („kann Spuren enthalten")
   notes?: string // freie Hinweise der KI zum Ergebnis (AnalyzeResult.notes)
+  // --- KI-Verfeinerungsschleife (Paket B) ---
+  /** Analyse-Modus des Ursprungs-Requests — für „Neu schätzen" im Review. */
+  mode?: AnalyzeMode
+  /** Bisheriger Hint an die KI; wird beim Verfeinern mit der Zusatzinfo kombiniert. */
+  hint?: string
+  /** Analysiertes Bild (bereits verkleinert, ~1024 px q0.7) für die Neu-Schätzung. */
+  imageBase64?: string
+  /** Kurze Rückfragen der KI (AnalyzeResult.questions) — als Chips antippbar. */
+  questions?: string[]
 }
 
 const KEY = 'nt-review'
 
+/**
+ * Payload speichern — quota-tolerant (Muster chatStore.saveChat): schlägt das
+ * Schreiben fehl (sessionStorage voll, Bild-Daten), wird zuerst `imageBase64`
+ * (nur für die Verfeinerung nötig — der Refine-Abschnitt blendet sich dann
+ * einfach aus), notfalls auch `photo` verworfen. Items/Meta gehen nie verloren.
+ */
 export function setReview(payload: ReviewPayload) {
-  sessionStorage.setItem(KEY, JSON.stringify(payload))
+  try {
+    sessionStorage.setItem(KEY, JSON.stringify(payload))
+  } catch {
+    try {
+      const { imageBase64, ...withoutRefineImage } = payload
+      void imageBase64
+      sessionStorage.setItem(KEY, JSON.stringify(withoutRefineImage))
+    } catch {
+      try {
+        const { imageBase64, photo, ...bare } = payload
+        void imageBase64
+        void photo
+        sessionStorage.setItem(KEY, JSON.stringify(bare))
+      } catch {
+        // Selbst der Rest passt nicht — flüchtiger Arbeitszustand, kein Crash.
+      }
+    }
+  }
 }
 
 export function getReview(): ReviewPayload | null {

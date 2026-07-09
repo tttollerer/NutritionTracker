@@ -12,6 +12,13 @@ export const MODE_KEY = 'nt-theme-mode'
 export const VARIANT_KEY = 'nt-theme-variant'
 const LEGACY_KEY = 'nt-theme'
 
+/**
+ * Window-Event, mit dem außerhalb des Providers gesetzte Theme-Werte
+ * (z. B. Backup-Import schreibt localStorage) angekündigt werden — der
+ * ThemeProvider liest die Storage-Werte dann neu ein.
+ */
+export const THEME_RESTORED_EVENT = 'nt-theme-restored'
+
 export function resolveMode(mode: ThemeMode, systemDark: boolean): 'light' | 'dark' {
   return mode === 'system' ? (systemDark ? 'dark' : 'light') : mode
 }

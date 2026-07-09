@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Trash2, Trophy } from 'lucide-react'
+import { Trash2, Trophy, Wallet } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Photo } from '@/db/types'
 import { deleteLog, getActiveGoalsMap, getAllergies, getSettings, restoreLog } from '@/db/repo'
@@ -10,7 +10,10 @@ import { useOverlays } from '@/lib/overlays-context'
 import { EditLogSheet } from '@/components/EditLogSheet'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { activeChallenges, evaluateChallenge } from '@/lib/challenges'
-import { todayKey } from '@/lib/utils'
+import { sumsByDate } from '@/lib/gamification'
+import { overridesFromGoals } from '@/lib/deficit'
+import { useTodayKey } from '@/hooks/useTodayKey'
+import { formatEuro, sumCost } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
 import { macroColor } from '@/lib/macroColor'
 import { ProgressRing } from '@/components/ProgressRing'
@@ -26,7 +29,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 
 export function Today() {
   const { t } = useTranslation()
-  const date = todayKey()
+  const date = useTodayKey() // reaktiv über Mitternacht (Befund 1)
   const { showUndo } = useOverlays()
   const [editing, setEditing] = useState<LogEntry | null>(null)
 
@@ -82,6 +85,9 @@ export function Today() {
     { kcal: 0, protein: 0, carbs: 0, fat: 0 },
   )
 
+  // Haushaltskasse: Summe der Kosten-Snapshots des Tages (nur zeigen, wenn > 0).
+  const dayCost = sumCost(logs)
+
   const kcalGoal = goals.kcal?.target ?? 2200
   const weightKg = profile?.weightKg
   const macros = [
@@ -91,13 +97,25 @@ export function Today() {
   ] as const
 
   // Zielabhängiges kcal-Framing: beim Zunehmen ist „mehr" gewollt → „noch bis Ziel".
+  // Überschreitung sichtbar machen (Befund 7): statt bei 0 kcal übrig zu klemmen,
+  // zeigt das Sublabel „X kcal über Ziel" und der Ring wechselt in den over-Zustand.
   const kcalDiff = Math.round(kcalGoal - sum.kcal)
+  const kcalOver = profile?.goal !== 'gain' && kcalDiff < 0
   const kcalSublabel =
     profile?.goal === 'gain'
       ? kcalDiff > 0
         ? t('today.kcalToGoal', { count: kcalDiff })
         : t('today.kcalReached')
-      : t('today.kcalLeft', { count: Math.max(0, kcalDiff) })
+      : kcalOver
+        ? t('today.kcalOver', { count: -kcalDiff })
+        : t('today.kcalLeft', { count: kcalDiff })
+
+  // Übernommene Coach-Ziele für sugar/sodium (Limits) bzw. fiber (Min-Ziel)
+  // in die Nährstoff-Anzeigen einspeisen (Vertrag v1.2).
+  const { limitOverrides, benefitOverrides } = overridesFromGoals(goals)
+
+  // Tages-Summen inkl. getrackter micros (sugar/fiber/sodium) für Challenges.
+  const challengeSums = sumsByDate(logs)
 
   return (
     <div className="space-y-6">
@@ -115,6 +133,8 @@ export function Today() {
         vegan={profile?.dietForms.includes('vegan')}
         allergies={allergies}
         sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
+        limitOverrides={limitOverrides}
+        benefitOverrides={benefitOverrides}
       />
 
       {/* Aktive Coach-Challenges kompakt anzeigen (Details & Aktionen: Erfolge). */}
@@ -125,7 +145,7 @@ export function Today() {
             {t('today.challenges')}
           </h2>
           {challenges.map((c) => {
-            const p = evaluateChallenge(c, { [date]: sum }, date)
+            const p = evaluateChallenge(c, challengeSums, date)
             const dayProgress = p?.kind === 'day' ? p : null
             return (
               <div key={c.id} className="space-y-1">
@@ -159,6 +179,7 @@ export function Today() {
           max={kcalGoal}
           label={String(Math.round(sum.kcal))}
           sublabel={kcalSublabel}
+          over={kcalOver}
         />
       </div>
 
@@ -195,6 +216,15 @@ export function Today() {
             </div>
           )
         })}
+        {/* Dezente Essenskosten-Zeile (Haushaltskasse) — nur mit Preisdaten. */}
+        {dayCost > 0 && (
+          <p className="flex items-center justify-between border-t border-border pt-3 text-sm">
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              <Wallet size={16} aria-hidden="true" /> {t('today.foodCost')}
+            </span>
+            <span className="tabular-nums font-medium">{formatEuro(dayCost)}</span>
+          </p>
+        )}
       </Card>
 
       <NutrientPanel
@@ -205,6 +235,8 @@ export function Today() {
         vegan={profile?.dietForms.includes('vegan')}
         allergies={allergies}
         sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
+        limitOverrides={limitOverrides}
+        benefitOverrides={benefitOverrides}
       />
 
       {settings?.bloodSugar && <GlucoseCard unit={settings.glucoseUnit} date={date} />}

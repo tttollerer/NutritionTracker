@@ -3,6 +3,8 @@ import { db } from './index'
 import type { CoachMemory, FoodItem, GlucoseContext, GlucoseReading, Goal, LogEntry, Meal, Measurement, Profile, Settings, Unit } from './types'
 import { computeTargets, kcalFloor } from '@/lib/nutrition'
 import { todayKey } from '@/lib/utils'
+import { clearChat } from '@/lib/chatStore'
+import { clearReview } from '@/lib/reviewStore'
 
 const now = () => Date.now()
 
@@ -143,6 +145,39 @@ export async function getActiveGoalsMap() {
   return Object.fromEntries(goals.map((g) => [g.nutrient, g]))
 }
 
+/** ALLE (nicht gelöschten) Ziele — auch deaktivierte, für die Ziel-Verwaltung im Profil. */
+export async function getGoals(): Promise<Goal[]> {
+  return db.goals.filter((g) => !g.deletedAt).toArray()
+}
+
+/** Ziel aktivieren/deaktivieren (Profil-Screen, Befund 3). */
+export async function setGoalActive(id: string, active: boolean) {
+  await db.goals.update(id, { active, updatedAt: now() })
+}
+
+/**
+ * Coach-Anpassung eines Ziels zurücknehmen (Befund 3 „Einbahnstraße"):
+ * alle Ziele des Nährstoffs werden getombstoned und — falls es ein
+ * Basis-Nährstoff ist (kcal/protein/carbs/fat) — das Basis-Ziel aus dem
+ * Profil neu abgeleitet (gleiche Ableitung wie saveOnboarding/updateProfile).
+ * Für reine Coach-Nährstoffe (z. B. sugar) bleibt danach schlicht kein Ziel:
+ * die Anzeige fällt auf die Katalog-Referenz (nutrients.ts) zurück.
+ */
+export async function resetGoalToBase(nutrient: string): Promise<void> {
+  await db.transaction('rw', db.profile, db.goals, async () => {
+    const stale = await db.goals.filter((g) => g.nutrient === nutrient && !g.deletedAt).toArray()
+    for (const g of stale) {
+      await db.goals.update(g.id, { active: false, deletedAt: now(), updatedAt: now() })
+    }
+    const profile = await db.profile.get('me')
+    if (!profile) return
+    const base = baseGoals(profile).find((g) => g.nutrient === nutrient)
+    // put überschreibt ggf. den soeben getombstoneten `base-<nutrient>`-Datensatz
+    // mit einem frischen aktiven Basis-Ziel (createdBy 'user').
+    if (base) await db.goals.put(base)
+  })
+}
+
 export interface NewFoodInput {
   name: string
   per: 'g' | 'ml'
@@ -158,9 +193,24 @@ export interface NewFoodInput {
 }
 
 /**
+ * Quellen-Hierarchie für den Upsert (Erwartungs-Audit Befund 6): gepflegte
+ * Werte dürfen nicht von schlechteren Quellen überschrieben werden —
+ * manual > openfoodfacts/usda (Datenbank) > ai (Schätzung).
+ */
+const SOURCE_RANK: Record<FoodItem['source'], number> = {
+  manual: 3,
+  openfoodfacts: 2,
+  usda: 2,
+  ai: 1,
+}
+
+/**
  * Lebensmittel im Katalog anlegen — mit Dedupe: existiert bereits ein Eintrag mit
  * gleichem Barcode (oder ersatzweise gleichem Namen), wird dieser aktualisiert
  * (Upsert) statt ein Duplikat zu erzeugen. defaultPortion des Treffers bleibt erhalten.
+ * Werte werden nur überschrieben, wenn die neue Quelle in der Hierarchie
+ * mindestens gleichwertig ist (SOURCE_RANK) — ein KI-Scan lässt z. B. ein
+ * OFF-/manuell gepflegtes Item unangetastet und loggt mit dessen Werten.
  */
 export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   const name = input.name.trim()
@@ -185,6 +235,15 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
   }
 
   if (existing) {
+    // Quellen-Hierarchie: schlechtere Quelle (z. B. 'ai' auf OFF-/manuellen
+    // Bestand) überschreibt NICHTS — der Aufrufer loggt mit den gepflegten
+    // Bestandswerten weiter. Ohne explizite Quelle gilt der Input als manuell.
+    if (SOURCE_RANK[input.source ?? 'manual'] < SOURCE_RANK[existing.source]) {
+      return existing
+    }
+    // Spread-Reihenfolge bewusst: nur Name/Nährwerte/Quelle werden aktualisiert —
+    // nutzergepflegte Felder des Bestands-Items (favorite, pantry, defaultPortion,
+    // price) bleiben erhalten, weil `values` sie nie enthält.
     const updated: FoodItem = {
       ...existing,
       ...values,
@@ -328,12 +387,16 @@ export async function applyGoalSuggestion(s: {
   }
 }
 
-/** Vom Coach vorgeschlagene Challenge als aktiv anlegen. */
-export async function applyChallengeSuggestion(s: { title: string; period: 'day' | 'week' }) {
+/**
+ * Vom Coach vorgeschlagene Challenge als aktiv anlegen. `rule` (Vertrag v1.2,
+ * Format von parseChallengeRule in src/lib/challenges.ts) wird persistiert und
+ * macht die Challenge automatisch auswertbar; ohne rule bleibt sie manuell.
+ */
+export async function applyChallengeSuggestion(s: { title: string; period: 'day' | 'week'; rule?: unknown }) {
   await db.challenges.put({
     id: uuid(),
     title: s.title,
-    rule: {},
+    rule: s.rule ?? {},
     period: s.period,
     status: 'active',
     createdBy: 'coach',
@@ -395,14 +458,24 @@ export async function logFood(args: {
     amount,
     unit,
     computed: computeLogValues(food, amount, unit),
+    // Kosten-Snapshot (EUR) — nur wenn ein Packungspreis hinterlegt ist.
+    cost: computeCost(food, amount, unit),
     photoBlobId,
     updatedAt: now(),
   }
+  if (entry.cost === undefined) delete entry.cost // kein Leer-Feld persistieren
   await db.logs.put(entry)
   // Übliche Portion nur für konkrete Mengen (g/ml) merken — eine 'portion'-Menge
   // würde sonst beim nächsten Loggen erneut mit der Portionsgröße multipliziert.
+  // Das Portions-Label bleibt nur erhalten, wenn Menge & Einheit unverändert
+  // sind („1 Tasse (80 g)" wäre bei 50 g nicht mehr wahr).
   if (unit !== 'portion') {
-    await db.foods.update(food.id, { defaultPortion: { amount, unit }, updatedAt: now() })
+    const prev = food.defaultPortion
+    const keepLabel = prev?.label && prev.amount === amount && prev.unit === unit
+    await db.foods.update(food.id, {
+      defaultPortion: { amount, unit, ...(keepLabel ? { label: prev.label } : {}) },
+      updatedAt: now(),
+    })
   }
   return entry
 }
@@ -422,6 +495,18 @@ function computeLogValues(food: FoodItem, amount: number, unit: Unit): LogEntry[
     fat: round1(food.fat * factor),
     micros: scaleMicros(food.micros, factor),
   }
+}
+
+/**
+ * Kosten (EUR) einer verzehrten Menge aus dem Packungspreis des Lebensmittels —
+ * Menge / Packungsgröße * Packungspreis, auf Cent gerundet. Ohne (gültigen)
+ * Preis: undefined — die Haushaltskasse ist strikt optional.
+ */
+export function computeCost(food: FoodItem, amount: number, unit: Unit): number | undefined {
+  const price = food.price
+  if (!price || !(price.per > 0) || !(price.amount >= 0)) return undefined
+  const grams = unit === 'portion' ? (food.defaultPortion?.amount ?? 100) * amount : amount
+  return Math.round((grams / price.per) * price.amount * 100) / 100
 }
 
 /**
@@ -447,8 +532,10 @@ export async function updateLog(
       // Ohne Food (sollte nicht vorkommen) bleibt der alte Snapshot stehen,
       // statt Werte aus der Luft zu greifen.
       computed: food ? computeLogValues(food, amount, unit) : entry.computed,
+      cost: food ? computeCost(food, amount, unit) : entry.cost,
       updatedAt: now(),
     }
+    if (updated.cost === undefined) delete updated.cost // kein Leer-Feld persistieren
     await db.logs.put(updated)
     return updated
   })
@@ -493,6 +580,100 @@ export async function favoriteFoods(): Promise<FoodItem[]> {
   return foods.sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }
 
+// ---- „Mein Vorrat" (Pantry/Warenkorb) + Haushaltskasse ----
+
+/**
+ * Vorrat-Flag setzen/entfernen. Wie beim Favoriten-Stern: nicht indiziert,
+ * beim Abwählen wird das Feld ganz gelöscht (Dexie entfernt undefined-Properties),
+ * damit die Datensätze sync-sauber bleiben.
+ */
+export async function setPantry(foodId: string, on: boolean): Promise<void> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return
+  await db.foods.update(foodId, { pantry: on || undefined, updatedAt: now() })
+}
+
+/** Alle Vorrats-Lebensmittel, zuletzt aktualisierte zuerst (frischer Einkauf oben). */
+export async function pantryFoods(): Promise<FoodItem[]> {
+  const foods = await db.foods.filter((f) => !f.deletedAt && !!f.pantry).toArray()
+  return foods.sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/**
+ * Packungspreis (Haushaltskasse) setzen oder mit `undefined` entfernen —
+ * additiv/optional, ohne Preis wird schlicht kein Kostenwert berechnet.
+ */
+export async function setFoodPrice(foodId: string, price?: { amount: number; per: number }): Promise<void> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return
+  const valid = price && price.amount >= 0 && price.per > 0
+  await db.foods.update(foodId, { price: valid ? price : undefined, updatedAt: now() })
+}
+
+/**
+ * Einkauf in den Vorrat legen: Katalog-Upsert (createFood-Dedupe per Barcode/Name)
+ * + pantry=true — bewusst OHNE LogEntry. Optional wird eine übliche Portion
+ * gemerkt (nur konkrete g/ml-Mengen, gleiche Regel wie logFood).
+ */
+export async function addToPantry(
+  input: NewFoodInput,
+  portion?: { amount: number; unit: Unit; label?: string },
+): Promise<FoodItem> {
+  const food = await createFood(input)
+  const patch: Partial<FoodItem> = { pantry: true, updatedAt: now() }
+  if (portion && portion.unit !== 'portion' && portion.amount > 0) {
+    patch.defaultPortion = {
+      amount: portion.amount,
+      unit: portion.unit,
+      ...(portion.label?.trim() ? { label: portion.label.trim() } : {}),
+    }
+  }
+  await db.foods.update(food.id, patch)
+  return { ...food, ...patch }
+}
+
+/** Geprüftes Item aus dem Review-Screen (strukturkompatibel zu AiItem). */
+export interface PantryReviewItem {
+  name: string
+  amount: number
+  unit: Unit
+  per100: { kcal: number; protein: number; carbs: number; fat: number; micros?: Record<string, number> }
+}
+
+/**
+ * „Nur in den Vorrat" (Label-/Foto-Flow): alle geprüften Items als FoodItems
+ * upserten (pantry=true), die eingestellte Menge als defaultPortion merken —
+ * es entstehen KEINE LogEntries. Gibt die Foods zurück (Undo: Vorrat-Flag weg).
+ */
+export async function saveReviewToPantry(
+  items: PantryReviewItem[],
+  meta: { source?: FoodItem['source']; barcode?: string; allergens?: string[]; traces?: string[] } = {},
+): Promise<FoodItem[]> {
+  const out: FoodItem[] = []
+  for (const it of items) {
+    const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
+    out.push(
+      await addToPantry(
+        {
+          name: it.name,
+          per,
+          kcal: it.per100.kcal,
+          protein: it.per100.protein,
+          carbs: it.per100.carbs,
+          fat: it.per100.fat,
+          micros: it.per100.micros,
+          allergens: meta.allergens,
+          traces: meta.traces,
+          source: meta.source,
+          barcode: meta.barcode,
+        },
+        { amount: it.amount, unit: it.unit },
+      ),
+    )
+  }
+  return out
+}
+
 /**
  * Match-Regel der Katalog-Suche: case-insensitives „Name enthält Suchbegriff"
  * (getrimmt). Als pure Funktion exportiert, damit sie direkt testbar ist.
@@ -522,12 +703,16 @@ function previousDayKey(dateKey: string): string {
   return todayKey(dt)
 }
 
-/** Anzahl gestriger (nicht gelöschter) Einträge — steuert den „Gestern kopieren"-Button. */
-export async function yesterdayLogCount(targetDate = todayKey()): Promise<number> {
+/**
+ * Anzahl gestriger (nicht gelöschter) Einträge — steuert den „Gestern kopieren"-
+ * Button. Mit `meal` nur die Einträge dieser Mahlzeit (Befund 11: der Button
+ * kopiert kontextbezogen die gewählte Mahlzeit).
+ */
+export async function yesterdayLogCount(targetDate = todayKey(), meal?: Meal): Promise<number> {
   return db.logs
     .where('date')
     .equals(previousDayKey(targetDate))
-    .filter((l) => !l.deletedAt)
+    .filter((l) => !l.deletedAt && (!meal || l.meal === meal))
     .count()
 }
 
@@ -598,9 +783,16 @@ export async function undoLastWater(date = todayKey()) {
   if (last) await db.water.delete(last.id)
 }
 
-/** ALLE Stores leeren (kompletter Reset, z. B. „Onboarding erneut"). */
+/**
+ * ALLE Stores leeren (kompletter Reset, z. B. „Onboarding erneut").
+ * Zusätzlich die sessionStorage-Zwischenstände räumen (Befund 13): Coach-Chat
+ * (chatStore) und Prüf-Screen-Payload (reviewStore) würden sonst den Reset
+ * überleben und den „frischen" Zustand mit Altdaten füllen.
+ */
 export async function resetAllData() {
   await db.transaction('rw', db.tables, async () => {
     await Promise.all(db.tables.map((t) => t.clear()))
   })
+  clearChat()
+  clearReview()
 }

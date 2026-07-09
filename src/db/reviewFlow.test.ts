@@ -83,17 +83,32 @@ describe('Review-Lernschleife: Katalog-Match beim Übernehmen', () => {
     expect(await findFoodByName('   ')).toBeUndefined()
   })
 
-  it('Übernehmen-Pfad aktualisiert den Katalog-Treffer statt ein Duplikat anzulegen', async () => {
-    // Bekanntes Produkt mit gemerkter Portion …
+  it('Übernehmen-Pfad matcht den Katalog-Treffer statt ein Duplikat anzulegen — KI überschreibt gepflegte Werte NICHT (Befund 6)', async () => {
+    // Bekanntes, manuell gepflegtes Produkt mit gemerkter Portion …
     const known = await createFood({ name: 'Haferflocken', per: 'g', kcal: 370, protein: 13, carbs: 59, fat: 7 })
     await logFood({ food: known, date: '2026-07-04', meal: 'breakfast', amount: 50, unit: 'g' })
 
-    // … KI erkennt dasselbe Lebensmittel (andere Schreibweise, leicht andere Werte).
+    // … KI erkennt dasselbe Lebensmittel (andere Schreibweise, leicht andere Schätzwerte).
+    const fromReview = await createFood({ name: 'haferflocken', per: 'g', kcal: 372, protein: 13.5, carbs: 58, fat: 7, source: 'ai' })
+
+    // Kein Duplikat — der Log-Pfad nutzt den Bestands-Datensatz …
+    expect(fromReview.id).toBe(known.id)
+    expect(await db.foods.filter((f) => !f.deletedAt).count()).toBe(1)
+    // … und zwar mit den GEPFLEGTEN Werten: Quellen-Hierarchie manual > ai,
+    // die KI-Schätzung überschreibt den Katalog-Treffer nicht mehr.
+    expect(fromReview).toMatchObject({ kcal: 370, protein: 13, source: 'manual' })
+    const stored = await db.foods.get(known.id)
+    expect(stored).toMatchObject({ kcal: 370, protein: 13, source: 'manual' })
+    expect(stored!.defaultPortion).toEqual({ amount: 50, unit: 'g' })
+  })
+
+  it('Übernehmen-Pfad aktualisiert ein KI-Item weiterhin (ai über ai)', async () => {
+    const known = await createFood({ name: 'Haferflocken', per: 'g', kcal: 370, protein: 13, carbs: 59, fat: 7, source: 'ai' })
+    await logFood({ food: known, date: '2026-07-04', meal: 'breakfast', amount: 50, unit: 'g' })
+
     const fromReview = await createFood({ name: 'haferflocken', per: 'g', kcal: 372, protein: 13.5, carbs: 58, fat: 7, source: 'ai' })
 
     expect(fromReview.id).toBe(known.id)
-    expect(await db.foods.filter((f) => !f.deletedAt).count()).toBe(1)
-    // Werte aktualisiert, gemerkte Portion überlebt den Upsert:
     const stored = await db.foods.get(known.id)
     expect(stored).toMatchObject({ kcal: 372, protein: 13.5 })
     expect(stored!.defaultPortion).toEqual({ amount: 50, unit: 'g' })

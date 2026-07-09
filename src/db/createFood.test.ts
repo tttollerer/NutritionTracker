@@ -80,3 +80,92 @@ describe('createFood Dedupe', () => {
     expect(await db.foods.count()).toBe(2)
   })
 })
+
+describe('createFood Quellen-Hierarchie (Befund 6: manual > OFF/USDA > ai)', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()))
+  })
+
+  it('KI-Scan überschreibt ein OFF-Item NICHT (gepflegte Werte bleiben)', async () => {
+    const off = await createFood({
+      name: 'Skyr Natur',
+      per: 'g',
+      kcal: 63,
+      protein: 11,
+      carbs: 4,
+      fat: 0.2,
+      micros: { calcium: 150 },
+      source: 'openfoodfacts',
+    })
+
+    const result = await createFood({
+      name: 'Skyr Natur',
+      per: 'g',
+      kcal: 90,
+      protein: 8,
+      carbs: 6,
+      fat: 2,
+      source: 'ai',
+    })
+
+    // Name-Match liefert das Bestands-Item mit den gepflegten Werten zurück …
+    expect(result.id).toBe(off.id)
+    expect(result.kcal).toBe(63)
+    // … und auch in der DB ist nichts überschrieben.
+    const stored = await db.foods.get(off.id)
+    expect(stored).toMatchObject({ kcal: 63, protein: 11, source: 'openfoodfacts' })
+    expect(stored!.micros).toEqual({ calcium: 150 })
+    expect(await db.foods.count()).toBe(1)
+  })
+
+  it('KI-Scan überschreibt ein manuell gepflegtes Item NICHT', async () => {
+    const manual = await createFood({ name: 'Omas Eintopf', per: 'g', kcal: 120, protein: 7, carbs: 9, fat: 5 })
+    const result = await createFood({ name: 'Omas Eintopf', per: 'g', kcal: 200, protein: 3, carbs: 20, fat: 10, source: 'ai' })
+    expect(result.id).toBe(manual.id)
+    expect((await db.foods.get(manual.id))!).toMatchObject({ kcal: 120, source: 'manual' })
+  })
+
+  it('OFF-Scan überschreibt ein manuell gepflegtes Item NICHT (manual ist oberste Stufe)', async () => {
+    const manual = await createFood({ name: 'Skyr Natur', per: 'g', kcal: 65, protein: 12, carbs: 4, fat: 0.2 })
+    const result = await createFood({
+      name: 'Skyr Natur',
+      per: 'g',
+      kcal: 63,
+      protein: 11,
+      carbs: 4,
+      fat: 0.2,
+      source: 'openfoodfacts',
+    })
+    expect(result.id).toBe(manual.id)
+    expect((await db.foods.get(manual.id))!).toMatchObject({ kcal: 65, protein: 12, source: 'manual' })
+  })
+
+  it('OFF-Scan aktualisiert ein KI-Item (bessere Quelle gewinnt)', async () => {
+    const ai = await createFood({ name: 'Skyr Natur', per: 'g', kcal: 90, protein: 8, carbs: 6, fat: 2, source: 'ai' })
+
+    const result = await createFood({
+      name: 'Skyr Natur',
+      per: 'g',
+      kcal: 63,
+      protein: 11,
+      carbs: 4,
+      fat: 0.2,
+      barcode: '4012345678901',
+      source: 'openfoodfacts',
+    })
+
+    expect(result.id).toBe(ai.id)
+    expect(await db.foods.get(ai.id)).toMatchObject({
+      kcal: 63,
+      protein: 11,
+      source: 'openfoodfacts',
+      barcode: '4012345678901',
+    })
+  })
+
+  it('gleiche Quelle aktualisiert weiterhin (ai über ai, OFF über OFF)', async () => {
+    const ai = await createFood({ name: 'Bowl', per: 'g', kcal: 150, protein: 5, carbs: 20, fat: 4, source: 'ai' })
+    await createFood({ name: 'Bowl', per: 'g', kcal: 160, protein: 6, carbs: 21, fat: 4, source: 'ai' })
+    expect((await db.foods.get(ai.id))!.kcal).toBe(160)
+  })
+})
