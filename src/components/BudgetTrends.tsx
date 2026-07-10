@@ -4,7 +4,7 @@ import { Tag, Wallet } from 'lucide-react'
 import { db } from '@/db'
 import { getSettings } from '@/db/repo'
 import type { FoodItem } from '@/db/types'
-import { budgetProgress, costsByTag, kcalPrice, proteinPricePerFood, topCostTags, UNTAGGED, type FoodPriceRank } from '@/lib/budget'
+import { budgetProgress, costsByTag, kcalPrice, mondayKeyOf, proteinPricePerFood, topCostTags, UNTAGGED, type FoodPriceRank } from '@/lib/budget'
 import { costByDate, formatEuro } from '@/lib/money'
 import { lastNDayKeys } from '@/lib/insights'
 import { useTodayKey } from '@/hooks/useTodayKey'
@@ -62,7 +62,13 @@ export function BudgetTrends() {
   const costDays = days7.filter((d) => costs[d] != null)
   const weekCost = Math.round(costDays.reduce((a, d) => a + costs[d], 0) * 100) / 100
   const avgCost = costDays.length ? weekCost / costDays.length : 0
-  const budget = budgetProgress(weekCost, settings.weeklyBudget)
+  // Budget-Ampel gegen die KALENDERWOCHE (Mo–heute) wie auf der Woche-Seite —
+  // das rollierende 7-Tage-Fenster der Balken überlappt sonst zwei Budget-Wochen
+  // und widerspräche der Anzeige dort.
+  const weekStart = mondayKeyOf(today)
+  const calendarWeekCost =
+    Math.round(days7.filter((d) => d >= weekStart).reduce((a, d) => a + (costs[d] ?? 0), 0) * 100) / 100
+  const budget = budgetProgress(calendarWeekCost, settings.weeklyBudget)
 
   const tagCosts = topCostTags(costsByTag(logs, foods), TOP_TAGS)
   const proteinRank = proteinPricePerFood(rankFoods).slice(0, TOP_RANKED)
@@ -110,10 +116,10 @@ export function BudgetTrends() {
             <span className="font-mono font-medium tabular-nums">Ø {formatEuro(avgCost)}</span>
           </div>
           <div className="flex items-baseline justify-between text-sm">
+            {/* Rollierende 7-Tage-Summe — die Budget-Ampel darunter bewertet
+                dagegen die Kalenderwoche, daher hier keine Warnfarbe. */}
             <span className="text-muted-foreground">{t('trends.budget.weekSum')}</span>
-            <span className={cn('font-mono font-medium tabular-nums', budget?.over && 'text-warning-text')}>
-              {formatEuro(weekCost)}
-            </span>
+            <span className="font-mono font-medium tabular-nums">{formatEuro(weekCost)}</span>
           </div>
           {budget && (
             <div className="space-y-1">
@@ -124,7 +130,7 @@ export function BudgetTrends() {
                 />
               </div>
               <p className="text-xs tabular-nums text-muted-foreground">
-                {t('budget.spentOfBudget', { spent: formatEuro(weekCost), budget: formatEuro(settings.weeklyBudget!) })}
+                {t('budget.spentOfBudget', { spent: formatEuro(calendarWeekCost), budget: formatEuro(settings.weeklyBudget!) })}
                 {' · '}
                 <span className={cn(budget.over && 'font-medium text-warning-text')}>
                   {t(budget.over ? 'budget.over' : 'budget.left', { amount: formatEuro(budget.diff) })}

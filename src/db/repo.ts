@@ -585,12 +585,19 @@ export async function favoriteFoods(): Promise<FoodItem[]> {
 /**
  * Vorrat-Flag setzen/entfernen. Wie beim Favoriten-Stern: nicht indiziert,
  * beim Abwählen wird das Feld ganz gelöscht (Dexie entfernt undefined-Properties),
- * damit die Datensätze sync-sauber bleiben.
+ * damit die Datensätze sync-sauber bleiben. Beim Herausnehmen räumen Zähler
+ * und MHD mit ab — sonst käme das Produkt bei einem späteren addToPantry mit
+ * stalem Bestand/altem Ablaufdatum zurück (Parität zu undoPantryAdd).
  */
 export async function setPantry(foodId: string, on: boolean): Promise<void> {
   const food = await db.foods.get(foodId)
   if (!food || food.deletedAt) return
-  await db.foods.update(foodId, { pantry: on || undefined, updatedAt: now() })
+  await db.foods.update(
+    foodId,
+    on
+      ? { pantry: true, updatedAt: now() }
+      : { pantry: undefined, pantryQty: undefined, expiryDate: undefined, updatedAt: now() },
+  )
 }
 
 /** Alle Vorrats-Lebensmittel, zuletzt aktualisierte zuerst (frischer Einkauf oben). */

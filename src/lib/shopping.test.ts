@@ -2,13 +2,14 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { createFood, setPantry } from '@/db/repo'
-import { setPantryQty } from './pantryStock'
+import { lowPantryFoods, setPantryQty } from './pantryStock'
 import {
   addShoppingItem,
   checkOffToPantry,
   clearCheckedShoppingItems,
   openShoppingItems,
   removeShoppingItem,
+  restoreShoppingItem,
   suggestFromLowPantry,
   toggleShoppingItem,
   undoCheckOff,
@@ -108,6 +109,45 @@ describe('Einkaufsliste', () => {
     // Auf offene Einträge ist der Undo ein No-op (idempotent).
     await undoCheckOff(item.id)
     expect((await db.foods.get(food.id))!.pantryQty).toBe(2)
+  })
+
+  it('undoCheckOff wirft Foods wieder ganz raus, die vorher NICHT im Vorrat lagen', async () => {
+    // z. B. ein 'plan'-Eintrag für ein Food, das nie Vorratsartikel war.
+    const food = await createFood({ name: 'Kokosmilch', ...base })
+    const item = await addShoppingItem({ name: 'Kokosmilch', foodId: food.id, qty: 1, source: 'plan' })
+
+    await checkOffToPantry(item.id)
+    expect((await db.foods.get(food.id))!.pantry).toBe(true)
+
+    await undoCheckOff(item.id)
+    const stored = (await db.foods.get(food.id))!
+    expect('pantry' in stored).toBe(false)
+    expect('pantryQty' in stored).toBe(false)
+    // Kein Geister-Eintrag in „bald leer"/Nachkauf-Vorschlägen.
+    expect(await lowPantryFoods()).toEqual([])
+  })
+
+  it('undoCheckOff stellt leere Packungen (qty 0) wieder als „leer" her', async () => {
+    const food = await createFood({ name: 'Haferflocken', ...base })
+    await setPantryQty(food.id, 0)
+    const [item] = await suggestFromLowPantry()
+
+    await checkOffToPantry(item.id)
+    expect((await db.foods.get(food.id))!.pantryQty).toBe(1)
+
+    await undoCheckOff(item.id)
+    // Bleibt als „leer" gemerkter Nachkauf-Kandidat im Vorrat.
+    expect((await db.foods.get(food.id))!).toMatchObject({ pantry: true, pantryQty: 0 })
+  })
+
+  it('restoreShoppingItem nimmt den Tombstone zurück (Undo nach Entfernen)', async () => {
+    const item = await addShoppingItem({ name: 'Senf' })
+    await removeShoppingItem(item.id)
+    expect(await visibleShoppingItems()).toEqual([])
+
+    await restoreShoppingItem(item.id)
+    expect((await visibleShoppingItems()).map((i) => i.name)).toEqual(['Senf'])
+    expect((await db.shoppingList.get(item.id))!.deletedAt).toBeUndefined()
   })
 
   it('clearCheckedShoppingItems löscht nur Abgehakte per Tombstone', async () => {

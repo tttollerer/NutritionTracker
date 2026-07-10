@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
 import type { ShoppingItem } from '@/db/types'
-import { effectivePantryQty, incrementPantry, lowPantryFoods, setPantryQty } from './pantryStock'
+import { incrementPantry, lowPantryFoods, undoPantryAdd } from './pantryStock'
 
 /**
  * Einkaufsliste (eigene Tabelle, Dexie v6). Fokussierte lib-Datei nach dem
@@ -49,6 +49,11 @@ export async function removeShoppingItem(id: string): Promise<void> {
   await db.shoppingList.update(id, { deletedAt: now(), updatedAt: now() })
 }
 
+/** Tombstone zurücknehmen (Undo nach Entfernen). */
+export async function restoreShoppingItem(id: string): Promise<void> {
+  await db.shoppingList.update(id, { deletedAt: undefined, updatedAt: now() })
+}
+
 /** Offene (nicht abgehakte, nicht gelöschte) Einträge, neueste zuerst. */
 export async function openShoppingItems(): Promise<ShoppingItem[]> {
   const items = await db.shoppingList.filter((i) => !i.deletedAt && !i.checked).toArray()
@@ -74,16 +79,15 @@ export async function clearCheckedShoppingItems(): Promise<number> {
 
 /**
  * Undo von checkOffToPantry: Häkchen zurücknehmen und die beim Abhaken
- * eingelagerten Packungen wieder aus dem Vorrat nehmen (Clamp bei 0 übernimmt
- * setPantryQty).
+ * eingelagerten Packungen wieder herausnehmen — mit der Undo-Semantik von
+ * undoPantryAdd: Foods, die vorher gar nicht im Vorrat lagen, verschwinden
+ * wieder ganz statt dauerhaft als „leer" (qty 0) hängen zu bleiben.
  */
 export async function undoCheckOff(itemId: string): Promise<void> {
   const item = await db.shoppingList.get(itemId)
   if (!item || item.deletedAt || !item.checked) return
   await db.shoppingList.update(itemId, { checked: false, updatedAt: now() })
-  if (!item.foodId) return
-  const food = await db.foods.get(item.foodId)
-  if (food && !food.deletedAt) await setPantryQty(item.foodId, effectivePantryQty(food) - (item.qty ?? 1))
+  if (item.foodId) await undoPantryAdd(item.foodId, item.qty ?? 1)
 }
 
 /**

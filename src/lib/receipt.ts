@@ -2,7 +2,7 @@ import { db } from '@/db'
 import type { FoodItem } from '@/db/types'
 import type { ReceiptItem } from './apiContract'
 import { addToPantry, findFoodByName, setFoodPrice } from '@/db/repo'
-import { incrementPantry, undoPantryAdd } from './pantryStock'
+import { incrementPantry } from './pantryStock'
 
 /**
  * Kassenbon-Scan (Vertrag v1.3): Zwischenspeicher der erkannten Positionen für
@@ -39,10 +39,13 @@ export function clearReceiptDraft(): void {
 
 // ---- Übernahme in den Vorrat ----
 
-/** Ergebnis je Position — `added` Packungen nimmt der Undo wieder zurück. */
+/** Ergebnis je Position — `prevPantry` stellt der Undo exakt wieder her. */
 export interface ReceiptSaveResult {
   food: FoodItem
+  /** Hinzugekommene Packungen (Anzeige/Nachvollziehbarkeit). */
   added: number
+  /** Vorrats-Zustand VOR der Übernahme — Basis für punktgenaues Undo. */
+  prevPantry: Pick<FoodItem, 'pantry' | 'pantryQty'>
 }
 
 /**
@@ -65,7 +68,11 @@ export async function saveReceiptToPantry(items: ReceiptItem[]): Promise<Receipt
     if (!name) continue
     const qty = Math.max(1, Math.round(it.quantity))
 
-    const existing = it.per100 ? undefined : await findFoodByName(name)
+    // Vorrats-Zustand VOR der Übernahme einfrieren (gleiche Match-Regel wie
+    // der createFood-Namens-Dedupe) — undoReceiptSave stellt ihn exakt her.
+    const match = await findFoodByName(name)
+    const prevPantry = { pantry: match?.pantry, pantryQty: match?.pantryQty }
+    const existing = it.per100 ? undefined : match
     let food: FoodItem
     if (existing) {
       await incrementPantry(existing.id, qty)
@@ -92,17 +99,24 @@ export async function saveReceiptToPantry(items: ReceiptItem[]): Promise<Receipt
       food = (await db.foods.get(food.id)) ?? food
     }
 
-    out.push({ food, added: qty })
+    out.push({ food, added: qty, prevPantry })
   }
   return out
 }
 
 /**
- * Undo der Übernahme: je Position die hinzugekommenen Packungen zurücknehmen
- * (Preis-Update bleibt — der alte Preis liegt in der priceHistory).
+ * Undo der Übernahme: je Position den Vorrats-Zustand von VOR dem Bon exakt
+ * wiederherstellen — Foods, die vorher nicht im Vorrat lagen, fliegen wieder
+ * raus, „leer" gemerkte (qty 0) bleiben leer (Preis-Update bleibt — der alte
+ * Preis liegt in der priceHistory). Rückwärts, damit bei doppelten Positionen
+ * desselben Foods der Zustand vor der ERSTEN Position gewinnt.
  */
 export async function undoReceiptSave(saved: ReceiptSaveResult[]): Promise<void> {
-  for (const { food, added } of saved) {
-    for (let i = 0; i < added; i++) await undoPantryAdd(food.id)
+  for (const { food, prevPantry } of [...saved].reverse()) {
+    await db.foods.update(food.id, {
+      pantry: prevPantry.pantry || undefined,
+      pantryQty: prevPantry.pantryQty,
+      updatedAt: Date.now(),
+    })
   }
 }

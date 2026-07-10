@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { addToPantry, createFood, setFoodPrice } from '@/db/repo'
+import { setPantryQty } from './pantryStock'
 import {
   clearReceiptDraft,
   getReceiptDraft,
@@ -98,6 +99,29 @@ describe('Kassenbon → Vorrat (saveReceiptToPantry)', () => {
     // Hafermilch war neu → fliegt ganz aus dem Vorrat (Flag weg, Item bleibt im Katalog).
     const milk = (await db.foods.get(saved[1].food.id))!
     expect(milk.pantry).toBeUndefined()
+  })
+
+  it('undoReceiptSave stellt „leer" (qty 0) und Nicht-Vorrats-Foods exakt wieder her', async () => {
+    // Leer gemerkter Nachkauf-Kandidat + Katalog-Food ohne Vorrats-Flag.
+    const empty = await createFood({ name: 'Milch', ...base })
+    await setPantryQty(empty.id, 0)
+    const catalogOnly = await createFood({ name: 'Mehl', ...base })
+
+    const saved = await saveReceiptToPantry([
+      { name: 'Milch', quantity: 1 },
+      { name: 'Mehl', quantity: 2 },
+    ])
+    expect((await db.foods.get(empty.id))!.pantryQty).toBe(1)
+    expect((await db.foods.get(catalogOnly.id))!).toMatchObject({ pantry: true, pantryQty: 2 })
+
+    await undoReceiptSave(saved)
+
+    // Milch bleibt als „leer" (qty 0) im Vorrat — weiter Nachkauf-Kandidat …
+    expect((await db.foods.get(empty.id))!).toMatchObject({ pantry: true, pantryQty: 0 })
+    // … Mehl fliegt wieder ganz raus (lag vorher nicht im Vorrat).
+    const flour = (await db.foods.get(catalogOnly.id))!
+    expect('pantry' in flour).toBe(false)
+    expect('pantryQty' in flour).toBe(false)
   })
 })
 

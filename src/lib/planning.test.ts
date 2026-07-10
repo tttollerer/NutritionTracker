@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { createFood, setFoodPrice, setPantry } from '@/db/repo'
-import { setPantryQty } from './pantryStock'
+import { effectivePantryQty, lowPantryFoods, setPantryQty } from './pantryStock'
 import { sumsByDate } from './gamification'
 import { sumCost } from './money'
 import { addShoppingItem, openShoppingItems } from './shopping'
@@ -66,10 +66,10 @@ describe('Wochenplaner (planned-Logs)', () => {
     await setFoodPrice(food.id, { amount: 4, per: 500 })
     await db.logs.update(entry.id, { loggedAt: 1 }) // alte Plan-Zeit simulieren
 
-    const confirmed = await confirmPlanned(entry.id)
-    expect(confirmed!.planned).toBeUndefined()
-    expect(confirmed!.cost).toBe(0.8)
-    expect(confirmed!.loggedAt).toBeGreaterThan(1)
+    const confirmed = (await confirmPlanned(entry.id))!.entry
+    expect(confirmed.planned).toBeUndefined()
+    expect(confirmed.cost).toBe(0.8)
+    expect(confirmed.loggedAt).toBeGreaterThan(1)
 
     const stored = (await db.logs.get(entry.id))!
     expect('planned' in stored).toBe(false) // Feld ganz entfernt (sync-sauber)
@@ -81,6 +81,25 @@ describe('Wochenplaner (planned-Logs)', () => {
 
     // Nur geplante Einträge sind bestätigbar.
     expect(await confirmPlanned(entry.id)).toBeUndefined()
+  })
+
+  it('confirmPlanned zieht eine Vorrats-Packung ab — wie der direkte Verzehr', async () => {
+    const food = await createFood({ name: 'Nudeln', ...base })
+    await setPantryQty(food.id, 1) // letzte Packung
+    const entry = await planFood({ food, date: DATE, meal: 'dinner', amount: 100, unit: 'g' })
+
+    const result = (await confirmPlanned(entry.id))!
+    expect(result.pantryTook).toBe(true) // Undo legt die Packung zurück
+    const stored = (await db.foods.get(food.id))!
+    expect(stored).toMatchObject({ pantry: true, pantryQty: 0 }) // leer, bleibt Nachkauf-Kandidat
+    expect(effectivePantryQty(stored)).toBe(0)
+    expect((await lowPantryFoods()).map((f) => f.id)).toContain(food.id)
+
+    // Ohne Vorrats-Bezug wird nichts abgezogen.
+    const plain = await createFood({ name: 'Brot', ...base })
+    const other = await planFood({ food: plain, date: DATE, meal: 'lunch', amount: 100, unit: 'g' })
+    expect((await confirmPlanned(other.id))!.pantryTook).toBe(false)
+    expect((await db.foods.get(plain.id))!.pantry).toBeUndefined()
   })
 
   it('plannedForDate liefert nur geplante, nicht gelöschte Einträge des Tages', async () => {

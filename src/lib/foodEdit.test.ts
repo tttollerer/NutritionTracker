@@ -85,6 +85,26 @@ describe('foodEdit (Produkt-Editor, Paket B)', () => {
       expect(cleared.source).toBe('ai')
     })
 
+    it('Preisänderung/-entfernung archiviert den alten Preis in priceHistory (wie setFoodPrice)', async () => {
+      const food = await createFood({ name: 'Reis', ...base })
+      await updateFoodValues(food.id, { price: { amount: 2.49, per: 500 } })
+      // Erstes Setzen und identisches Wieder-Setzen erzeugen keinen Verlauf.
+      await updateFoodValues(food.id, { price: { amount: 2.49, per: 500 } })
+      expect((await db.foods.get(food.id))!.priceHistory).toBeUndefined()
+
+      await updateFoodValues(food.id, { price: { amount: 2.99, per: 500 } })
+      let stored = (await db.foods.get(food.id))!
+      expect(stored.price).toEqual({ amount: 2.99, per: 500 })
+      expect(stored.priceHistory![0]).toMatchObject({ amount: 2.49, per: 500 })
+      expect(stored.priceHistory![0].at).toBeGreaterThan(0)
+
+      // Entfernen (null) archiviert ebenfalls — neueste Ablösung zuerst.
+      await updateFoodValues(food.id, { price: null })
+      stored = (await db.foods.get(food.id))!
+      expect('price' in stored).toBe(false)
+      expect(stored.priceHistory!.map((p) => p.amount)).toEqual([2.99, 2.49])
+    })
+
     it('wirft für unbekannte/gelöschte Produkte', async () => {
       await expect(updateFoodValues('nope', { kcal: 1 })).rejects.toThrow()
       const food = await createFood({ name: 'Weg', ...base })

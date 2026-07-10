@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Meal, Recipe, RecipeIngredient } from '@/db/types'
 import { computeCost, computeLogValues } from '@/db/repo'
+import { decrementPantryOnLog } from './pantryStock'
 
 /**
  * Eigene Rezepte (eigene Tabelle, Dexie v6). Loggen eines Rezepts erzeugt EIN
@@ -60,19 +61,27 @@ export async function listRecipes(): Promise<Recipe[]> {
   return recipes.sort((a, b) => a.name.localeCompare(b.name, 'de'))
 }
 
+export interface LogRecipeResult {
+  entries: LogEntry[]
+  /** Food-IDs, bei denen eine Vorrats-Packung abging (Undo legt sie zurück). */
+  pantryTook: string[]
+}
+
 /**
  * Rezept loggen: Zutatenmengen (fürs GANZE Rezept hinterlegt) werden auf
  * portionsEaten/portions skaliert, je Zutat entsteht ein LogEntry mit
  * computed- und Kosten-Snapshot (wie logFood). Zutaten ohne Katalog-Food
  * werden übersprungen (gelöschtes Food ⇒ Rezept-Rest bleibt loggbar).
- * Gibt die erzeugten Einträge zurück (Undo: alle wieder löschen).
+ * Je geloggter Zutat geht eine Packung vom Vorrat ab — gleiche
+ * Bestandsführung wie beim direkten Loggen (decrementPantryOnLog).
+ * Gibt Einträge + Vorrats-Info zurück (Undo: Einträge löschen, Packungen zurück).
  */
 export async function logRecipe(
   recipeId: string,
   args: { date: string; meal: Meal; portionsEaten: number },
-): Promise<LogEntry[]> {
+): Promise<LogRecipeResult> {
   const recipe = await db.recipes.get(recipeId)
-  if (!recipe || recipe.deletedAt) return []
+  if (!recipe || recipe.deletedAt) return { entries: [], pantryTook: [] }
   const factor = args.portionsEaten / recipe.portions
   const foods = await db.foods.bulkGet(recipe.ingredients.map((i) => i.foodId))
 
@@ -96,8 +105,14 @@ export async function logRecipe(
     if (entry.cost === undefined) delete entry.cost // kein Leer-Feld persistieren
     entries.push(entry)
   })
-  if (entries.length) await db.logs.bulkPut(entries)
-  return entries
+  const pantryTook: string[] = []
+  if (entries.length) {
+    await db.logs.bulkPut(entries)
+    for (const e of entries) {
+      if (await decrementPantryOnLog(e.foodId)) pantryTook.push(e.foodId)
+    }
+  }
+  return { entries, pantryTook }
 }
 
 /**

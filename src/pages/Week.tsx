@@ -17,6 +17,7 @@ import {
   planFood,
   sumPlannedCost,
 } from '@/lib/planning'
+import { incrementPantry } from '@/lib/pantryStock'
 import { removeShoppingItem } from '@/lib/shopping'
 import { describePortion } from '@/lib/portion'
 import { cn, todayKey } from '@/lib/utils'
@@ -96,10 +97,11 @@ export function Week() {
     const items = await db.foods.bulkGet(ids)
     return new Map(items.filter((f): f is FoodItem => !!f).map((f) => [f.id, f]))
   }, [logs, plannedLogs])
-  // Fehlende Plan-Zutaten je Zukunfts-Tag (Hinweis „N Zutaten fehlen im Vorrat").
+  // Fehlende Plan-Zutaten je Tag ab heute (Hinweis „N Zutaten fehlen im Vorrat") —
+  // auch am Zieltag selbst, denn genau dann wird eingekauft/gekocht.
   const missingByDay = useLiveQuery(async () => {
     const entries = await Promise.all(
-      days.map(async (d) => [d.key, d.key > today ? await missingForPlan(d.key) : []] as const),
+      days.map(async (d) => [d.key, d.key >= today ? await missingForPlan(d.key) : []] as const),
     )
     return new Map(entries)
   }, [firstKey, today])
@@ -193,12 +195,14 @@ export function Week() {
   const plannedByDay = days.map((d) => plannedLogs.filter((l) => l.date === d.key))
 
   // „Gegessen ✓": bestätigen; Undo stellt den Plan-Snapshot exakt wieder her
-  // (confirmPlanned rechnet computed/cost neu — l ist der Stand davor).
+  // (confirmPlanned rechnet computed/cost neu — l ist der Stand davor) und legt
+  // die dabei abgegangene Vorrats-Packung zurück (Muster Add/Pantry).
   async function confirmEntry(l: LogEntry) {
-    const confirmed = await confirmPlanned(l.id)
-    if (!confirmed) return
+    const result = await confirmPlanned(l.id)
+    if (!result) return
     showUndo(t('plan.confirmed'), async () => {
       await db.logs.put({ ...l, updatedAt: Date.now() })
+      if (result.pantryTook) await incrementPantry(l.foodId)
     })
   }
 
@@ -303,11 +307,14 @@ export function Week() {
           const kcal = kcalByDay[i]
           const isToday = d.key === today
           const isFuture = d.key > today
-          // Plan-UI gibt es nur für Zukunfts-Tage — heute/vergangen zeigen nur echte Logs.
-          const dayPlanned = isFuture ? plannedByDay[i] : []
+          // Geplante Einträge auf ALLEN Tagen rendern — sonst wäre ein nicht
+          // bestätigter Plan ab dem Zieltag unsichtbar und nie mehr
+          // bestätig-/löschbar. Nur der Plan-EINSTIEG bleibt Zukunfts-Tagen
+          // vorbehalten (Vergangenes lässt sich nicht mehr vorausplanen).
+          const dayPlanned = plannedByDay[i]
           const plannedKcal = dayPlanned.reduce((a, l) => a + l.computed.kcal, 0)
           const plannedCost = sumPlannedCost(dayPlanned)
-          const missing = isFuture ? missingByDay.get(d.key) ?? [] : []
+          const missing = d.key >= today ? missingByDay.get(d.key) ?? [] : []
           return (
             <section
               key={d.key}
@@ -522,7 +529,7 @@ function PlannedRow({
         type="button"
         onClick={onConfirm}
         aria-label={t('plan.confirmAria', { name })}
-        className="focus-ring flex h-11 shrink-0 items-center gap-1 rounded-full bg-primary-soft px-3 text-xs font-semibold text-primary"
+        className="focus-ring flex h-12 shrink-0 items-center gap-1 rounded-full bg-primary-soft px-3 text-xs font-semibold text-primary"
       >
         <Check size={14} strokeWidth={3} aria-hidden="true" /> {t('plan.confirm')}
       </button>
@@ -530,7 +537,7 @@ function PlannedRow({
         type="button"
         onClick={onRemove}
         aria-label={t('plan.removeAria', { name })}
-        className="focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+        className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
       >
         <Trash2 size={16} aria-hidden="true" />
       </button>

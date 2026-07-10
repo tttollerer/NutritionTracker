@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { createFood, setFoodPrice } from '@/db/repo'
+import { setPantryQty } from './pantryStock'
 import {
   createRecipe,
   deleteRecipe,
@@ -38,7 +39,9 @@ describe('Rezepte', () => {
     expect((await listRecipes()).map((r) => r.name)).toEqual(['Linsen-Curry'])
     // Gelöschte Rezepte sind nicht mehr loggbar/änderbar.
     expect(await updateRecipe(other.id, { name: 'X' })).toBeUndefined()
-    expect(await logRecipe(other.id, { date: '2026-07-10', meal: 'lunch', portionsEaten: 1 })).toEqual([])
+    expect(
+      (await logRecipe(other.id, { date: '2026-07-10', meal: 'lunch', portionsEaten: 1 })).entries,
+    ).toEqual([])
   })
 
   it('logRecipe skaliert Zutaten auf gegessene Portionen — ein LogEntry je Zutat inkl. cost', async () => {
@@ -57,7 +60,7 @@ describe('Rezepte', () => {
     })
 
     // 2 von 4 Portionen → Faktor 0,5.
-    const entries = await logRecipe(recipe.id, { date: '2026-07-10', meal: 'dinner', portionsEaten: 2 })
+    const { entries } = await logRecipe(recipe.id, { date: '2026-07-10', meal: 'dinner', portionsEaten: 2 })
     expect(entries).toHaveLength(2)
     expect(await db.logs.count()).toBe(2)
 
@@ -86,10 +89,31 @@ describe('Rezepte', () => {
         { foodId: gone.id, amount: 100, unit: 'g' },
       ],
     })
-    const entries = await logRecipe(recipe.id, { date: '2026-07-10', meal: 'lunch', portionsEaten: 2 })
+    const { entries } = await logRecipe(recipe.id, { date: '2026-07-10', meal: 'lunch', portionsEaten: 2 })
     expect(entries).toHaveLength(1)
     expect(entries[0].foodId).toBe(rice.id)
     expect(entries[0].amount).toBe(200)
+  })
+
+  it('logRecipe zieht je Zutat eine Vorrats-Packung ab und meldet sie für den Undo', async () => {
+    const rice = await createFood({ name: 'Reis', ...base, kcal: 350, protein: 7 })
+    const lentils = await createFood({ name: 'Linsen', ...base, kcal: 300, protein: 25 })
+    await setPantryQty(rice.id, 2)
+    // Linsen sind nicht im Vorrat → dort wird nichts abgezogen.
+
+    const recipe = await createRecipe({
+      name: 'Linsen-Curry',
+      portions: 2,
+      ingredients: [
+        { foodId: rice.id, amount: 200, unit: 'g' },
+        { foodId: lentils.id, amount: 100, unit: 'g' },
+      ],
+    })
+    const { pantryTook } = await logRecipe(recipe.id, { date: '2026-07-10', meal: 'dinner', portionsEaten: 1 })
+
+    expect(pantryTook).toEqual([rice.id])
+    expect((await db.foods.get(rice.id))!.pantryQty).toBe(1)
+    expect((await db.foods.get(lentils.id))!.pantry).toBeUndefined()
   })
 
   it('recipeCostPerPortion summiert bepreiste Zutaten je Portion; ohne Preise undefined', async () => {

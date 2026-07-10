@@ -54,4 +54,17 @@ describe('ShoppingList', () => {
     expect(showUndo).toHaveBeenCalledWith('Brot abgehakt', expect.any(Function))
     expect(screen.getByRole('button', { name: 'Liste leeren (abgehakte)' })).toBeTruthy()
   })
+
+  it('offene Einträge lassen sich direkt entfernen (Undo, ohne Abhaken-Umweg)', async () => {
+    await addShoppingItem({ name: 'Senf' })
+    renderList()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Senf entfernen' }))
+
+    await waitFor(() => expect(screen.queryByText('Senf')).toBeNull())
+    expect(showUndo).toHaveBeenCalledWith('Artikel entfernt', expect.any(Function))
+    // Tombstone statt Hard-Delete (Undo-fähig, sync-sauber).
+    const stored = (await db.shoppingList.toArray())[0]
+    expect(stored.deletedAt).toBeGreaterThan(0)
+  })
 })

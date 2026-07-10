@@ -80,6 +80,25 @@ describe('Week — Vorausplanung', () => {
     expect(stored.planned).toBeUndefined() // jetzt echter Verzehr
   })
 
+  it('zeigt geplante Einträge auch am Zieltag und lässt sie dort bestätigen', async () => {
+    const food = await createFood({ name: 'Reis', ...base })
+    // Am Zieltag selbst geplant (z. B. gestern für heute) — muss sichtbar bleiben.
+    await planFood({ food, date: todayKey(), meal: 'dinner', amount: 100, unit: 'g' })
+
+    renderWeek()
+
+    // Plan-Eintrag samt Aktionen und Fehlende-Zutaten-Hinweis am HEUTE-Panel.
+    expect(await screen.findByText('geplant')).toBeTruthy()
+    expect(screen.getByText('1 Zutat fehlt im Vorrat')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Planung von Reis entfernen' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reis als gegessen bestätigen' }))
+    await waitFor(() =>
+      expect(showUndo).toHaveBeenCalledWith('Als gegessen übernommen', expect.any(Function)),
+    )
+    expect((await db.logs.toArray())[0].planned).toBeUndefined()
+  })
+
   it('plant über den Vorrats-Picker eine Mahlzeit für einen Zukunfts-Tag', async () => {
     const food = await createFood({ name: 'Nudeln', ...base })
     await setPantry(food.id, true)

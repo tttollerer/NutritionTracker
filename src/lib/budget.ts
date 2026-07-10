@@ -37,6 +37,18 @@ export function costsByTag(logs: LogEntry[], foods: FoodItem[]): Record<string, 
   return out
 }
 
+/**
+ * Montag ('YYYY-MM-DD') der Kalenderwoche (Mo–So), in der `dayKey` liegt —
+ * gleiche Wochenkonvention wie der Wochenplaner (mondayOf). Das Wochenbudget
+ * wird IMMER gegen die Kalenderwoche gestellt, nicht gegen rollierende Fenster.
+ */
+export function mondayKeyOf(dayKey: string): string {
+  const [y, m, d] = dayKey.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7)) // So=0 → 6, Mo=1 → 0, …
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
 export interface BudgetProgress {
   /** Verbrauchter Anteil, auf [0..1] geklemmt (für Fortschrittsbalken). */
   ratio: number

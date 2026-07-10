@@ -2,6 +2,7 @@ import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Meal, ShoppingItem, Unit } from '@/db/types'
 import { computeCost, computeLogValues } from '@/db/repo'
+import { decrementPantryOnLog } from './pantryStock'
 import { addShoppingItem, openShoppingItems } from './shopping'
 
 /**
@@ -40,13 +41,21 @@ export async function planFood(args: {
   return entry
 }
 
+export interface ConfirmPlannedResult {
+  entry: LogEntry
+  /** true, wenn dabei eine Packung vom Vorrat abging (Undo legt sie zurück). */
+  pantryTook: boolean
+}
+
 /**
  * Geplante Mahlzeit als gegessen bestätigen: planned-Flag entfernen, loggedAt
  * frisch setzen und computed/cost aus dem AKTUELLEN FoodItem neu berechnen
- * (das Food kann sich seit der Planung geändert haben). Gibt den bestätigten
- * Eintrag zurück (undefined, wenn er fehlt/gelöscht/nicht geplant ist).
+ * (das Food kann sich seit der Planung geändert haben). Wie beim direkten
+ * Loggen (Add/Pantry) geht dabei eine Packung vom Vorrat ab — der Planer
+ * plant explizit „aus Vorrat". Gibt den bestätigten Eintrag samt
+ * Vorrats-Info zurück (undefined, wenn er fehlt/gelöscht/nicht geplant ist).
  */
-export async function confirmPlanned(logId: string): Promise<LogEntry | undefined> {
+export async function confirmPlanned(logId: string): Promise<ConfirmPlannedResult | undefined> {
   return db.transaction('rw', db.logs, db.foods, async () => {
     const entry = await db.logs.get(logId)
     if (!entry || entry.deletedAt || !entry.planned) return undefined
@@ -62,7 +71,8 @@ export async function confirmPlanned(logId: string): Promise<LogEntry | undefine
     delete confirmed.planned // Feld ganz entfernen (sync-sauber, wie favorite/pantry)
     if (confirmed.cost === undefined) delete confirmed.cost
     await db.logs.put(confirmed)
-    return confirmed
+    const pantryTook = await decrementPantryOnLog(entry.foodId)
+    return { entry: confirmed, pantryTook }
   })
 }
 

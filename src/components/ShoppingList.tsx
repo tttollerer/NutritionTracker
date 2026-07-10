@@ -9,6 +9,8 @@ import {
   addShoppingItem,
   checkOffToPantry,
   clearCheckedShoppingItems,
+  removeShoppingItem,
+  restoreShoppingItem,
   suggestFromLowPantry,
   undoCheckOff,
   visibleShoppingItems,
@@ -59,6 +61,13 @@ export function ShoppingList() {
         showUndo(t(key, { name: item.name }), () => undoCheckOff(item.id))
       }
     })()
+  }
+
+  // Offenen Eintrag entfernen (Tombstone) — ohne Umweg über Abhaken, das den
+  // Vorratsbestand verfälschen würde. Undo stellt den Eintrag wieder her.
+  const remove = (item: ShoppingItem) => {
+    void removeShoppingItem(item.id)
+    showUndo(t('shopping.removed'), () => restoreShoppingItem(item.id))
   }
 
   return (
@@ -131,7 +140,7 @@ export function ShoppingList() {
             ) : (
               <ul className="space-y-0.5">
                 {open.map((i) => (
-                  <ShoppingRow key={i.id} item={i} onToggle={() => toggle(i)} />
+                  <ShoppingRow key={i.id} item={i} onToggle={() => toggle(i)} onRemove={() => remove(i)} />
                 ))}
                 {done.map((i) => (
                   <ShoppingRow key={i.id} item={i} onToggle={() => toggle(i)} />
@@ -156,7 +165,16 @@ export function ShoppingList() {
   )
 }
 
-function ShoppingRow({ item, onToggle }: { item: ShoppingItem; onToggle: () => void }) {
+function ShoppingRow({
+  item,
+  onToggle,
+  onRemove,
+}: {
+  item: ShoppingItem
+  onToggle: () => void
+  /** Nur offene Einträge sind entfernbar — abgehakte räumt „Liste leeren". */
+  onRemove?: () => void
+}) {
   const { t } = useTranslation()
   // Sekundärzeile: Menge (nur > 1 Packung) · Notiz.
   const meta = [item.qty && item.qty > 1 ? `${item.qty}×` : null, item.note].filter(Boolean).join(' · ')
@@ -203,6 +221,16 @@ function ShoppingRow({ item, onToggle }: { item: ShoppingItem; onToggle: () => v
           </p>
         )}
       </div>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={t('shopping.remove', { name: item.name })}
+          className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-destructive"
+        >
+          <Trash2 size={16} aria-hidden="true" />
+        </button>
+      )}
     </li>
   )
 }

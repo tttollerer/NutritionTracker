@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import type { FoodItem, LogEntry } from '@/db/types'
-import { budgetProgress, costsByTag, getWeeklyBudget, kcalPrice, proteinPricePerFood, setWeeklyBudget, topCostTags, UNTAGGED } from './budget'
+import { budgetProgress, costsByTag, getWeeklyBudget, kcalPrice, mondayKeyOf, proteinPricePerFood, setWeeklyBudget, topCostTags, UNTAGGED } from './budget'
 
 const food = (over: Partial<FoodItem>): FoodItem => ({
   id: over.id ?? 'f',
@@ -85,6 +85,13 @@ describe('Kosten- & Preis-Auswertungen (pure)', () => {
     expect(budgetProgress(75.5, 60)).toEqual({ ratio: 1, over: true, diff: 15.5 })
     // Punktlandung zählt nicht als „drüber".
     expect(budgetProgress(60, 60)).toEqual({ ratio: 1, over: false, diff: 0 })
+  })
+
+  it('mondayKeyOf: Montag der Kalenderwoche (deutsche Konvention, So gehört zur Vorwoche)', () => {
+    expect(mondayKeyOf('2026-07-06')).toBe('2026-07-06') // Montag selbst
+    expect(mondayKeyOf('2026-07-10')).toBe('2026-07-06') // Freitag
+    expect(mondayKeyOf('2026-07-12')).toBe('2026-07-06') // Sonntag → Montag davor
+    expect(mondayKeyOf('2026-08-01')).toBe('2026-07-27') // über die Monatsgrenze
   })
 
   it('topCostTags: teuerste Kategorien zuerst, auf n begrenzt', () => {

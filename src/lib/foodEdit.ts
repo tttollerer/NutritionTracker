@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
+import { PRICE_HISTORY_MAX } from '@/db/repo'
 import type { FoodItem, Micros, Photo, Unit } from '@/db/types'
 
 /**
@@ -63,6 +64,17 @@ export async function updateFoodValues(id: string, patch: FoodValuesPatch): Prom
     else delete updated.defaultPortion
   }
   if (patch.price !== undefined) {
+    // Abgelöste (geänderte/entfernte) Preise wandern wie bei setFoodPrice in
+    // die priceHistory — der Editor ist sonst der einzige Preis-Pfad ohne Verlauf.
+    const old = food.price
+    const changed =
+      old && (!patch.price || old.amount !== patch.price.amount || old.per !== patch.price.per)
+    if (changed) {
+      updated.priceHistory = [{ ...old, at: now() }, ...(food.priceHistory ?? [])].slice(
+        0,
+        PRICE_HISTORY_MAX,
+      )
+    }
     if (patch.price) updated.price = patch.price
     else delete updated.price
   }

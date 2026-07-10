@@ -80,16 +80,46 @@ describe('Vorrats-Bestand (pantryQty)', () => {
     await addToPantry({ name: 'Skyr', ...base, barcode: '444' }) // 2 Packungen
 
     await undoPantryAdd(food.id)
-    expect((await db.foods.get(food.id))!).toMatchObject({ pantry: true, pantryQty: 1 })
+    // Rest 1 ohne expliziten Zähler (Konvention undefined == 1) — so weiß der
+    // nächste Undo, dass das Food erst durchs Add in den Vorrat kam.
+    let stored = (await db.foods.get(food.id))!
+    expect(stored.pantry).toBe(true)
+    expect('pantryQty' in stored).toBe(false)
+    expect(effectivePantryQty(stored)).toBe(1)
 
     await undoPantryAdd(food.id)
-    const stored = (await db.foods.get(food.id))!
+    stored = (await db.foods.get(food.id))!
     expect('pantry' in stored).toBe(false)
     expect('pantryQty' in stored).toBe(false)
 
     // Ohne Vorrat-Flag ist der Undo ein No-Op.
     await undoPantryAdd(food.id)
     expect('pantry' in (await db.foods.get(food.id))!).toBe(false)
+  })
+
+  it('undoPantryAdd stellt eine vorher leere Packung (qty 0) wieder als „leer" her', async () => {
+    const food = await createFood({ name: 'Milch', ...base })
+    await setPantryQty(food.id, 0) // leer gemerkter Nachkauf-Kandidat
+    await addToPantry({ name: 'Milch', ...base }) // Nachkauf füllt 0 → 1 auf
+
+    await undoPantryAdd(food.id)
+    // Zurück zu „leer im Vorrat" — nicht ganz rausgeworfen.
+    expect((await db.foods.get(food.id))!).toMatchObject({ pantry: true, pantryQty: 0 })
+    expect((await lowPantryFoods()).map((f) => f.id)).toContain(food.id)
+  })
+
+  it('incrementPantry lässt bei frischer Einzelpackung den Zähler weg (undefined == 1)', async () => {
+    const fresh = await createFood({ name: 'Senf', ...base })
+    await incrementPantry(fresh.id)
+    const stored = (await db.foods.get(fresh.id))!
+    expect(stored.pantry).toBe(true)
+    expect('pantryQty' in stored).toBe(false)
+    expect(effectivePantryQty(stored)).toBe(1)
+
+    // Mehrere Packungen auf einmal bzw. bestehender Vorrat: expliziter Zähler.
+    const multi = await createFood({ name: 'Mehl', ...base })
+    await incrementPantry(multi.id, 3)
+    expect((await db.foods.get(multi.id))!).toMatchObject({ pantry: true, pantryQty: 3 })
   })
 
   it('lowPantryFoods: qty<=1 (undefined zählt als 1), leere zuerst', async () => {

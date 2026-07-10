@@ -33,6 +33,26 @@ describe('Mein Vorrat (pantry)', () => {
     expect('pantry' in stored!).toBe(false)
   })
 
+  it('setPantry(false) räumt auch Packungszähler und MHD ab (kein staler Bestand)', async () => {
+    const food = await addToPantry({ name: 'Skyr', ...base, barcode: '555' })
+    await addToPantry({ name: 'Skyr', ...base, barcode: '555' })
+    await addToPantry({ name: 'Skyr', ...base, barcode: '555' }) // 3 Packungen
+    await db.foods.update(food.id, { expiryDate: '2026-07-01' })
+
+    await setPantry(food.id, false)
+    const cleared = (await db.foods.get(food.id))!
+    expect('pantry' in cleared).toBe(false)
+    expect('pantryQty' in cleared).toBe(false)
+    expect('expiryDate' in cleared).toBe(false)
+
+    // Später neu gescannt: wieder genau 1 Packung, kein altes MHD.
+    await addToPantry({ name: 'Skyr', ...base, barcode: '555' })
+    const again = (await db.foods.get(food.id))!
+    expect(again.pantry).toBe(true)
+    expect(again.pantryQty ?? 1).toBe(1)
+    expect(again.expiryDate).toBeUndefined()
+  })
+
   it('pantryFoods liefert nur Vorrat-Items (nicht gelöscht), zuletzt aktualisierte zuerst', async () => {
     const a = await createFood({ name: 'A', ...base })
     const b = await createFood({ name: 'B', ...base })

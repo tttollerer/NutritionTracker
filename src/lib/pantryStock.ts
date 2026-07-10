@@ -32,6 +32,13 @@ export async function setPantryQty(foodId: string, qty: number): Promise<void> {
 export async function incrementPantry(foodId: string, by = 1): Promise<void> {
   const food = await db.foods.get(foodId)
   if (!food || food.deletedAt) return
+  if (!food.pantry && by === 1) {
+    // Frisch mit genau 1 Packung in den Vorrat: Zähler weglassen (Konvention
+    // undefined == 1, wie addToPantry). So bleibt für den Undo unterscheidbar,
+    // ob vorher eine leere Packung (explizites qty 0) im Vorrat lag oder keine.
+    await db.foods.update(foodId, { pantry: true, updatedAt: now() })
+    return
+  }
   await setPantryQty(foodId, effectivePantryQty(food) + by)
 }
 
@@ -51,16 +58,26 @@ export async function decrementPantryOnLog(foodId: string): Promise<boolean> {
 }
 
 /**
- * Undo eines addToPantry: eine Packung zurücknehmen. Bei der letzten Packung
- * verschwinden Flag UND Zähler ganz (Dexie entfernt undefined-Properties —
- * sync-sauber wie setPantry(false)).
+ * Undo eines addToPantry/incrementPantry: `by` Packungen zurücknehmen und den
+ * VORHER-Zustand wiederherstellen. Ein expliziter Zähler heißt, das Food lag
+ * schon vor dem Add (ggf. „leer", qty 0) im Vorrat — dann bleibt es mit qty 0
+ * Nachkauf-Kandidat. Ohne Zähler kam es erst durchs Add hinein: Flag UND
+ * Zähler verschwinden ganz (Dexie entfernt undefined-Properties — sync-sauber
+ * wie setPantry(false)).
  */
-export async function undoPantryAdd(foodId: string): Promise<void> {
+export async function undoPantryAdd(foodId: string, by = 1): Promise<void> {
   const food = await db.foods.get(foodId)
   if (!food || food.deletedAt || !food.pantry) return
-  const qty = effectivePantryQty(food)
-  if (qty > 1) await db.foods.update(foodId, { pantryQty: qty - 1, updatedAt: now() })
-  else await db.foods.update(foodId, { pantry: undefined, pantryQty: undefined, updatedAt: now() })
+  const rest = effectivePantryQty(food) - by
+  if (rest >= 1) {
+    // Rest 1 als undefined (Konvention == 1): erhält die Unterscheidung
+    // „expliziter Zähler = lag vorher schon im Vorrat" für einen weiteren Undo.
+    await db.foods.update(foodId, { pantryQty: rest > 1 ? rest : undefined, updatedAt: now() })
+  } else if (food.pantryQty != null) {
+    await db.foods.update(foodId, { pantryQty: 0, updatedAt: now() })
+  } else {
+    await db.foods.update(foodId, { pantry: undefined, pantryQty: undefined, updatedAt: now() })
+  }
 }
 
 /** Vorrats-Foods, die zur Neige gehen (qty <= 1) — Basis für Einkaufsvorschläge. */

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CookingPot, Pencil, Plus, Search, Trash2, Utensils, X } from 'lucide-react'
-import type { FoodItem, LogEntry, Meal, Recipe, Unit } from '@/db/types'
+import type { FoodItem, Meal, Recipe, Unit } from '@/db/types'
 import { db } from '@/db'
 import { deleteLog, searchFoods } from '@/db/repo'
 import {
@@ -16,7 +16,9 @@ import {
   recipeKcalPerPortion,
   restoreRecipe,
   updateRecipe,
+  type LogRecipeResult,
 } from '@/lib/recipes'
+import { incrementPantry } from '@/lib/pantryStock'
 import { formatEuro, parsePositiveNumber } from '@/lib/money'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { useOverlays } from '@/lib/overlays-context'
@@ -101,9 +103,11 @@ export function Recipes() {
         recipe={logging}
         foodsMap={foodsMap ?? new Map()}
         onClose={() => setLogging(null)}
-        onLogged={(entries) => {
+        onLogged={({ entries, pantryTook }) => {
           showUndo(t('recipes.logged', { count: entries.length }), async () => {
             await Promise.all(entries.map((e) => deleteLog(e.id)))
+            // Nur zurücklegen, was beim Loggen wirklich abging (Muster Add/Pantry).
+            await Promise.all(pantryTook.map((id) => incrementPantry(id)))
           })
           navigate('/')
         }}
@@ -419,7 +423,7 @@ function RecipeLogSheet({
   recipe: Recipe | null
   foodsMap: Map<string, FoodItem>
   onClose: () => void
-  onLogged: (entries: LogEntry[]) => void
+  onLogged: (result: LogRecipeResult) => void
 }) {
   const { t } = useTranslation()
 
@@ -461,7 +465,7 @@ function RecipeLogForm({
   recipe: Recipe
   foodsMap: Map<string, FoodItem>
   onClose: () => void
-  onLogged: (entries: LogEntry[]) => void
+  onLogged: (result: LogRecipeResult) => void
 }) {
   const { t } = useTranslation()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
@@ -488,9 +492,9 @@ function RecipeLogForm({
     if (portionsEaten == null || saving) return
     setSaving(true)
     try {
-      const entries = await logRecipe(recipe.id, { date: todayKey(), meal, portionsEaten })
+      const result = await logRecipe(recipe.id, { date: todayKey(), meal, portionsEaten })
       onClose()
-      if (entries.length > 0) onLogged(entries)
+      if (result.entries.length > 0) onLogged(result)
     } finally {
       setSaving(false)
     }
