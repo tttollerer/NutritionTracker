@@ -36,13 +36,31 @@ export async function incrementPantry(foodId: string, by = 1): Promise<void> {
 }
 
 /**
- * Beim Loggen eine Packung abziehen. Bei 0 bleibt pantry=true (qty 0 = „leer"
- * → taucht in lowPantryFoods/Einkaufsvorschlägen auf, statt zu verschwinden).
+ * Beim Verzehr aus dem Vorrat eine Packung abziehen. Bei 0 bleibt pantry=true
+ * (qty 0 = „leer" → taucht in lowPantryFoods/Einkaufsvorschlägen auf, statt zu
+ * verschwinden). Gibt zurück, ob wirklich abgezogen wurde — der Aufrufer legt
+ * beim Undo nur dann eine Packung zurück (leere Packung bleibt leer).
  */
-export async function decrementPantryOnLog(foodId: string): Promise<void> {
+export async function decrementPantryOnLog(foodId: string): Promise<boolean> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt || !food.pantry) return false
+  const qty = effectivePantryQty(food)
+  if (qty <= 0) return false
+  await setPantryQty(foodId, qty - 1)
+  return true
+}
+
+/**
+ * Undo eines addToPantry: eine Packung zurücknehmen. Bei der letzten Packung
+ * verschwinden Flag UND Zähler ganz (Dexie entfernt undefined-Properties —
+ * sync-sauber wie setPantry(false)).
+ */
+export async function undoPantryAdd(foodId: string): Promise<void> {
   const food = await db.foods.get(foodId)
   if (!food || food.deletedAt || !food.pantry) return
-  await setPantryQty(foodId, Math.max(0, effectivePantryQty(food) - 1))
+  const qty = effectivePantryQty(food)
+  if (qty > 1) await db.foods.update(foodId, { pantryQty: qty - 1, updatedAt: now() })
+  else await db.foods.update(foodId, { pantry: undefined, pantryQty: undefined, updatedAt: now() })
 }
 
 /** Vorrats-Foods, die zur Neige gehen (qty <= 1) — Basis für Einkaufsvorschläge. */

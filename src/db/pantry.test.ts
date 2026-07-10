@@ -12,6 +12,7 @@ import {
   setPantry,
   updateLog,
 } from './repo'
+import { setPantryQty } from '@/lib/pantryStock'
 
 const base = { per: 'g' as const, kcal: 100, protein: 5, carbs: 10, fat: 2 }
 
@@ -81,6 +82,40 @@ describe('Mein Vorrat (pantry)', () => {
     // 'portion'-Mengen werden NICHT als defaultPortion gemerkt (wie logFood).
     const other = await addToPantry({ name: 'Riegel', ...base }, { amount: 1, unit: 'portion' })
     expect((await db.foods.get(other.id))!.defaultPortion).toBeUndefined()
+  })
+
+  it('addToPantry zählt Packungen hoch statt zu duplizieren (Barcode- & Namens-Match)', async () => {
+    const first = await addToPantry({ name: 'Skyr', ...base, barcode: '333' })
+    // Erste Packung bleibt implizit (pantryQty-Konvention: undefined == 1).
+    expect((await db.foods.get(first.id))!.pantryQty).toBeUndefined()
+
+    const second = await addToPantry({ name: 'Skyr', ...base, barcode: '333' })
+    expect(second.id).toBe(first.id)
+    expect(await db.foods.count()).toBe(1)
+    expect((await db.foods.get(first.id))!.pantryQty).toBe(2)
+
+    // Ohne Barcode greift der exakte Namens-Match des createFood-Dedupe.
+    const third = await addToPantry({ name: 'Skyr', ...base })
+    expect(third.id).toBe(first.id)
+    expect((await db.foods.get(first.id))!.pantryQty).toBe(3)
+  })
+
+  it('addToPantry füllt eine leere Packung (qty 0) wieder auf 1 auf', async () => {
+    const food = await addToPantry({ name: 'Nudeln', ...base })
+    await setPantryQty(food.id, 0)
+    await addToPantry({ name: 'Nudeln', ...base })
+    expect((await db.foods.get(food.id))!.pantryQty).toBe(1)
+  })
+
+  it('saveReviewToPantry erhöht den Bestand eines bereits vorrätigen Produkts', async () => {
+    const existing = await addToPantry({ name: 'Müsli', ...base })
+    const foods = await saveReviewToPantry(
+      [{ name: 'Müsli', amount: 50, unit: 'g', per100: { kcal: 380, protein: 10, carbs: 60, fat: 8 } }],
+      { source: 'ai' },
+    )
+    expect(foods[0].id).toBe(existing.id)
+    expect(await db.foods.count()).toBe(1)
+    expect((await db.foods.get(existing.id))!.pantryQty).toBe(2)
   })
 
   it('saveReviewToPantry erzeugt FoodItems (pantry, defaultPortion) und KEINE Logs', async () => {

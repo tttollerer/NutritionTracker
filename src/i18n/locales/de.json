@@ -169,7 +169,13 @@
     "empty": "Dein Vorrat ist leer. Scanne deinen Einkauf per Barcode oder Foto — die KI erfasst die Nährwerte.",
     "consume": "{{name}} in Verzehr",
     "open": "{{name}} öffnen",
-    "inPantry": "im Vorrat"
+    "inPantry": "im Vorrat",
+    "stock_one": "1× im Vorrat",
+    "stock_other": "{{count}}× im Vorrat",
+    "stockInc": "Eine Packung {{name}} hinzufügen",
+    "stockDec": "Eine Packung {{name}} entfernen",
+    "lowStock": "bald leer",
+    "lowFilter": "Bald leer"
   },
   "coach": {
     "title": "Coach",

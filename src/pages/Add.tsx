@@ -21,6 +21,7 @@ import {
   yesterdayLogCount,
 } from '@/db/repo'
 import { checkAllergens } from '@/lib/allergens'
+import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
 import { useOverlays } from '@/lib/overlays-context'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
@@ -362,13 +363,20 @@ export function Add() {
         </Button>
       </Card>
 
-      {/* Mengen-Sheet für den Verzehr aus dem Vorrat */}
+      {/* Mengen-Sheet für den Verzehr aus dem Vorrat — Loggen zieht eine
+          Packung vom Bestand ab; Undo legt sie zurück. */}
       <PortionSheet
         food={portionFood}
         initialMeal={meal}
         onClose={() => setPortionFood(null)}
         onLogged={(entry, food) => {
-          showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+          void (async () => {
+            const took = await decrementPantryOnLog(food.id)
+            showUndo(t('capture.added', { name: food.name }), async () => {
+              await deleteLog(entry.id)
+              if (took) await incrementPantry(food.id)
+            })
+          })()
           navigate('/')
         }}
       />

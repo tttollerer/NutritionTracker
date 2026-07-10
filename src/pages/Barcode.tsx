@@ -5,7 +5,8 @@ import { ChevronLeft, ShoppingBasket, UtensilsCrossed } from 'lucide-react'
 import { lookupBarcode } from '@/lib/openfoodfacts'
 import { toApiError } from '@/lib/apiError'
 import { setReview } from '@/lib/reviewStore'
-import { addToPantry, setFoodPrice, setPantry } from '@/db/repo'
+import { addToPantry, setFoodPrice } from '@/db/repo'
+import { undoPantryAdd } from '@/lib/pantryStock'
 import { useOverlays } from '@/lib/overlays-context'
 import { parsePositiveNumber } from '@/lib/money'
 import type { Meal } from '@/db/types'
@@ -122,7 +123,8 @@ export function Barcode() {
         return
       }
       if (targetRef.current === 'pantry') {
-        // Einkauf-Batch-Scan: Upsert per Barcode mit pantry=true, KEIN LogEntry.
+        // Einkauf-Batch-Scan: Upsert per Barcode mit pantry=true, KEIN LogEntry;
+        // bereits im Vorrat → +1 Packung (pantryQty) statt Duplikat.
         // Der Scanner läuft direkt weiter → mehrere Einkäufe in Serie.
         const food = await addToPantry({
           ...product.food,
@@ -133,7 +135,7 @@ export function Barcode() {
         // Preis-Felder fürs neue Produkt vorbelegen: Packungsgröße aus OFF, falls vorhanden.
         setPriceText(food.price ? String(food.price.amount).replace('.', ',') : '')
         setPackText(food.price ? String(food.price.per) : product.packageSize ? String(product.packageSize) : '')
-        showUndo(t('capture.pantrySaved', { name: food.name }), () => setPantry(food.id, false))
+        showUndo(t('capture.pantrySaved', { name: food.name }), () => undoPantryAdd(food.id))
         return
       }
       setReview({

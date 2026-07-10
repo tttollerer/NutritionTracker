@@ -629,6 +629,8 @@ export async function setFoodPrice(foodId: string, price?: { amount: number; per
  * Einkauf in den Vorrat legen: Katalog-Upsert (createFood-Dedupe per Barcode/Name)
  * + pantry=true — bewusst OHNE LogEntry. Optional wird eine übliche Portion
  * gemerkt (nur konkrete g/ml-Mengen, gleiche Regel wie logFood).
+ * Liegt dasselbe Produkt schon im Vorrat, zählt der erneute Scan eine Packung
+ * dazu (pantryQty) statt ein Duplikat/No-Op zu erzeugen.
  */
 export async function addToPantry(
   input: NewFoodInput,
@@ -636,6 +638,8 @@ export async function addToPantry(
 ): Promise<FoodItem> {
   const food = await createFood(input)
   const patch: Partial<FoodItem> = { pantry: true, updatedAt: now() }
+  // pantryQty-Konvention: undefined == 1 Packung (siehe FoodItem.pantryQty).
+  if (food.pantry) patch.pantryQty = (food.pantryQty ?? 1) + 1
   if (portion && portion.unit !== 'portion' && portion.amount > 0) {
     patch.defaultPortion = {
       amount: portion.amount,

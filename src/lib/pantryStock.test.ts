@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
-import { createFood, setFoodPrice, setPantry, PRICE_HISTORY_MAX } from '@/db/repo'
+import { addToPantry, createFood, setFoodPrice, setPantry, PRICE_HISTORY_MAX } from '@/db/repo'
 import {
   decrementPantryOnLog,
   effectivePantryQty,
@@ -10,6 +10,7 @@ import {
   lowPantryFoods,
   setExpiry,
   setPantryQty,
+  undoPantryAdd,
 } from './pantryStock'
 
 const base = { per: 'g' as const, kcal: 100, protein: 5, carbs: 10, fat: 2 }
@@ -60,6 +61,33 @@ describe('Vorrats-Bestand (pantryQty)', () => {
 
     await decrementPantryOnLog(food.id)
     expect((await db.foods.get(food.id))!.pantryQty).toBe(4)
+  })
+
+  it('decrementPantryOnLog meldet, ob abgezogen wurde — Undo legt nur dann zurück', async () => {
+    const food = await createFood({ name: 'Milch', ...base })
+    await setPantry(food.id, true)
+    expect(await decrementPantryOnLog(food.id)).toBe(true) // 1 → 0
+    expect(await decrementPantryOnLog(food.id)).toBe(false) // schon leer
+
+    const plain = await createFood({ name: 'Banane', ...base })
+    expect(await decrementPantryOnLog(plain.id)).toBe(false) // kein Vorrat-Bezug
+  })
+
+  it('undoPantryAdd nimmt eine Packung zurück; die letzte entfernt Flag & Zähler', async () => {
+    const food = await addToPantry({ name: 'Skyr', ...base, barcode: '444' })
+    await addToPantry({ name: 'Skyr', ...base, barcode: '444' }) // 2 Packungen
+
+    await undoPantryAdd(food.id)
+    expect((await db.foods.get(food.id))!).toMatchObject({ pantry: true, pantryQty: 1 })
+
+    await undoPantryAdd(food.id)
+    const stored = (await db.foods.get(food.id))!
+    expect('pantry' in stored).toBe(false)
+    expect('pantryQty' in stored).toBe(false)
+
+    // Ohne Vorrat-Flag ist der Undo ein No-Op.
+    await undoPantryAdd(food.id)
+    expect('pantry' in (await db.foods.get(food.id))!).toBe(false)
   })
 
   it('lowPantryFoods: qty<=1 (undefined zählt als 1), leere zuerst', async () => {
