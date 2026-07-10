@@ -190,6 +190,8 @@ export interface NewFoodInput {
   traces?: string[]
   source?: FoodItem['source']
   barcode?: string
+  /** Benannte Portionseinheiten (z. B. OFF-Portion/Packung) — nur Vorbelegung. */
+  servings?: { label: string; amount: number }[]
 }
 
 /**
@@ -250,6 +252,9 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
       name,
       barcode: input.barcode ?? existing.barcode,
       source: input.source ?? existing.source,
+      // Portionseinheiten sind nutzergepflegt (Detail-Editor) — der Scan füllt
+      // sie nur, wenn noch keine existieren (gleiche Politik wie defaultPortion).
+      ...(existing.servings ? {} : input.servings?.length ? { servings: input.servings } : {}),
       updatedAt: now(),
     }
     await db.foods.put(updated)
@@ -262,6 +267,7 @@ export async function createFood(input: NewFoodInput): Promise<FoodItem> {
     source: input.source ?? 'manual',
     barcode: input.barcode,
     ...values,
+    ...(input.servings?.length ? { servings: input.servings } : {}),
     createdAt: now(),
     updatedAt: now(),
   }
@@ -446,8 +452,10 @@ export async function logFood(args: {
   amount: number
   unit: Unit
   photoBlobId?: string
+  /** Anzeige-Snapshot „2 Stück" — amount/unit tragen weiterhin die Basis-Menge. */
+  serving?: { label: string; count: number }
 }): Promise<LogEntry> {
-  const { food, date, meal, amount, unit, photoBlobId } = args
+  const { food, date, meal, amount, unit, photoBlobId, serving } = args
 
   const entry: LogEntry = {
     id: uuid(),
@@ -460,10 +468,12 @@ export async function logFood(args: {
     computed: computeLogValues(food, amount, unit),
     // Kosten-Snapshot (EUR) — nur wenn ein Packungspreis hinterlegt ist.
     cost: computeCost(food, amount, unit),
+    serving,
     photoBlobId,
     updatedAt: now(),
   }
   if (entry.cost === undefined) delete entry.cost // kein Leer-Feld persistieren
+  if (entry.serving === undefined) delete entry.serving
   await db.logs.put(entry)
   // Übliche Portion nur für konkrete Mengen (g/ml) merken — eine 'portion'-Menge
   // würde sonst beim nächsten Loggen erneut mit der Portionsgröße multipliziert.
@@ -516,7 +526,13 @@ export function computeCost(food: FoodItem, amount: number, unit: Unit): number 
  */
 export async function updateLog(
   id: string,
-  patch: { amount?: number; unit?: Unit; meal?: Meal },
+  patch: {
+    amount?: number
+    unit?: Unit
+    meal?: Meal
+    /** `null` entfernt den Anzeige-Snapshot („2 Stück"), `undefined` lässt ihn unverändert. */
+    serving?: { label: string; count: number } | null
+  },
 ): Promise<LogEntry | undefined> {
   return db.transaction('rw', db.logs, db.foods, async () => {
     const entry = await db.logs.get(id)
@@ -534,6 +550,14 @@ export async function updateLog(
       computed: food ? computeLogValues(food, amount, unit) : entry.computed,
       cost: food ? computeCost(food, amount, unit) : entry.cost,
       updatedAt: now(),
+    }
+    // Mengenänderung ohne expliziten serving-Patch macht den alten
+    // „2 Stück"-Snapshot unwahr → mit entfernen.
+    if (patch.serving !== undefined) {
+      if (patch.serving) updated.serving = patch.serving
+      else delete updated.serving
+    } else if (patch.amount !== undefined || patch.unit !== undefined) {
+      delete updated.serving
     }
     if (updated.cost === undefined) delete updated.cost // kein Leer-Feld persistieren
     await db.logs.put(updated)

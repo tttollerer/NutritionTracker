@@ -315,7 +315,11 @@ export function Today() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{foodName(l.foodId)}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {l.amount} {l.unit === 'portion' ? t('today.edit.unitPortion') : l.unit} · {Math.round(l.computed.kcal)} kcal
+                            {/* In benannter Einheit erfasst („2 Stück") → genau so anzeigen. */}
+                            {l.serving
+                              ? `${String(l.serving.count).replace('.', ',')} ${l.serving.label}`
+                              : `${l.amount} ${l.unit === 'portion' ? t('today.edit.unitPortion') : l.unit}`}
+                            {' · '}{Math.round(l.computed.kcal)} kcal
                           </span>
                         </span>
                       </button>

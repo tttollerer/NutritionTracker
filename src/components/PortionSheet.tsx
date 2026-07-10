@@ -59,6 +59,9 @@ export function PortionSheet({ food, initialMeal, onClose, onLogged }: Props) {
   )
 }
 
+/** Ausgewählte Eingabe-Einheit: Log-Einheit (g/ml/Portion) oder benannte Portionseinheit. */
+type UnitSel = { kind: 'unit'; unit: Unit } | { kind: 'serving'; idx: number }
+
 function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Props & { food: FoodItem }) {
   const { t } = useTranslation()
   // Lokale Produkt-Kopie: der Editor (FoodDetailSheet) kann Name/Portion/Preis
@@ -67,7 +70,7 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
   const [food, setFood] = useState(initialFood)
   const dp = food.defaultPortion
   const [amountText, setAmountText] = useState(String(dp?.amount ?? 100))
-  const [unit, setUnit] = useState<Unit>(dp?.unit ?? food.per)
+  const [sel, setSel] = useState<UnitSel>({ kind: 'unit', unit: dp?.unit ?? food.per })
   const [meal, setMeal] = useState<Meal>(initialMeal)
   // Haushaltskasse (optional): Packungspreis in EUR + Packungsgröße in g/ml.
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
@@ -78,9 +81,31 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
   const amount = Number.parseFloat(amountText.replace(',', '.'))
   const valid = Number.isFinite(amount) && amount > 0
 
-  // Einheiten: konkrete Basis (g/ml) + 'portion', wenn eine übliche Portion bekannt ist.
+  // Benannte Portionseinheiten („Stück", „Dose", „Cup") — ein gleichnamiges
+  // Label der üblichen Portion nicht doppelt anbieten.
+  const servings = (food.servings ?? []).filter(
+    (s) => !dp?.label || s.label.toLowerCase() !== dp.label.toLowerCase(),
+  )
+  // Log-Einheiten: konkrete Basis (g/ml) + 'portion', wenn eine übliche Portion bekannt ist.
   const units: Unit[] = dp ? [food.per, 'portion'] : [food.per]
   const unitLabel = (u: Unit) => (u === 'portion' ? dp?.label ?? t('today.edit.unitPortion') : u)
+
+  // Gerechnet wird IMMER in der Basis-Menge; die benannte Einheit ist nur
+  // Eingabe-Hilfe + Anzeige-Snapshot („2 Stück") auf dem Log.
+  const activeServing = sel.kind === 'serving' ? servings[sel.idx] : undefined
+  const baseAmount = activeServing ? amount * activeServing.amount : amount
+  const baseUnit: Unit = activeServing ? food.per : sel.kind === 'unit' ? sel.unit : food.per
+  const servingSnap = activeServing && valid ? { label: activeServing.label, count: amount } : undefined
+
+  function selectUnit(u: Unit) {
+    setSel({ kind: 'unit', unit: u })
+    // Beim Wechsel auf „Portion" ist 1 die sinnvolle Menge, zurück die gemerkte.
+    setAmountText(u === 'portion' ? '1' : String(dp?.amount ?? 100))
+  }
+  function selectServing(idx: number) {
+    setSel({ kind: 'serving', idx })
+    setAmountText('1')
+  }
 
   // Preis-Eingabe: beide Felder gültig → Preis setzen; beide leer → Preis entfernen;
   // sonst unverändert lassen (kein Datenverlust durch Tippfehler).
@@ -89,7 +114,7 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
   const bothEmpty = !priceText.trim() && !packText.trim()
   const nextPrice = priceVal != null && packVal != null ? { amount: priceVal, per: packVal } : undefined
   const effectivePrice = nextPrice ?? (bothEmpty ? undefined : food.price)
-  const cost = valid ? computeCost({ ...food, price: effectivePrice }, amount, unit) : undefined
+  const cost = valid ? computeCost({ ...food, price: effectivePrice }, baseAmount, baseUnit) : undefined
 
   async function save() {
     if (!valid || saving) return
@@ -102,8 +127,9 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
         food: { ...food, price: effectivePrice },
         date: todayKey(),
         meal,
-        amount,
-        unit,
+        amount: baseAmount,
+        unit: baseUnit,
+        serving: servingSnap,
       })
       onLogged(entry, food)
       onClose()
@@ -126,31 +152,36 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
         </button>
       </div>
 
-      <div className="flex items-end gap-2">
-        <Field label={t('today.edit.amount')}>
-          <Input
-            type="text"
-            inputMode="decimal"
-            value={amountText}
-            onChange={(e) => setAmountText(e.target.value)}
-            aria-label={t('today.edit.amount')}
-            aria-invalid={!valid}
-          />
-        </Field>
-        {units.length > 1 ? (
-          <div className="flex shrink-0 gap-1" role="group" aria-label={t('today.edit.unit')}>
+      <div className="space-y-2">
+        <div className="flex items-end gap-2">
+          <Field label={t('today.edit.amount')}>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={amountText}
+              onChange={(e) => setAmountText(e.target.value)}
+              aria-label={t('today.edit.amount')}
+              aria-invalid={!valid}
+            />
+          </Field>
+          {units.length === 1 && servings.length === 0 && (
+            <span className="flex min-h-[48px] shrink-0 items-center px-2 text-sm text-muted-foreground">
+              {unitLabel(units[0])}
+            </span>
+          )}
+        </div>
+        {(units.length > 1 || servings.length > 0) && (
+          // Einheiten-Chips: g/ml, übliche Portion und benannte Einheiten
+          // („Stück", „Dose", „Cup" …) — was fürs Produkt eben sinnvoll ist.
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('today.edit.unit')}>
             {units.map((u) => (
               <button
                 key={u}
                 type="button"
-                onClick={() => {
-                  setUnit(u)
-                  // Beim Wechsel auf „Portion" ist 1 die sinnvolle Menge, zurück die gemerkte.
-                  setAmountText(u === 'portion' ? '1' : String(dp?.amount ?? 100))
-                }}
-                aria-pressed={unit === u}
+                onClick={() => selectUnit(u)}
+                aria-pressed={sel.kind === 'unit' && sel.unit === u}
                 className={`focus-ring min-h-[48px] rounded-xl border px-4 text-sm font-medium transition-colors ${
-                  unit === u
+                  sel.kind === 'unit' && sel.unit === u
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-input bg-background text-foreground'
                 }`}
@@ -158,11 +189,42 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
                 {unitLabel(u)}
               </button>
             ))}
+            {servings.map((s, idx) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => selectServing(idx)}
+                aria-pressed={sel.kind === 'serving' && sel.idx === idx}
+                className={`focus-ring min-h-[48px] rounded-xl border px-4 text-sm font-medium transition-colors ${
+                  sel.kind === 'serving' && sel.idx === idx
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-input bg-background text-foreground'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
           </div>
-        ) : (
-          <span className="flex min-h-[48px] shrink-0 items-center px-2 text-sm text-muted-foreground">
-            {unitLabel(unit)}
-          </span>
+        )}
+        {activeServing && (
+          <div className="flex items-center gap-2">
+            {/* Schnellmengen + Live-Umrechnung in die Basis-Einheit */}
+            {['0,5', '1', '2'].map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => setAmountText(q)}
+                className="focus-ring min-h-[40px] rounded-full border border-input bg-background px-3 text-xs font-medium"
+              >
+                {q}×
+              </button>
+            ))}
+            {valid && (
+              <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                = {Math.round(baseAmount * 10) / 10} {food.per}
+              </span>
+            )}
+          </div>
         )}
       </div>
 

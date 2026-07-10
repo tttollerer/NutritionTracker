@@ -100,6 +100,12 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
   const [description, setDescription] = useState(food.description ?? '')
   const [tags, setTags] = useState<string[]>(food.tags ?? [])
   const [tagInput, setTagInput] = useState('')
+  // Benannte Portionseinheiten („Stück" = 22 g) — Chips im Mengen-/Log-Editor.
+  const [servingsList, setServingsList] = useState<{ label: string; amount: number }[]>(
+    food.servings ?? [],
+  )
+  const [servingLabel, setServingLabel] = useState('')
+  const [servingAmount, setServingAmount] = useState('')
   const [favorite, setFavorite] = useState(!!food.favorite)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -159,6 +165,7 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         price: priceVal != null && packVal != null ? { amount: priceVal, per: packVal } : null,
         description,
         tags,
+        servings: servingsList,
       }
       // MHD zuerst schreiben — updateFoodValues liest danach den frischen Stand
       // und liefert ihn (inkl. expiryDate) an onSaved zurück.
@@ -400,6 +407,71 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
           <Field label={t('food.edit.portionLabel')}>
             <Input value={portionLabel} onChange={(e) => touch(setPortionLabel)(e.target.value)} placeholder={t('food.edit.portionLabelPh')} />
           </Field>
+        </div>
+      </div>
+
+      {/* Portionseinheiten: benannte Mengen („Stück" = 22 g, „Cup" = 90 g …) —
+          erscheinen als Einheiten-Chips beim Loggen/Verzehren/Korrigieren. */}
+      <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+        <p className="text-xs font-medium text-muted-foreground">{t('food.edit.servingsTitle')}</p>
+        {servingsList.length > 0 && (
+          <ul className="space-y-1.5">
+            {servingsList.map((s) => (
+              <li key={s.label} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">
+                  1 {s.label}{' '}
+                  <span className="tabular-nums text-muted-foreground">
+                    = {String(s.amount).replace('.', ',')} {per}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => touch(setServingsList)(servingsList.filter((x) => x.label !== s.label))}
+                  aria-label={t('food.edit.removeServing', { label: s.label })}
+                  className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex items-end gap-2">
+          <Field label={t('food.edit.servingLabel')}>
+            <Input
+              value={servingLabel}
+              onChange={(e) => setServingLabel(e.target.value)}
+              placeholder={t('food.edit.servingLabelPh')}
+            />
+          </Field>
+          <Field label={t('food.edit.servingAmount', { unit: per })}>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={servingAmount}
+              onChange={(e) => setServingAmount(e.target.value)}
+              placeholder="22"
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={() => {
+              const label = servingLabel.trim()
+              const amount = parsePositiveNumber(servingAmount)
+              if (!label || amount == null) return
+              touch(setServingsList)([
+                ...servingsList.filter((x) => x.label.toLowerCase() !== label.toLowerCase()),
+                { label, amount },
+              ])
+              setServingLabel('')
+              setServingAmount('')
+            }}
+            disabled={!servingLabel.trim() || parsePositiveNumber(servingAmount) == null}
+            aria-label={t('food.edit.addServing')}
+            className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-input text-muted-foreground disabled:opacity-40"
+          >
+            <Plus size={16} aria-hidden="true" />
+          </button>
         </div>
       </div>
 

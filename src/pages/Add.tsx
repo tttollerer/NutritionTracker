@@ -191,7 +191,7 @@ export function Add() {
           results.length > 0 ? (
             <div className="space-y-2">
               {results.map((f) => (
-                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
               ))}
             </div>
           ) : (
@@ -227,7 +227,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('add.favorites')}</h2>
           <div className="space-y-2">
             {favorites.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -264,7 +264,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('entry.recent')}</h2>
           <div className="space-y-2">
             {recentsWithoutFavs.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>

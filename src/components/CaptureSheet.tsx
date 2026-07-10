@@ -5,12 +5,12 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Camera, CookingPot, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
-import { logFood, recentFoods, deleteLog } from '@/db/repo'
+import { recentFoods, deleteLog } from '@/db/repo'
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
-import { todayKey } from '@/lib/utils'
 import { Chip } from '@/components/ui/Chip'
+import { PortionSheet } from '@/components/PortionSheet'
 
 interface Props {
   open: boolean
@@ -91,19 +91,17 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
     navigate(`/capture?mode=${mode}&meal=${meal}`)
   }
 
-  async function quickLog(food: FoodItem) {
-    const entry = await logFood({
-      food,
-      date: todayKey(),
-      meal,
-      amount: food.defaultPortion?.amount ?? 100,
-      unit: food.defaultPortion?.unit ?? (food.per as 'g' | 'ml'),
-    })
+  // „Zuletzt benutzt" öffnet das Mengen-Sheet (Menge + Einheit wählbar: Stück,
+  // Gramm, Dose … was fürs Produkt sinnvoll ist) statt sofort zu loggen — die
+  // übliche Portion ist vorbelegt, Bestätigen kostet genau EINEN weiteren Tap.
+  const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
+  function pickRecent(food: FoodItem) {
     onClose()
-    showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+    setPortionFood(food)
   }
 
   return (
+    <>
     <AnimatePresence>
       {open && (
         <>
@@ -179,7 +177,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                   {recents.map((f) => (
                     <button
                       key={f.id}
-                      onClick={() => quickLog(f)}
+                      onClick={() => pickRecent(f)}
                       className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
                     >
                       <Check size={14} className="text-primary" /> {f.name}
@@ -205,6 +203,18 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
         </>
       )}
     </AnimatePresence>
+
+    {/* Mengen-Sheet für „Zuletzt benutzt" — lebt außerhalb des open-Zweigs,
+        damit es das Schließen des Quick-Sheets überlebt. */}
+    <PortionSheet
+      food={portionFood}
+      initialMeal={meal}
+      onClose={() => setPortionFood(null)}
+      onLogged={(entry, food) => {
+        showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+      }}
+    />
+    </>
   )
 }
 

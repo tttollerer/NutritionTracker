@@ -595,7 +595,13 @@
       "addTagPh": "z. B. Milchprodukt",
       "removeTag": "Tag {{tag}} entfernen",
       "favToggle": "{{name}} als Favorit",
-      "priceHistory": "Frühere Preise"
+      "priceHistory": "Frühere Preise",
+      "servingsTitle": "Portionseinheiten (Stück, Cup, Dose …)",
+      "servingLabel": "Einheit",
+      "servingLabelPh": "z. B. Stück",
+      "servingAmount": "Menge ({{unit}})",
+      "addServing": "Einheit hinzufügen",
+      "removeServing": "Einheit {{label}} entfernen"
     },
     "expiry": {
       "label": "MHD (optional)",

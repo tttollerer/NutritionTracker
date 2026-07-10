@@ -57,6 +57,14 @@ export interface FoodItem {
    */
   defaultPortion?: { amount: number; unit: Unit; label?: string }
   /**
+   * Benannte Portionseinheiten des Produkts („Stück" = 22 g, „Dose" = 500 ml,
+   * „Cup" = 90 g …); `amount` je 1 Einheit in der Basis-Einheit (per). Quelle:
+   * Nutzer (Detail-Editor) oder OFF-Portions-/Packungsangabe beim Scan. Logs
+   * speichern weiterhin Basis-Mengen — die Einheit ist reine Eingabe-/Anzeige-
+   * Hilfe. Nicht indiziert und optional — keine Dexie-Migration nötig.
+   */
+  servings?: { label: string; amount: number }[]
+  /**
    * Optionaler Packungspreis (Haushaltskasse): `amount` in EUR für eine
    * Packung von `per` g bzw. ml. Kosten eines Logs = verzehrte Menge / per
    * * amount. Nicht indiziert, additiv — keine Dexie-Migration nötig.
@@ -108,6 +116,12 @@ export interface LogEntry {
    * additiv — keine Dexie-Migration nötig.
    */
   planned?: boolean
+  /**
+   * Anzeige-Snapshot, wenn in einer benannten Portionseinheit erfasst wurde
+   * („2 Stück"): `amount`/`unit` halten weiterhin die Basis-Menge (z. B. 44 g),
+   * gerechnet wird NUR damit. Optional & additiv — keine Dexie-Migration nötig.
+   */
+  serving?: { label: string; count: number }
   photoBlobId?: string
   aiRaw?: unknown
   updatedAt: number

@@ -23,6 +23,7 @@ import { describePortion } from '@/lib/portion'
 import { cn, todayKey } from '@/lib/utils'
 import { useTodayKey } from '@/hooks/useTodayKey'
 import { useOverlays } from '@/lib/overlays-context'
+import { EditLogSheet } from '@/components/EditLogSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Button } from '@/components/ui/Button'
@@ -58,6 +59,8 @@ export function Week() {
   const [weekOffset, setWeekOffset] = useState(0)
   // Zukunfts-Tag, für den gerade der Vorrats-Picker (PlanSheet) offen ist.
   const [planFor, setPlanFor] = useState<string | null>(null)
+  // Echter Log-Eintrag im Editor (Menge/Einheit/Mahlzeit) — wie auf „Heute".
+  const [editing, setEditing] = useState<LogEntry | null>(null)
 
   const days = useMemo(() => {
     const monday = mondayOf(addDays(new Date(`${today}T12:00:00`), weekOffset * 7))
@@ -210,6 +213,12 @@ export function Week() {
   function removePlanned(l: LogEntry) {
     void deleteLog(l.id)
     showUndo(t('plan.removed'), () => restoreLog(l.id))
+  }
+
+  // Echten Eintrag löschen — gleiche Undo-Semantik wie auf „Heute".
+  function handleDelete(l: LogEntry) {
+    void deleteLog(l.id)
+    showUndo(t('today.entryDeleted', { name: foods?.get(l.foodId)?.name ?? '—' }), () => restoreLog(l.id))
   }
 
   // Frisch geplante Mahlzeit aus dem Picker — Undo löscht den planned-Log wieder.
@@ -386,6 +395,8 @@ export function Week() {
                             log={l}
                             name={foods.get(l.foodId)?.name ?? '—'}
                             photoUrl={l.photoBlobId ? photos?.get(l.photoBlobId) : undefined}
+                            onOpen={() => setEditing(l)}
+                            onDelete={() => handleDelete(l)}
                           />
                         ))}
                         {plannedItems.map((l) => (
@@ -493,6 +504,13 @@ export function Week() {
 
       {/* Vorrats-Picker fürs Vorplanen (Bottom-Sheet, Muster PortionSheet). */}
       <PlanSheet date={planFor} onClose={() => setPlanFor(null)} onPlanned={handlePlanned} />
+
+      {/* Log-Editor für echte Einträge — gleiches Sheet wie auf „Heute". */}
+      <EditLogSheet
+        entry={editing}
+        food={editing ? foods.get(editing.foodId) : undefined}
+        onClose={() => setEditing(null)}
+      />
     </div>
   )
 }
@@ -696,18 +714,57 @@ function PlanForm({
   )
 }
 
-function WeekLogRow({ log, name, photoUrl }: { log: LogEntry; name: string; photoUrl?: string }) {
+/**
+ * Echter (gegessener) Eintrag im Tages-Panel: Tap öffnet den Log-Editor
+ * (Menge/Einheit/Mahlzeit — Korrekturen wie „ganze Packung → 2 Stück"),
+ * der Papierkorb löscht mit Undo. Gleiches Verhalten wie auf „Heute".
+ */
+function WeekLogRow({
+  log,
+  name,
+  photoUrl,
+  onOpen,
+  onDelete,
+}: {
+  log: LogEntry
+  name: string
+  photoUrl?: string
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  const { t } = useTranslation()
+  const amountLabel = log.serving
+    ? `${String(log.serving.count).replace('.', ',')} ${log.serving.label}`
+    : `${log.amount} ${log.unit === 'portion' ? t('today.edit.unitPortion') : log.unit}`
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5">
-      {photoUrl ? (
-        <img src={photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" />
-      ) : (
-        <span className="h-10 w-10 shrink-0 rounded-md bg-muted" aria-hidden="true" />
-      )}
-      <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-        {Math.round(log.computed.kcal)}
-      </span>
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={t('today.edit.open', { name })}
+        className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center gap-3 rounded-md text-left"
+      >
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" />
+        ) : (
+          <span className="h-10 w-10 shrink-0 rounded-md bg-muted" aria-hidden="true" />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{name}</span>
+          <span className="block text-xs tabular-nums text-muted-foreground">{amountLabel}</span>
+        </span>
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+          {Math.round(log.computed.kcal)}
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={t('common.delete')}
+        className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+      >
+        <Trash2 size={16} aria-hidden="true" />
+      </button>
     </div>
   )
 }

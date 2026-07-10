@@ -105,6 +105,28 @@ describe('foodEdit (Produkt-Editor, Paket B)', () => {
       expect(stored.priceHistory!.map((p) => p.amount)).toEqual([2.99, 2.49])
     })
 
+    it('Portionseinheiten: normalisieren, deduplizieren, entfernen — Quelle bleibt', async () => {
+      const food = await createFood({ name: 'Cookies', ...base, source: 'ai' })
+
+      const updated = await updateFoodValues(food.id, {
+        servings: [
+          { label: ' Stück ', amount: 22 },
+          { label: 'stück', amount: 30 }, // Duplikat (case-insensitiv) → verworfen
+          { label: 'Cup', amount: 0 }, // keine positive Menge → verworfen
+          { label: 'Packung', amount: 225 },
+        ],
+      })
+      expect(updated.servings).toEqual([
+        { label: 'Stück', amount: 22 },
+        { label: 'Packung', amount: 225 },
+      ])
+      expect(updated.source).toBe('ai') // rein beschreibend
+
+      const cleared = await updateFoodValues(food.id, { servings: [] })
+      expect('servings' in (await db.foods.get(food.id))!).toBe(false)
+      expect(cleared.source).toBe('ai')
+    })
+
     it('wirft für unbekannte/gelöschte Produkte', async () => {
       await expect(updateFoodValues('nope', { kcal: 1 })).rejects.toThrow()
       const food = await createFood({ name: 'Weg', ...base })
