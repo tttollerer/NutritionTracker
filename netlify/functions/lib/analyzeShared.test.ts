@@ -3,6 +3,7 @@ import { AnalyzeResultSchema, ApiErrorSchema, ReceiptResultSchema } from '../../
 import {
   ANALYZE_ERROR_TEXT,
   analyzeErrorResponse,
+  clampBarcode,
   clampQuestions,
   clampReceipt,
   extractJson,
@@ -163,6 +164,25 @@ describe('analyzeShared (Helfer der Analyze-Function, Vertrag §1/§2)', () => {
       expect(clampReceipt(noItems)).toBe(noItems)
       expect(clampReceipt(null)).toBe(null)
       expect(clampReceipt('kein objekt')).toBe('kein objekt')
+    })
+  })
+
+  describe('clampBarcode (barcode-Sanitizing v1.4)', () => {
+    it('normalisiert Leerzeichen/Bindestriche und Zahlen zu Ziffern-Strings', () => {
+      expect(clampBarcode({ items: [], barcode: '4066 600-203704' })).toEqual({ items: [], barcode: '4066600203704' })
+      expect(clampBarcode({ items: [], barcode: 40123456 })).toEqual({ items: [], barcode: '40123456' })
+    })
+
+    it('entfernt unplausible Codes, statt die Antwort zu kippen', () => {
+      expect(clampBarcode({ items: [], barcode: '123' })).toEqual({ items: [] })
+      expect(clampBarcode({ items: [], barcode: 'kein Code sichtbar' })).toEqual({ items: [] })
+      expect(clampBarcode({ items: [], barcode: '123456789012345678' })).toEqual({ items: [] })
+    })
+
+    it('lässt Antworten ohne barcode-Feld unangetastet', () => {
+      const raw = { items: [], notes: 'x' }
+      expect(clampBarcode(raw)).toBe(raw)
+      expect(clampBarcode('kein Objekt')).toBe('kein Objekt')
     })
   })
 })

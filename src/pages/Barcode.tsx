@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronLeft, ShoppingBasket, UtensilsCrossed } from 'lucide-react'
+import { Camera, ChevronLeft, ShoppingBasket, UtensilsCrossed } from 'lucide-react'
 import { lookupBarcode } from '@/lib/openfoodfacts'
 import { toApiError } from '@/lib/apiError'
 import { setReview } from '@/lib/reviewStore'
@@ -210,7 +210,9 @@ export function Barcode() {
       </div>
       {target === 'pantry' && <p className="text-xs text-muted-foreground">{t('capture.pantryHint')}</p>}
 
-      <div className="relative overflow-hidden rounded-lg bg-black">
+      {/* Live-Scanner nur zeigen, wenn er wirklich läuft — auf iOS Safari gibt
+          es keinen BarcodeDetector, dort wäre die Fläche nur eine schwarze Box. */}
+      <div className={scanning ? 'relative overflow-hidden rounded-lg bg-black' : 'hidden'}>
         <video ref={videoRef} className="aspect-square w-full object-cover" muted playsInline />
         {busy && (
           <div
@@ -222,6 +224,13 @@ export function Barcode() {
           </div>
         )}
       </div>
+
+      {/* Ohne Live-Scanner: der Foto-Scan kann den Barcode genauso lesen (KI). */}
+      {!scanning && (
+        <Button variant="secondary" className="w-full" onClick={() => navigate('/capture?mode=label')}>
+          <Camera size={18} aria-hidden="true" /> {t('capture.scanByPhoto')}
+        </Button>
+      )}
 
       {/* Optionale Preis-Eingabe zum zuletzt abgelegten Produkt — der Scanner
           läuft währenddessen weiter (Batch-Einkauf: scannen, Preis, weiter). */}

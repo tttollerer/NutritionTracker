@@ -80,6 +80,26 @@ describe('AnalyzeResultSchema v1.2 — optionales questions-Feld (Paket B)', () 
   })
 })
 
+describe('AnalyzeResultSchema v1.4 — optionales barcode-Feld (Foto-Scan)', () => {
+  const item = {
+    name: 'Bier',
+    amount: 500,
+    unit: 'ml',
+    per100: { kcal: 42, protein: 0.5, carbs: 3, fat: 0 },
+  }
+
+  it('parst OHNE barcode (abwärtskompatibel) und MIT gültigem EAN', () => {
+    expect(AnalyzeResultSchema.parse({ items: [item] }).barcode).toBeUndefined()
+    expect(AnalyzeResultSchema.parse({ items: [item], barcode: '4066600203704' }).barcode).toBe('4066600203704')
+  })
+
+  it('lehnt Nicht-Ziffern und unplausible Längen ab (Sanitizing macht der Server)', () => {
+    expect(AnalyzeResultSchema.safeParse({ items: [item], barcode: '40666 00203704' }).success).toBe(false)
+    expect(AnalyzeResultSchema.safeParse({ items: [item], barcode: '1234567' }).success).toBe(false)
+    expect(AnalyzeResultSchema.safeParse({ items: [item], barcode: '123456789012345' }).success).toBe(false)
+  })
+})
+
 describe('Kassenbon-Scan v1.3 — mode receipt + ReceiptResultSchema', () => {
   it('AnalyzeRequestSchema akzeptiert den neuen Modus "receipt" (additiv)', () => {
     expect(AnalyzeRequestSchema.safeParse({ mode: 'receipt', imageBase64: 'QUJD' }).success).toBe(true)

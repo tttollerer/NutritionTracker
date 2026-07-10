@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
 import { analyzeImage, analyzeReceipt, type AnalyzeMode } from '@/lib/ai'
+import { enrichAnalyzeWithBarcode } from '@/lib/barcodeEnrich'
 import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
@@ -74,19 +75,25 @@ export function Capture() {
         return
       }
       const result = await analyzeImage(mode, preview, trimmedHint)
+      // Vertrag v1.4: Hat die KI einen Strichcode abgelesen, liefern die
+      // exakten OFF-Daten Name/Nährwerte — die Mengen-Schätzung bleibt.
+      const enriched = await enrichAnalyzeWithBarcode(result)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
       // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
       // mode/hint/imageBase64/questions: Verfeinerungsschleife („Neu schätzen" im Review).
       setReview({
-        items: result.items,
+        items: enriched.items,
         meal,
-        source: 'ai',
+        source: enriched.source,
+        barcode: enriched.barcode,
+        allergens: enriched.allergens,
+        traces: enriched.traces,
         photo: mode === 'meal' ? preview : undefined,
-        notes: result.notes,
+        notes: enriched.notes,
         mode,
         hint: trimmedHint,
         imageBase64: preview,
-        questions: result.questions,
+        questions: enriched.questions,
       })
       clearPendingImage()
       navigate('/review')
