@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { addToPantry, createFood, setFoodPrice, setPantry, PRICE_HISTORY_MAX } from '@/db/repo'
 import {
+  daysUntilExpiry,
   decrementPantryOnLog,
   effectivePantryQty,
   expiringSoon,
   incrementPantry,
+  isExpiringSoon,
   lowPantryFoods,
   setExpiry,
   setPantryQty,
@@ -136,6 +138,23 @@ describe('MHD (expiryDate)', () => {
 
     const list = await expiringSoon(3, today)
     expect(list.map((f) => f.name)).toEqual(['Quark', 'Joghurt'])
+  })
+
+  it('daysUntilExpiry: 0 = heute, negativ = abgelaufen, über Monatsgrenzen hinweg', () => {
+    expect(daysUntilExpiry('2026-07-10', '2026-07-10')).toBe(0)
+    expect(daysUntilExpiry('2026-07-11', '2026-07-10')).toBe(1)
+    expect(daysUntilExpiry('2026-07-09', '2026-07-10')).toBe(-1)
+    expect(daysUntilExpiry('2026-08-02', '2026-07-30')).toBe(3)
+  })
+
+  it('isExpiringSoon: gleiche Regel wie expiringSoon (Fenster, leere Packung, kein MHD)', () => {
+    const today = '2026-07-10'
+    expect(isExpiringSoon({ pantry: true, expiryDate: '2026-07-13' }, 3, today)).toBe(true)
+    expect(isExpiringSoon({ pantry: true, expiryDate: '2026-07-14' }, 3, today)).toBe(false)
+    expect(isExpiringSoon({ pantry: true, expiryDate: '2026-07-01' }, 3, today)).toBe(true) // abgelaufen
+    expect(isExpiringSoon({ pantry: true, pantryQty: 0, expiryDate: '2026-07-11' }, 3, today)).toBe(false)
+    expect(isExpiringSoon({ pantry: true }, 3, today)).toBe(false)
+    expect(isExpiringSoon({ expiryDate: '2026-07-11' }, 3, today)).toBe(false) // nicht im Vorrat
   })
 })
 

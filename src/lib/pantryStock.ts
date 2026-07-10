@@ -74,6 +74,35 @@ export async function lowPantryFoods(): Promise<FoodItem[]> {
 
 // ---- MHD (Mindesthaltbarkeitsdatum) ----
 
+/** Gemeinsames „läuft bald ab"-Fenster (Tage) für Badge, Filter & Hinweis. */
+export const EXPIRY_SOON_DAYS = 3
+
+/** Tage bis zum MHD: 0 = heute, negativ = abgelaufen. UTC-Rechnung — DST-sicher. */
+export function daysUntilExpiry(expiryDate: string, today = todayKey()): number {
+  const utc = (key: string) => {
+    const [y, m, d] = key.split('-').map(Number)
+    return Date.UTC(y, m - 1, d)
+  }
+  return Math.round((utc(expiryDate) - utc(today)) / 86_400_000)
+}
+
+/**
+ * Synchroner Einzel-Check (Zeilen-Badge/Filter) mit derselben Regel wie
+ * expiringSoon(): MHD im Fenster (abgelaufene inklusive), leere Packungen nicht.
+ */
+export function isExpiringSoon(
+  food: Pick<FoodItem, 'pantry' | 'pantryQty' | 'expiryDate'>,
+  days = EXPIRY_SOON_DAYS,
+  today = todayKey(),
+): boolean {
+  return (
+    !!food.pantry &&
+    (food.pantryQty ?? 1) > 0 &&
+    !!food.expiryDate &&
+    daysUntilExpiry(food.expiryDate, today) <= days
+  )
+}
+
 /** MHD der offenen Packung setzen oder mit `null` entfernen. */
 export async function setExpiry(foodId: string, date: string | null): Promise<void> {
   const food = await db.foods.get(foodId)
@@ -87,18 +116,9 @@ export async function setExpiry(foodId: string, date: string | null): Promise<vo
  * abgelaufene inklusive — sie sind am dringendsten). Leere Packungen (qty 0)
  * fallen raus: kein Inhalt, kein Verderb. Aufsteigend nach Datum sortiert.
  */
-export async function expiringSoon(days = 3, today = todayKey()): Promise<FoodItem[]> {
-  const [y, m, d] = today.split('-').map(Number)
-  const limit = todayKey(new Date(y, m - 1, d + days))
+export async function expiringSoon(days = EXPIRY_SOON_DAYS, today = todayKey()): Promise<FoodItem[]> {
   const foods = await db.foods
-    .filter(
-      (f) =>
-        !f.deletedAt &&
-        !!f.pantry &&
-        (f.pantryQty ?? 1) > 0 &&
-        !!f.expiryDate &&
-        f.expiryDate <= limit,
-    )
+    .filter((f) => !f.deletedAt && isExpiringSoon(f, days, today))
     .toArray()
   return foods.sort((a, b) => a.expiryDate!.localeCompare(b.expiryDate!))
 }

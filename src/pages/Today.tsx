@@ -22,6 +22,7 @@ import { NutrientPanel } from '@/components/NutrientPanel'
 import { GlucoseCard } from '@/components/GlucoseCard'
 import { DueMeasurements } from '@/components/DueMeasurements'
 import { NudgeCard } from '@/components/NudgeCard'
+import { ExpiryHint } from '@/components/ExpiryHint'
 import { CaptureCta } from '@/components/CaptureCta'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
@@ -148,6 +149,9 @@ export function Today() {
       <CaptureCta />
 
       <DueMeasurements />
+
+      {/* Bald ablaufende Vorrats-Artikel → heute verbrauchen (Link zum Einkauf). */}
+      <ExpiryHint today={date} />
 
       <NudgeCard
         logs={logs}

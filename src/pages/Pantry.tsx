@@ -7,7 +7,7 @@ import { Minus, Plus, Receipt, ScanBarcode, Search, ShoppingBasket, Sparkles, Ut
 import type { FoodItem, Photo } from '@/db/types'
 import { db } from '@/db'
 import { deleteLog, foodNameMatches, pantryFoods } from '@/db/repo'
-import { decrementPantryOnLog, effectivePantryQty, incrementPantry, setPantryQty } from '@/lib/pantryStock'
+import { decrementPantryOnLog, effectivePantryQty, incrementPantry, isExpiringSoon, setPantryQty } from '@/lib/pantryStock'
 import { formatEuro } from '@/lib/money'
 import { defaultMeal } from '@/lib/meal'
 import { cn } from '@/lib/utils'
@@ -17,6 +17,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { ShoppingList } from '@/components/ShoppingList'
 import { PortionSheet } from '@/components/PortionSheet'
 import { FoodDetailSheet } from '@/components/FoodDetailSheet'
+import { ExpiryBadge } from '@/components/ExpiryBadge'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 
@@ -35,6 +36,8 @@ export function Pantry() {
   const [tag, setTag] = useState<string | null>(null)
   // „Bald leer"-Filter: nur Artikel mit höchstens 1 Packung im Bestand.
   const [lowOnly, setLowOnly] = useState(false)
+  // „Läuft ab"-Filter: nur Artikel, deren MHD im Fenster liegt (inkl. abgelaufener).
+  const [expiringOnly, setExpiringOnly] = useState(false)
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
   const [detailFood, setDetailFood] = useState<FoodItem | null>(null)
 
@@ -80,7 +83,8 @@ export function Pantry() {
     (f) =>
       (!searching || foodNameMatches(f.name, query)) &&
       (!tag || (f.tags ?? []).includes(tag)) &&
-      (!lowOnly || effectivePantryQty(f) <= 1),
+      (!lowOnly || effectivePantryQty(f) <= 1) &&
+      (!expiringOnly || isExpiringSoon(f)),
   )
 
   return (
@@ -143,10 +147,11 @@ export function Pantry() {
         <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4">
           <FilterChip
             label={t('pantryPage.all')}
-            selected={tag === null && !lowOnly}
+            selected={tag === null && !lowOnly && !expiringOnly}
             onClick={() => {
               setTag(null)
               setLowOnly(false)
+              setExpiringOnly(false)
             }}
           />
           <FilterChip
@@ -154,6 +159,12 @@ export function Pantry() {
             selected={lowOnly}
             warning
             onClick={() => setLowOnly((v) => !v)}
+          />
+          <FilterChip
+            label={t('pantryPage.expiringFilter')}
+            selected={expiringOnly}
+            warning
+            onClick={() => setExpiringOnly((v) => !v)}
           />
           {tags.map((tg) => (
             <FilterChip key={tg} label={tg} selected={tag === tg} onClick={() => setTag(tag === tg ? null : tg)} />
@@ -317,11 +328,15 @@ function PantryRow({
             <Plus size={18} />
           </button>
         </div>
-        {qty <= 1 && (
-          <span className="shrink-0 rounded-full border border-warning/40 bg-warning/15 px-2.5 py-1 text-[11px] font-semibold text-warning-text">
-            {t('pantryPage.lowStock')}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {/* MHD-Badge: gleiche Regel wie der „Läuft ab"-Filter (isExpiringSoon). */}
+          {isExpiringSoon(food) && <ExpiryBadge expiryDate={food.expiryDate!} />}
+          {qty <= 1 && (
+            <span className="shrink-0 rounded-full border border-warning/40 bg-warning/15 px-2.5 py-1 text-[11px] font-semibold text-warning-text">
+              {t('pantryPage.lowStock')}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

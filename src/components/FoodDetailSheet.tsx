@@ -6,11 +6,13 @@ import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, Spa
 import type { FoodItem } from '@/db/types'
 import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type FoodValuesPatch } from '@/lib/foodEdit'
 import { getActiveGoalsMap, toggleFavorite } from '@/db/repo'
+import { setExpiry } from '@/lib/pantryStock'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
-import { parsePositiveNumber } from '@/lib/money'
+import { formatEuro, parsePositiveNumber } from '@/lib/money'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Input'
+import { ExpiryBadge } from '@/components/ExpiryBadge'
 
 interface Props {
   /** null → Sheet geschlossen (Muster PortionSheet). */
@@ -92,6 +94,8 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
   // Haushaltskasse (optional), gleiche Semantik wie im PortionSheet.
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
   const [packText, setPackText] = useState(food.price ? String(food.price.per) : '')
+  // MHD der offenen Packung ('YYYY-MM-DD' vom date-Input, leer = keins).
+  const [expiryText, setExpiryText] = useState(food.expiryDate ?? '')
   // Beschreibung & Tags (Design 1d) — gespeichert wie Name/Portion/Preis.
   const [description, setDescription] = useState(food.description ?? '')
   const [tags, setTags] = useState<string[]>(food.tags ?? [])
@@ -156,6 +160,9 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         description,
         tags,
       }
+      // MHD zuerst schreiben — updateFoodValues liest danach den frischen Stand
+      // und liefert ihn (inkl. expiryDate) an onSaved zurück.
+      if ((food.expiryDate ?? '') !== expiryText) await setExpiry(food.id, expiryText || null)
       const updated = await updateFoodValues(food.id, patch)
       setSaved(true)
       onSaved?.(updated)
@@ -421,6 +428,21 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
             />
           </Field>
         </div>
+        <PriceHistory food={food} />
+      </div>
+
+      {/* MHD der offenen Packung + Ablauf-Badge (warning/destructive). */}
+      <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-muted-foreground">{t('food.expiry.label')}</p>
+          {expiryText && <ExpiryBadge expiryDate={expiryText} />}
+        </div>
+        <Input
+          type="date"
+          value={expiryText}
+          onChange={(e) => touch(setExpiryText)(e.target.value)}
+          aria-label={t('food.expiry.label')}
+        />
       </div>
 
       {!valid && <p className="text-xs text-destructive">{t('food.edit.invalid')}</p>}
@@ -438,6 +460,33 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
           {t('food.edit.save')}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Mini-Preis-Historie unter dem Packungspreis: die letzten 5 abgelösten
+ * Preise (Datum + Preis, mono) — bewusst nur eine Liste, keine Chart-Library.
+ */
+function PriceHistory({ food }: { food: FoodItem }) {
+  const { t, i18n } = useTranslation()
+  const history = (food.priceHistory ?? []).slice(0, 5)
+  if (history.length === 0) return null
+
+  const dateFmt = new Intl.DateTimeFormat(i18n.language, { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return (
+    <div className="space-y-1 border-t border-border/60 pt-2">
+      <p className="text-[10px] font-medium uppercase text-muted-foreground">{t('food.edit.priceHistory')}</p>
+      <ul>
+        {history.map((p) => (
+          <li key={p.at} className="flex items-baseline justify-between py-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+            <span>{dateFmt.format(new Date(p.at))}</span>
+            <span>
+              {formatEuro(p.amount)} / {p.per} {food.per}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
