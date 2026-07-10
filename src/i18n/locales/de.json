@@ -602,7 +602,11 @@
       "servingLabelPh": "z. B. Stück",
       "servingAmount": "Menge ({{unit}})",
       "addServing": "Einheit hinzufügen",
-      "removeServing": "Einheit {{label}} entfernen"
+      "removeServing": "Einheit {{label}} entfernen",
+      "portionPhoto": "Portion fotografieren — KI schätzt die Menge",
+      "portionDefaultLabel": "Portion",
+      "portionEstimated": "KI-Schätzung: {{amount}} {{unit}} — unten prüfen und mit + übernehmen.",
+      "portionEstimateNone": "Keine Mengenschätzung erkennbar — bitte Menge von Hand eintragen."
     },
     "create": {
       "title": "Neues Produkt",

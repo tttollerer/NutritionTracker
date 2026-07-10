@@ -5,9 +5,11 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, ShoppingBasket, Sparkles, Star, X } from 'lucide-react'
 import type { FoodItem } from '@/db/types'
 import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type FoodValuesPatch } from '@/lib/foodEdit'
-import { createFood, getActiveGoalsMap, getAllergies, toggleFavorite } from '@/db/repo'
+import { createFood, getActiveGoalsMap, getAllergies, getSettings, toggleFavorite, updateSettings } from '@/db/repo'
 import { incrementPantry, setExpiry } from '@/lib/pantryStock'
 import { checkAllergens } from '@/lib/allergens'
+import { analyzeImage } from '@/lib/ai'
+import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
 import { formatEuro, parsePositiveNumber } from '@/lib/money'
@@ -176,6 +178,10 @@ function FoodDetailForm({
   )
   const [servingLabel, setServingLabel] = useState('')
   const [servingAmount, setServingAmount] = useState('')
+  // „Portion fotografieren": KI schätzt die Menge (Capture-Modus 'portion').
+  const [portionBusy, setPortionBusy] = useState(false)
+  const [portionHint, setPortionHint] = useState<string | null>(null)
+  const [portionError, setPortionError] = useState<string | null>(null)
   const [favorite, setFavorite] = useState(!!food.favorite)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -184,6 +190,9 @@ function FoodDetailForm({
 
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
+  const portionCamRef = useRef<HTMLInputElement>(null)
+  // Einmalige Einwilligung, Fotos an den KI-Dienst zu senden (wie Capture/Coach).
+  const photoConsent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
   // Bestehende Produkte: Galerie live aus der DB. Drafts: Fotos lokal sammeln
   // (pendingPhotos) und erst beim Anlegen persistieren — gleiche UI für beides.
   const storedPhotos = useLiveQuery(() => (food.id ? getFoodPhotos(food.id) : Promise.resolve([])), [food.id]) ?? []
@@ -315,6 +324,43 @@ function FoodDetailForm({
       // Kein Canvas/kaputtes Bild → Galerie bleibt einfach unverändert.
     } finally {
       setPhotoBusy(false)
+    }
+  }
+
+  /**
+   * Übliche Portion abfotografieren: die KI (Capture-Modus 'portion', Hint =
+   * Produktname) schätzt die Menge. Das Ergebnis befüllt die Einheiten-Eingaben
+   * (Label „Portion" + Menge) und — falls noch leer — die übliche Portion;
+   * das Foto wandert zusätzlich in die Produkt-Galerie.
+   */
+  async function onPortionPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || portionBusy) return
+    setPortionBusy(true)
+    setPortionError(null)
+    setPortionHint(null)
+    try {
+      const dataUrl = await downscaleImage(file)
+      const result = await analyzeImage('portion', dataUrl, name.trim() || undefined)
+      const item = result.items[0]
+      const grams = item && item.unit !== 'portion' ? Math.round(item.amount) : 0
+      if (!(grams > 0)) {
+        setPortionError('food.edit.portionEstimateNone')
+        return
+      }
+      // Foto in die Galerie (Draft lokal, sonst direkt persistieren).
+      if (isDraft) setPendingPhotos((prev) => [...prev, dataUrl])
+      else await addFoodPhoto(food.id, dataUrl)
+      setSaved(false)
+      setServingLabel((l) => l.trim() || t('food.edit.portionDefaultLabel'))
+      setServingAmount(String(grams))
+      if (!portionAmount.trim()) setPortionAmount(String(grams))
+      setPortionHint(t('food.edit.portionEstimated', { amount: grams, unit: item.unit }))
+    } catch (err) {
+      setPortionError(toApiError(err).i18nKey)
+    } finally {
+      setPortionBusy(false)
     }
   }
 
@@ -626,6 +672,7 @@ function FoodDetailForm({
               ])
               setServingLabel('')
               setServingAmount('')
+              setPortionHint(null)
             }}
             disabled={!servingLabel.trim() || parsePositiveNumber(servingAmount) == null}
             aria-label={t('food.edit.addServing')}
@@ -634,6 +681,42 @@ function FoodDetailForm({
             <Plus size={16} aria-hidden="true" />
           </button>
         </div>
+
+        {/* Übliche Portion einfach abfotografieren — die KI schätzt die Menge
+            (Hint = Produktname), das Foto landet zusätzlich in der Galerie. */}
+        {photoConsent ? (
+          <button
+            type="button"
+            onClick={() => portionCamRef.current?.click()}
+            disabled={portionBusy || !name.trim()}
+            className="focus-ring flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-dashed border-input text-sm font-medium text-muted-foreground disabled:opacity-50"
+          >
+            <Camera size={16} aria-hidden="true" />
+            {portionBusy ? t('capture.analyzing') : t('food.edit.portionPhoto')}
+          </button>
+        ) : (
+          <div className="space-y-2 rounded-md bg-muted p-3">
+            <p className="text-xs font-medium">{t('capture.consentTitle')}</p>
+            <p className="text-xs text-muted-foreground">{t('capture.consentBody')}</p>
+            <Button variant="secondary" className="w-full" onClick={() => void updateSettings({ photoConsent: true })}>
+              {t('capture.consentAccept')}
+            </Button>
+          </div>
+        )}
+        {portionHint && (
+          <p className="text-xs font-medium text-primary" role="status">
+            {portionHint}
+          </p>
+        )}
+        {portionError && <p className="text-xs text-destructive">{t(portionError)}</p>}
+        <input
+          ref={portionCamRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={(e) => void onPortionPhotoFile(e)}
+        />
       </div>
 
       {/* Haushaltskasse: Packungspreis (optional) */}
