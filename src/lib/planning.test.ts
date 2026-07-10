@@ -5,7 +5,15 @@ import { createFood, setFoodPrice, setPantry } from '@/db/repo'
 import { setPantryQty } from './pantryStock'
 import { sumsByDate } from './gamification'
 import { sumCost } from './money'
-import { confirmPlanned, missingForPlan, planFood, plannedForDate } from './planning'
+import { addShoppingItem, openShoppingItems } from './shopping'
+import {
+  confirmPlanned,
+  missingForPlan,
+  missingToShoppingList,
+  planFood,
+  plannedForDate,
+  sumPlannedCost,
+} from './planning'
 
 const base = { per: 'g' as const, kcal: 200, protein: 10, carbs: 20, fat: 4 }
 const DATE = '2026-07-11'
@@ -101,5 +109,36 @@ describe('Wochenplaner (planned-Logs)', () => {
 
     const missing = await missingForPlan(DATE)
     expect(missing.map((f) => f.name).sort()).toEqual(['Kokosmilch', 'Linsen'])
+  })
+
+  it('missingToShoppingList legt plan-Einträge an und überspringt bereits gelistete Foods', async () => {
+    const lentils = await createFood({ name: 'Linsen', ...base })
+    const coconut = await createFood({ name: 'Kokosmilch', ...base })
+    await planFood({ food: lentils, date: DATE, meal: 'dinner', amount: 100, unit: 'g' })
+    await planFood({ food: coconut, date: DATE, meal: 'dinner', amount: 100, unit: 'g' })
+    // Kokosmilch steht schon offen auf der Liste → kein Duplikat.
+    await addShoppingItem({ name: 'Kokosmilch', foodId: coconut.id })
+
+    const created = await missingToShoppingList(DATE)
+    expect(created.map((i) => i.name)).toEqual(['Linsen'])
+    expect(created[0].source).toBe('plan')
+    expect(created[0].foodId).toBe(lentils.id)
+
+    const open = await openShoppingItems()
+    expect(open).toHaveLength(2)
+
+    // Zweiter Aufruf ist idempotent — alles schon gelistet.
+    expect(await missingToShoppingList(DATE)).toEqual([])
+  })
+
+  it('sumPlannedCost summiert nur geplante, nicht gelöschte Kosten-Snapshots', () => {
+    expect(
+      sumPlannedCost([
+        { cost: 0.4, planned: true },
+        { cost: 0.2, planned: true, deletedAt: 1 }, // gelöscht → zählt nicht
+        { cost: 9 }, // echter Verzehr → zählt nicht
+        { planned: true }, // ohne Preis
+      ]),
+    ).toBe(0.4)
   })
 })

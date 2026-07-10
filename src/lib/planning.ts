@@ -1,7 +1,8 @@
 import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
-import type { FoodItem, LogEntry, Meal, Unit } from '@/db/types'
+import type { FoodItem, LogEntry, Meal, ShoppingItem, Unit } from '@/db/types'
 import { computeCost, computeLogValues } from '@/db/repo'
+import { addShoppingItem, openShoppingItems } from './shopping'
 
 /**
  * Wochenplaner: geplante Mahlzeiten sind normale LogEntries mit planned=true.
@@ -88,4 +89,32 @@ export async function missingForPlan(date: string): Promise<FoodItem[]> {
   return foods.filter(
     (f): f is FoodItem => !!f && !f.deletedAt && (!f.pantry || (f.pantryQty ?? 1) <= 0),
   )
+}
+
+/**
+ * Kosten-Snapshot-Summe geplanter Einträge in EUR (Panel-Fußzeile
+ * „geplant: ~X €"). Gegenstück zu sumCost, das planned bewusst ausschließt.
+ */
+export function sumPlannedCost(
+  logs: Pick<LogEntry, 'cost' | 'deletedAt' | 'planned'>[],
+): number {
+  const sum = logs.reduce((a, l) => a + (!l.deletedAt && l.planned ? l.cost ?? 0 : 0), 0)
+  return Math.round(sum * 100) / 100 // Cent-genau gegen Float-Drift
+}
+
+/**
+ * Fehlende Plan-Zutaten (missingForPlan) als 'plan'-Einträge auf die
+ * Einkaufsliste setzen. Foods mit offenem Listen-Eintrag (per foodId) werden
+ * übersprungen — keine Duplikate, wie suggestFromLowPantry. Gibt die neu
+ * angelegten Einträge zurück (Basis für den Undo-Toast).
+ */
+export async function missingToShoppingList(date: string): Promise<ShoppingItem[]> {
+  const [missing, open] = await Promise.all([missingForPlan(date), openShoppingItems()])
+  const listed = new Set(open.flatMap((i) => (i.foodId ? [i.foodId] : [])))
+  const created: ShoppingItem[] = []
+  for (const food of missing) {
+    if (listed.has(food.id)) continue
+    created.push(await addShoppingItem({ name: food.name, foodId: food.id, qty: 1, source: 'plan' }))
+  }
+  return created
 }
