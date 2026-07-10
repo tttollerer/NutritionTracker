@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { useOverlays } from '@/lib/overlays-context'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
+import { ShoppingList } from '@/components/ShoppingList'
 import { PortionSheet } from '@/components/PortionSheet'
 import { FoodDetailSheet } from '@/components/FoodDetailSheet'
 import { Input } from '@/components/ui/Input'
@@ -87,6 +88,9 @@ export function Pantry() {
       <PageHeader title={t('pantryPage.title')} subtitle={subtitle}>
         <ProfileAvatar />
       </PageHeader>
+
+      {/* Einkaufsliste: einklappbarer Abschnitt über dem Vorrat. */}
+      <ShoppingList />
 
       {/* Scan-Einstiege: Barcode (Ziel Vorrat) & Foto/KI (Review → „Nur in den Vorrat"). */}
       <div className="grid grid-cols-2 gap-3">

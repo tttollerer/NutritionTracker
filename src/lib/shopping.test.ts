@@ -6,10 +6,13 @@ import { setPantryQty } from './pantryStock'
 import {
   addShoppingItem,
   checkOffToPantry,
+  clearCheckedShoppingItems,
   openShoppingItems,
   removeShoppingItem,
   suggestFromLowPantry,
   toggleShoppingItem,
+  undoCheckOff,
+  visibleShoppingItems,
 } from './shopping'
 
 const base = { per: 'g' as const, kcal: 100, protein: 5, carbs: 10, fat: 2 }
@@ -72,6 +75,52 @@ describe('Einkaufsliste', () => {
     await checkOffToPantry(first[0].id)
     expect((await db.foods.get(low.id))!.pantryQty).toBe(2)
     expect(await suggestFromLowPantry()).toHaveLength(0)
+  })
+
+  it('visibleShoppingItems: offene zuerst, abgehakte dahinter; gelöschte raus', async () => {
+    const milk = await addShoppingItem({ name: 'Milch' })
+    const done = await addShoppingItem({ name: 'Brot' })
+    await toggleShoppingItem(done.id)
+    const eggs = await addShoppingItem({ name: 'Eier' })
+    const gone = await addShoppingItem({ name: 'Butter' })
+    await removeShoppingItem(gone.id)
+    // Timestamps pinnen — sonst hinge die Reihenfolge an Millisekunden-Zufall.
+    await db.shoppingList.update(milk.id, { updatedAt: 1 })
+    await db.shoppingList.update(eggs.id, { updatedAt: 2 })
+
+    const visible = await visibleShoppingItems()
+    expect(visible.map((i) => i.name)).toEqual(['Eier', 'Milch', 'Brot'])
+    expect(visible[2].checked).toBe(true)
+  })
+
+  it('undoCheckOff nimmt Häkchen und eingelagerte Packungen zurück', async () => {
+    const food = await createFood({ name: 'Reis', ...base })
+    await setPantryQty(food.id, 2)
+    const item = await addShoppingItem({ name: 'Reis', foodId: food.id, qty: 3 })
+
+    await checkOffToPantry(item.id)
+    expect((await db.foods.get(food.id))!.pantryQty).toBe(5)
+
+    await undoCheckOff(item.id)
+    expect((await db.shoppingList.get(item.id))!.checked).toBe(false)
+    expect((await db.foods.get(food.id))!.pantryQty).toBe(2)
+
+    // Auf offene Einträge ist der Undo ein No-op (idempotent).
+    await undoCheckOff(item.id)
+    expect((await db.foods.get(food.id))!.pantryQty).toBe(2)
+  })
+
+  it('clearCheckedShoppingItems löscht nur Abgehakte per Tombstone', async () => {
+    const open = await addShoppingItem({ name: 'Milch' })
+    const a = await addShoppingItem({ name: 'Brot' })
+    const b = await addShoppingItem({ name: 'Eier' })
+    await toggleShoppingItem(a.id)
+    await toggleShoppingItem(b.id)
+
+    expect(await clearCheckedShoppingItems()).toBe(2)
+    expect((await visibleShoppingItems()).map((i) => i.name)).toEqual(['Milch'])
+    expect((await db.shoppingList.get(a.id))!.deletedAt).toBeGreaterThan(0)
+    expect((await db.shoppingList.get(open.id))!.deletedAt).toBeUndefined()
   })
 
   it('checkOffToPantry ohne foodId hakt nur ab; qty>1 erhöht entsprechend', async () => {

@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
 import type { ShoppingItem } from '@/db/types'
-import { incrementPantry, lowPantryFoods } from './pantryStock'
+import { effectivePantryQty, incrementPantry, lowPantryFoods, setPantryQty } from './pantryStock'
 
 /**
  * Einkaufsliste (eigene Tabelle, Dexie v6). Fokussierte lib-Datei nach dem
@@ -53,6 +53,37 @@ export async function removeShoppingItem(id: string): Promise<void> {
 export async function openShoppingItems(): Promise<ShoppingItem[]> {
   const items = await db.shoppingList.filter((i) => !i.deletedAt && !i.checked).toArray()
   return items.sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/**
+ * Alle sichtbaren Einträge für die Listen-UI: offene zuerst, abgehakte dezent
+ * darunter — innerhalb der Gruppen jeweils die zuletzt angefassten oben.
+ */
+export async function visibleShoppingItems(): Promise<ShoppingItem[]> {
+  const items = await db.shoppingList.filter((i) => !i.deletedAt).toArray()
+  return items.sort((a, b) => Number(a.checked) - Number(b.checked) || b.updatedAt - a.updatedAt)
+}
+
+/** Abgehakte Einträge räumen (Soft-Delete); gibt die Anzahl zurück. */
+export async function clearCheckedShoppingItems(): Promise<number> {
+  const checked = await db.shoppingList.filter((i) => !i.deletedAt && i.checked).toArray()
+  const t = now()
+  await db.shoppingList.bulkPut(checked.map((i) => ({ ...i, deletedAt: t, updatedAt: t })))
+  return checked.length
+}
+
+/**
+ * Undo von checkOffToPantry: Häkchen zurücknehmen und die beim Abhaken
+ * eingelagerten Packungen wieder aus dem Vorrat nehmen (Clamp bei 0 übernimmt
+ * setPantryQty).
+ */
+export async function undoCheckOff(itemId: string): Promise<void> {
+  const item = await db.shoppingList.get(itemId)
+  if (!item || item.deletedAt || !item.checked) return
+  await db.shoppingList.update(itemId, { checked: false, updatedAt: now() })
+  if (!item.foodId) return
+  const food = await db.foods.get(item.foodId)
+  if (food && !food.deletedAt) await setPantryQty(item.foodId, effectivePantryQty(food) - (item.qty ?? 1))
 }
 
 /**
