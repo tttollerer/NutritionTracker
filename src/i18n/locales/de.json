@@ -618,6 +618,8 @@
     "over": "{{amount}} über Budget",
     "byTag": "Ausgaben nach Kategorie",
     "untagged": "Ohne Kategorie",
+    "perDay": "€ pro Tag",
+    "pricePerformance": "Preis-Leistung",
     "proteinPrice": "Protein-Preis",
     "proteinPriceHint": "EUR je 100 g Protein — günstigste Eiweißquellen zuerst.",
     "kcalPrice": "Kalorien-Preis",

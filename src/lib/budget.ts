@@ -37,6 +37,32 @@ export function costsByTag(logs: LogEntry[], foods: FoodItem[]): Record<string, 
   return out
 }
 
+export interface BudgetProgress {
+  /** Verbrauchter Anteil, auf [0..1] geklemmt (für Fortschrittsbalken). */
+  ratio: number
+  /** true, wenn die Ausgaben das Budget übersteigen. */
+  over: boolean
+  /** Abstand zum Budget in EUR (Betrag): übrig bzw. Überschreitung. */
+  diff: number
+}
+
+/** Ausgaben gegen das Wochenbudget stellen; ohne (gültiges) Budget undefined. */
+export function budgetProgress(spent: number, budget?: number): BudgetProgress | undefined {
+  if (budget == null || !Number.isFinite(budget) || budget <= 0) return undefined
+  return {
+    ratio: Math.min(1, Math.max(0, spent / budget)),
+    over: spent > budget,
+    diff: Math.round(Math.abs(budget - spent) * 100) / 100,
+  }
+}
+
+/** Top-N Kategorien aus costsByTag, teuerste zuerst (für horizontale Balken). */
+export function topCostTags(costs: Record<string, number>, n = 5): [string, number][] {
+  return Object.entries(costs)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+}
+
 export interface FoodPriceRank {
   food: FoodItem
   /** EUR je 100 g Protein bzw. je 1000 kcal, auf Cent gerundet. */

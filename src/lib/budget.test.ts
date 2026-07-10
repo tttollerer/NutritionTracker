@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import type { FoodItem, LogEntry } from '@/db/types'
-import { costsByTag, getWeeklyBudget, kcalPrice, proteinPricePerFood, setWeeklyBudget, UNTAGGED } from './budget'
+import { budgetProgress, costsByTag, getWeeklyBudget, kcalPrice, proteinPricePerFood, setWeeklyBudget, topCostTags, UNTAGGED } from './budget'
 
 const food = (over: Partial<FoodItem>): FoodItem => ({
   id: over.id ?? 'f',
@@ -73,6 +73,27 @@ describe('Kosten- & Preis-Auswertungen (pure)', () => {
       Grundnahrung: 0.5,
       [UNTAGGED]: 0.3,
     })
+  })
+
+  it('budgetProgress: Anteil geklemmt, over-Flag und Abstand in EUR', () => {
+    // Ohne (gültiges) Budget keine Auswertung.
+    expect(budgetProgress(10)).toBeUndefined()
+    expect(budgetProgress(10, 0)).toBeUndefined()
+
+    expect(budgetProgress(30, 60)).toEqual({ ratio: 0.5, over: false, diff: 30 })
+    // Über Budget: Balken bleibt bei 100 %, diff ist die Überschreitung.
+    expect(budgetProgress(75.5, 60)).toEqual({ ratio: 1, over: true, diff: 15.5 })
+    // Punktlandung zählt nicht als „drüber".
+    expect(budgetProgress(60, 60)).toEqual({ ratio: 1, over: false, diff: 0 })
+  })
+
+  it('topCostTags: teuerste Kategorien zuerst, auf n begrenzt', () => {
+    const costs = { Obst: 2, Fleisch: 9, Milchprodukt: 5, Brot: 1 }
+    expect(topCostTags(costs, 2)).toEqual([
+      ['Fleisch', 9],
+      ['Milchprodukt', 5],
+    ])
+    expect(topCostTags({})).toEqual([])
   })
 
   it('proteinPricePerFood: €/100 g Protein, nur mit Preis & Protein, günstigste zuerst', () => {

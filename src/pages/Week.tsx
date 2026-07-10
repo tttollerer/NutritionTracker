@@ -6,7 +6,8 @@ import { motion } from 'framer-motion'
 import { CalendarPlus, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Photo } from '@/db/types'
-import { getActiveGoalsMap } from '@/db/repo'
+import { getActiveGoalsMap, getSettings } from '@/db/repo'
+import { budgetProgress } from '@/lib/budget'
 import { formatEuro, sumCost } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
 import { cn, todayKey } from '@/lib/utils'
@@ -81,6 +82,7 @@ export function Week() {
     return new Map(items.filter((p): p is Photo => !!p).map((p) => [p.id, p.dataUrl]))
   }, [logs])
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
+  const settings = useLiveQuery(() => getSettings(), [])
 
   // Fokussierter Tag: heute (aktuelle Woche) bzw. Montag (andere Wochen).
   const todayIdx = days.findIndex((d) => d.key === today)
@@ -90,7 +92,7 @@ export function Week() {
   // Solange Daten laden, rendert die Seite nur Skeletons — den Scroll-Container
   // gibt es erst mit `ready`. Der Fokus-Effekt muss daher auf ready reagieren,
   // sonst startet die Woche immer auf Montag statt heute.
-  const ready = logs !== undefined && foods !== undefined && goals !== undefined
+  const ready = logs !== undefined && foods !== undefined && goals !== undefined && settings !== undefined
   // Beim Wochenwechsel/Laden Fokus setzen (ohne Animation ans Ziel springen).
   useEffect(() => {
     setActiveIdx(initialIdx)
@@ -123,7 +125,7 @@ export function Week() {
     setActiveIdx(idx)
   }
 
-  if (!ready || logs === undefined || foods === undefined || goals === undefined) {
+  if (!ready || logs === undefined || foods === undefined || goals === undefined || settings === undefined) {
     return (
       <div className="space-y-4">
         <PageHeader title={t('week.title')} />
@@ -153,6 +155,8 @@ export function Week() {
     ? Math.round(daysWithLogs.reduce((a, b) => a + b, 0) / daysWithLogs.length)
     : 0
   const weekCost = sumCost(logs)
+  // Wochenbudget aus den Settings gegen die Kosten der angezeigten Woche.
+  const budget = budgetProgress(weekCost, settings.weeklyBudget)
 
   return (
     <div className="flex flex-col">
@@ -301,20 +305,44 @@ export function Week() {
         })}
       </div>
 
-      {/* Wochen-Summe */}
-      <Card className="flex justify-between px-6 py-3">
-        <div className="text-center">
-          <div className="font-mono text-lg font-bold tabular-nums">{avgKcal}</div>
-          <div className="text-xs text-muted-foreground">{t('week.avgKcal')}</div>
+      {/* Wochen-Summe — Kosten färben sich, wenn das Wochenbudget überschritten ist. */}
+      <Card className="space-y-2 px-6 py-3">
+        <div className="flex justify-between">
+          <div className="text-center">
+            <div className="font-mono text-lg font-bold tabular-nums">{avgKcal}</div>
+            <div className="text-xs text-muted-foreground">{t('week.avgKcal')}</div>
+          </div>
+          <div className="text-center">
+            <div className="font-mono text-lg font-bold tabular-nums">{logs.length}</div>
+            <div className="text-xs text-muted-foreground">{t('week.mealsCount')}</div>
+          </div>
+          <div className="text-center">
+            <div className={cn('font-mono text-lg font-bold tabular-nums', budget?.over && 'text-warning-text')}>
+              {formatEuro(weekCost)}
+            </div>
+            <div className="text-xs text-muted-foreground">{t('week.cost')}</div>
+          </div>
         </div>
-        <div className="text-center">
-          <div className="font-mono text-lg font-bold tabular-nums">{logs.length}</div>
-          <div className="text-xs text-muted-foreground">{t('week.mealsCount')}</div>
-        </div>
-        <div className="text-center">
-          <div className="font-mono text-lg font-bold tabular-nums">{formatEuro(weekCost)}</div>
-          <div className="text-xs text-muted-foreground">{t('week.cost')}</div>
-        </div>
+        {budget && (
+          <div className="space-y-1">
+            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+              <div
+                className={cn('h-full rounded-full', budget.over ? 'bg-warning' : 'bg-primary')}
+                style={{ width: `${budget.ratio * 100}%` }}
+              />
+            </div>
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {t('budget.spentOfBudget', {
+                spent: formatEuro(weekCost),
+                budget: formatEuro(settings.weeklyBudget!),
+              })}
+              {' · '}
+              <span className={cn(budget.over && 'font-medium text-warning-text')}>
+                {t(budget.over ? 'budget.over' : 'budget.left', { amount: formatEuro(budget.diff) })}
+              </span>
+            </p>
+          </div>
+        )}
       </Card>
     </div>
   )

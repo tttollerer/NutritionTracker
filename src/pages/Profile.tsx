@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Upload, RefreshCw, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle, Trophy } from 'lucide-react'
+import { Download, Upload, RefreshCw, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle, Trophy, Wallet } from 'lucide-react'
 import {
   getCoachMemory,
   getGoals,
@@ -17,6 +17,8 @@ import {
 } from '@/db/repo'
 import type { CoachMemory, Goal } from '@/db/types'
 import { exportBackup, downloadBackup, importBackup } from '@/lib/backup'
+import { setWeeklyBudget } from '@/lib/budget'
+import { formatEuro, parsePositiveNumber } from '@/lib/money'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { ThemeSettings } from '@/components/ThemeSettings'
 import { EditProfile } from '@/components/EditProfile'
@@ -217,6 +219,9 @@ export function Profile({ onReset }: { onReset: () => void }) {
         />
       </Card>
 
+      {/* Wochenbudget (Haushaltskasse): färbt die Kosten auf der Woche-Seite. */}
+      {settings && <BudgetCard key={settings.weeklyBudget ?? 'none'} budget={settings.weeklyBudget} />}
+
       <Card className="space-y-3 p-4">
         <h2 className="font-semibold">{t('profile.backup')}</h2>
         <div className="grid grid-cols-2 gap-3">
@@ -296,6 +301,56 @@ export function Profile({ onReset }: { onReset: () => void }) {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+/**
+ * Wochenbudget setzen/entfernen (Haushaltskasse). Der Parent remountet die
+ * Karte per key, sobald sich das gespeicherte Budget ändert — so bleibt der
+ * unkontrollierte Eingabewert synchron ohne Effekt-Gymnastik.
+ */
+function BudgetCard({ budget }: { budget?: number }) {
+  const { t } = useTranslation()
+  const [value, setValue] = useState(budget != null ? String(budget).replace('.', ',') : '')
+  const parsed = parsePositiveNumber(value)
+
+  return (
+    <Card className="space-y-3 p-4">
+      <h2 className="flex items-center gap-2 text-sm font-semibold">
+        <Wallet size={20} className="text-muted-foreground" aria-hidden="true" />
+        {t('budget.title')}
+      </h2>
+      {budget == null && <p className="text-xs text-muted-foreground">{t('budget.noBudget')}</p>}
+      <div className="flex items-end gap-2">
+        <div className="flex-1">
+          <Field label={`${t('budget.weeklyBudget')} (€ ${t('budget.perWeek')})`}>
+            <Input
+              inputMode="decimal"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={t('budget.weeklyBudgetPh')}
+            />
+          </Field>
+        </div>
+        <Button
+          onClick={() => void setWeeklyBudget(parsed)}
+          disabled={parsed == null || parsed === budget}
+          aria-label={t('budget.save')}
+        >
+          {t('budget.save')}
+        </Button>
+      </div>
+      {budget != null && (
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span className="tabular-nums text-muted-foreground">
+            {formatEuro(budget)} {t('budget.perWeek')}
+          </span>
+          <Button variant="ghost" className="text-muted-foreground" onClick={() => void setWeeklyBudget(undefined)}>
+            {t('budget.remove')}
+          </Button>
+        </div>
+      )}
+    </Card>
   )
 }
 

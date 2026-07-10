@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
 import { TrendChart, type ChartSeries } from '@/components/TrendChart'
 import { NutritionHistory } from '@/components/NutritionHistory'
+import { BudgetTrends } from '@/components/BudgetTrends'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 const RANGES = [
@@ -76,6 +77,9 @@ export function Trends() {
 
       {/* Ernährungs-Verlauf (§7.5): kcal-Historie, Makro-Woche, Wochen-Insights */}
       <NutritionHistory />
+
+      {/* Haushaltskasse: € pro Tag, Kategorien, Preis-Leistung (nur mit Preisdaten) */}
+      <BudgetTrends />
 
       <h2 className="text-sm font-semibold text-muted-foreground">{t('trends.measurementsTitle')}</h2>
 
