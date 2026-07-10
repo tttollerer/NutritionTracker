@@ -513,6 +513,7 @@
     "searching": "Suche Produkt …",
     "unknownProduct": "Unbekanntes Produkt",
     "noCamera": "Keine Kamera/Barcode-Erkennung verfügbar — gib den Barcode manuell ein.",
+    "pantryAll": "alle {{count}} →",
     "consentTitle": "Foto an KI senden?",
     "consentBody": "Zum Erkennen wird das Bild einmalig an unseren KI-Dienst (OpenRouter) übertragen und dort nicht dauerhaft gespeichert. Es wird kein Bild ohne dein Zutun gesendet.",
     "consentAccept": "Verstanden & fortfahren",
