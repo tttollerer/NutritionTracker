@@ -2,7 +2,16 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { createFood, setFoodPrice } from '@/db/repo'
-import { createRecipe, deleteRecipe, listRecipes, logRecipe, recipeCostPerPortion, updateRecipe } from './recipes'
+import {
+  createRecipe,
+  deleteRecipe,
+  listRecipes,
+  logRecipe,
+  recipeCostPerPortion,
+  recipeKcalPerPortion,
+  restoreRecipe,
+  updateRecipe,
+} from './recipes'
 
 const base = { per: 'g' as const, carbs: 20, fat: 4 }
 
@@ -104,5 +113,36 @@ describe('Rezepte', () => {
     const free = { portions: 2, ingredients: [{ foodId: unpriced.id, amount: 500, unit: 'ml' as const }] }
     const map2 = new Map((await db.foods.toArray()).map((f) => [f.id, f]))
     expect(recipeCostPerPortion(free, map2)).toBeUndefined()
+  })
+
+  it('restoreRecipe nimmt den Tombstone zurück (Undo nach Löschen)', async () => {
+    const recipe = await createRecipe({ name: 'Bowl', portions: 2, ingredients: [] })
+    await deleteRecipe(recipe.id)
+    expect(await listRecipes()).toEqual([])
+
+    await restoreRecipe(recipe.id)
+    const restored = (await listRecipes())[0]
+    expect(restored.name).toBe('Bowl')
+    expect(restored.deletedAt).toBeUndefined()
+  })
+
+  it('recipeKcalPerPortion skaliert wie beim Loggen; ohne Katalog-Foods undefined', async () => {
+    const rice = await createFood({ name: 'Reis', ...base, kcal: 350, protein: 7 })
+    const lentils = await createFood({ name: 'Linsen', ...base, kcal: 300, protein: 25 })
+    const foodsMap = new Map((await db.foods.toArray()).map((f) => [f.id, f]))
+
+    const recipe = {
+      portions: 4,
+      ingredients: [
+        { foodId: rice.id, amount: 400, unit: 'g' as const },
+        { foodId: lentils.id, amount: 200, unit: 'g' as const },
+      ],
+    }
+    // Reis 1400 kcal + Linsen 600 kcal = 2000 kcal / 4 Portionen = 500.
+    expect(recipeKcalPerPortion(recipe, foodsMap)).toBe(500)
+
+    // Zutat ohne Katalog-Food zählt nicht; ganz ohne Foods → undefined.
+    const orphan = { portions: 1, ingredients: [{ foodId: 'weg', amount: 100, unit: 'g' as const }] }
+    expect(recipeKcalPerPortion(orphan, foodsMap)).toBeUndefined()
   })
 })

@@ -656,9 +656,13 @@
   },
   "recipes": {
     "title": "Rezepte",
+    "entry": "Meine Rezepte",
+    "tile": "Rezept",
     "empty": "Noch keine Rezepte — lege dein erstes Rezept mit Zutaten aus deinem Katalog an.",
     "new": "Neues Rezept",
     "edit": "Rezept bearbeiten",
+    "editAria": "{{name}} bearbeiten",
+    "deleteAria": "{{name}} löschen",
     "name": "Name",
     "namePh": "z. B. Linsen-Curry",
     "portions": "Portionen",
@@ -677,6 +681,9 @@
     "logged_one": "1 Zutat geloggt",
     "logged_other": "{{count}} Zutaten geloggt",
     "costPerPortion": "{{amount}} pro Portion",
+    "kcalPerPortion": "{{kcal}} kcal / Portion",
+    "portionCount_one": "1 Portion",
+    "portionCount_other": "{{count}} Portionen",
     "ingredientCount_one": "1 Zutat",
     "ingredientCount_other": "{{count}} Zutaten"
   },

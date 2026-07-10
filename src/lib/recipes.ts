@@ -49,6 +49,11 @@ export async function deleteRecipe(id: string): Promise<void> {
   await db.recipes.update(id, { deletedAt: now(), updatedAt: now() })
 }
 
+/** Tombstone zurücknehmen (Undo nach Löschen). */
+export async function restoreRecipe(id: string): Promise<void> {
+  await db.recipes.update(id, { deletedAt: undefined, updatedAt: now() })
+}
+
 /** Alle (nicht gelöschten) Rezepte, alphabetisch. */
 export async function listRecipes(): Promise<Recipe[]> {
   const recipes = await db.recipes.filter((r) => !r.deletedAt).toArray()
@@ -116,4 +121,24 @@ export function recipeCostPerPortion(
   }
   if (!priced) return undefined
   return Math.round((sum / Math.max(1, recipe.portions)) * 100) / 100
+}
+
+/**
+ * kcal einer Portion aus den Referenzwerten der Zutaten (gleiche Skalierung
+ * wie beim Loggen). undefined, wenn keine Zutat (mehr) im Katalog ist.
+ */
+export function recipeKcalPerPortion(
+  recipe: Pick<Recipe, 'portions' | 'ingredients'>,
+  foodsMap: Map<string, FoodItem>,
+): number | undefined {
+  let sum = 0
+  let any = false
+  for (const ing of recipe.ingredients) {
+    const food = foodsMap.get(ing.foodId)
+    if (!food) continue
+    any = true
+    sum += computeLogValues(food, ing.amount, ing.unit).kcal
+  }
+  if (!any) return undefined
+  return Math.round(sum / Math.max(1, recipe.portions))
 }

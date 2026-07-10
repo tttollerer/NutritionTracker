@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
+import { Camera, CookingPot, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
 import {
   copyYesterday,
   createFood,
@@ -168,6 +168,11 @@ export function Add() {
           </motion.button>
         ))}
       </div>
+
+      {/* Eigene Rezepte: anlegen, bearbeiten und in einem Rutsch loggen */}
+      <Button variant="secondary" className="w-full" onClick={() => navigate('/recipes')}>
+        <CookingPot size={18} /> {t('recipes.entry')}
+      </Button>
 
       {/* Katalog-Suche über die eigenen Lebensmittel */}
       <section className="space-y-2">

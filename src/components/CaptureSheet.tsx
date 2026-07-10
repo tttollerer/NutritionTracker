@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
+import { Camera, CookingPot, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { logFood, recentFoods, deleteLog } from '@/db/repo'
 import { downscaleImage } from '@/lib/image'
@@ -156,10 +156,11 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               <ImageIcon size={16} /> {t('capture.choose')}
             </button>
 
-            {/* Sekundär: Tabelle (Kamera direkt) + Barcode */}
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            {/* Sekundär: Tabelle (Kamera direkt) + Barcode + eigene Rezepte */}
+            <div className="mt-3 grid grid-cols-3 gap-3">
               <SheetTile icon={ScanText} label={t('add.label')} onClick={() => labelCamRef.current?.click()} />
               <SheetTile icon={ScanBarcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
+              <SheetTile icon={CookingPot} label={t('recipes.tile')} onClick={() => go('/recipes')} />
             </div>
 
             {/* Dezenter Einstieg: Einkauf scannen → Vorrat (Batch-Scan ohne Loggen) */}
