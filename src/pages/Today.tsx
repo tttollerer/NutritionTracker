@@ -35,7 +35,8 @@ export function Today() {
   const [editing, setEditing] = useState<LogEntry | null>(null)
 
   const logs = useLiveQuery(
-    () => db.logs.where('date').equals(date).filter((l) => !l.deletedAt).toArray(),
+    // planned = nur vorgeplant (Wochenplaner) → zählt nicht als Verzehr des Tages.
+    () => db.logs.where('date').equals(date).filter((l) => !l.deletedAt && !l.planned).toArray(),
     [date],
   )
   // Gezielt nur die Foods/Fotos der Tages-Logs laden (bulkGet) statt alle Stores.

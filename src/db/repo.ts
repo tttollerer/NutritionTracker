@@ -483,9 +483,9 @@ export async function logFood(args: {
 /**
  * computed-Snapshot eines Log-Eintrags aus den Referenzwerten (je 100 g/ml)
  * des Lebensmittels berechnen; 'portion' nutzt defaultPortion oder 100er-Basis.
- * Gemeinsame Basis für logFood und updateLog.
+ * Gemeinsame Basis für logFood/updateLog (und planFood/logRecipe in src/lib).
  */
-function computeLogValues(food: FoodItem, amount: number, unit: Unit): LogEntry['computed'] {
+export function computeLogValues(food: FoodItem, amount: number, unit: Unit): LogEntry['computed'] {
   const grams = unit === 'portion' ? (food.defaultPortion?.amount ?? 100) * amount : amount
   const factor = grams / 100
   return {
@@ -599,15 +599,30 @@ export async function pantryFoods(): Promise<FoodItem[]> {
   return foods.sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
+/** Obergrenze des Preis-Verlaufs — ältere Einträge fallen hinten raus. */
+export const PRICE_HISTORY_MAX = 20
+
 /**
  * Packungspreis (Haushaltskasse) setzen oder mit `undefined` entfernen —
  * additiv/optional, ohne Preis wird schlicht kein Kostenwert berechnet.
+ * Ein abgelöster (abweichender) alter Preis wandert in `priceHistory`
+ * (neueste zuerst, max. PRICE_HISTORY_MAX Einträge) — Basis für Preis-Trends.
  */
 export async function setFoodPrice(foodId: string, price?: { amount: number; per: number }): Promise<void> {
   const food = await db.foods.get(foodId)
   if (!food || food.deletedAt) return
   const valid = price && price.amount >= 0 && price.per > 0
-  await db.foods.update(foodId, { price: valid ? price : undefined, updatedAt: now() })
+  const old = food.price
+  // Nur echte Preisänderungen archivieren — gleiches Setzen erzeugt keinen Eintrag.
+  const changed = old && (!valid || old.amount !== price.amount || old.per !== price.per)
+  const history = changed
+    ? [{ ...old, at: now() }, ...(food.priceHistory ?? [])].slice(0, PRICE_HISTORY_MAX)
+    : food.priceHistory
+  await db.foods.update(foodId, {
+    price: valid ? price : undefined,
+    priceHistory: history?.length ? history : undefined,
+    updatedAt: now(),
+  })
 }
 
 /**
@@ -709,10 +724,11 @@ function previousDayKey(dateKey: string): string {
  * kopiert kontextbezogen die gewählte Mahlzeit).
  */
 export async function yesterdayLogCount(targetDate = todayKey(), meal?: Meal): Promise<number> {
+  // planned-Einträge (nur geplant, nie gegessen) zählen nicht als Vortags-Verzehr.
   return db.logs
     .where('date')
     .equals(previousDayKey(targetDate))
-    .filter((l) => !l.deletedAt && (!meal || l.meal === meal))
+    .filter((l) => !l.deletedAt && !l.planned && (!meal || l.meal === meal))
     .count()
 }
 
@@ -728,7 +744,7 @@ export async function copyYesterday(meal?: Meal, targetDate = todayKey()): Promi
   const source = await db.logs
     .where('date')
     .equals(previousDayKey(targetDate))
-    .filter((l) => !l.deletedAt && (!meal || l.meal === meal))
+    .filter((l) => !l.deletedAt && !l.planned && (!meal || l.meal === meal))
     .toArray()
   const copies: LogEntry[] = source.map((l) => ({
     id: uuid(),

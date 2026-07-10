@@ -33,7 +33,8 @@ export function NutritionHistory() {
   const start = days14[0]
 
   const logs = useLiveQuery(
-    () => db.logs.where('date').between(start, today, true, true).filter((l) => !l.deletedAt).toArray(),
+    // planned-Einträge (Wochenplan) sind kein Verzehr → nicht in der Historie.
+    () => db.logs.where('date').between(start, today, true, true).filter((l) => !l.deletedAt && !l.planned).toArray(),
     [start, today],
   )
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])

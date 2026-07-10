@@ -42,7 +42,8 @@ export function fireConfetti() {
  */
 export function useGamification(opts: { celebrate?: boolean } = {}): GamificationView | undefined {
   const { celebrate = false } = opts
-  const logs = useLiveQuery(() => db.logs.filter((l) => !l.deletedAt).toArray(), [])
+  // planned-Einträge (Wochenplan) sind kein Verzehr → zählen nicht für Punkte/Streaks.
+  const logs = useLiveQuery(() => db.logs.filter((l) => !l.deletedAt && !l.planned).toArray(), [])
   const foods = useLiveQuery(() => db.foods.toArray(), [])
   const goals = useLiveQuery(() => getActiveGoalsMap(), [])
   const achievements = useLiveQuery(() => db.achievements.toArray(), [])

@@ -64,10 +64,15 @@ export function evaluateDay(sums: DaySums, goals: GoalsMap): DayStatus {
   }
 }
 
-/** Tages-Summen je Datum aus Log-Einträgen. */
+/**
+ * Tages-Summen je Datum aus Log-Einträgen. Gelöschte (deletedAt) und nur
+ * geplante (planned) Einträge zählen zentral hier NIE mit — Gamification und
+ * alle Verzehr-Auswertungen bleiben so frei von Wochenplan-Einträgen.
+ */
 export function sumsByDate(logs: LogEntry[]): Record<string, DaySums> {
   const out: Record<string, DaySums> = {}
   for (const l of logs) {
+    if (l.deletedAt || l.planned) continue
     const d = (out[l.date] ??= { kcal: 0, protein: 0, carbs: 0, fat: 0 })
     d.kcal += l.computed.kcal
     d.protein += l.computed.protein

@@ -62,7 +62,9 @@ export function Week() {
       db.logs
         .where('date')
         .between(firstKey, lastKey, true, true)
-        .filter((l) => !l.deletedAt)
+        // planned-Einträge (Wochenplan) zählen nicht als Verzehr — sie werden
+        // im Planer separat geladen/gerendert (plannedForDate).
+        .filter((l) => !l.deletedAt && !l.planned)
         .toArray(),
     [firstKey, lastKey],
   )

@@ -12,9 +12,13 @@ export function formatEuro(amount: number): string {
   return EUR.format(amount)
 }
 
-/** Summe der Kosten-Snapshots (Einträge ohne Preis zählen 0), auf Cent gerundet. */
-export function sumCost(logs: Pick<LogEntry, 'cost'>[]): number {
-  const sum = logs.reduce((a, l) => a + (l.cost ?? 0), 0)
+/**
+ * Summe der Kosten-Snapshots (Einträge ohne Preis zählen 0), auf Cent gerundet.
+ * Gelöschte (deletedAt) und nur geplante (planned) Einträge zählen zentral
+ * hier nicht mit — geplante Mahlzeiten sind noch keine Ausgaben.
+ */
+export function sumCost(logs: Pick<LogEntry, 'cost' | 'deletedAt' | 'planned'>[]): number {
+  const sum = logs.reduce((a, l) => a + (l.deletedAt || l.planned ? 0 : (l.cost ?? 0)), 0)
   return Math.round(sum * 100) / 100
 }
 
@@ -22,10 +26,12 @@ export function sumCost(logs: Pick<LogEntry, 'cost'>[]): number {
  * Kosten je Tag aus Logs (nicht gelöschte, mit cost) — Basis für die
  * Haushaltskassen-Karte: Wochensumme + Ø pro Tag mit Kostendaten.
  */
-export function costByDate(logs: Pick<LogEntry, 'cost' | 'date' | 'deletedAt'>[]): Record<string, number> {
+export function costByDate(
+  logs: Pick<LogEntry, 'cost' | 'date' | 'deletedAt' | 'planned'>[],
+): Record<string, number> {
   const out: Record<string, number> = {}
   for (const l of logs) {
-    if (l.deletedAt || l.cost == null) continue
+    if (l.deletedAt || l.planned || l.cost == null) continue
     out[l.date] = Math.round(((out[l.date] ?? 0) + l.cost) * 100) / 100
   }
   return out
