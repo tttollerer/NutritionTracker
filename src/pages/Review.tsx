@@ -10,6 +10,7 @@ import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
 import { useOverlays } from '@/lib/overlays-context'
 import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
+import { addFoodPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
@@ -171,6 +172,11 @@ export function Review() {
           barcode: payload!.barcode,
         })
         await logFood({ food, date, meal: payload!.meal, amount: it.amount || (it.unit === 'portion' ? 1 : 100), unit: it.unit, photoBlobId })
+        // Genau EIN erkanntes Produkt → das Scan-Foto gehört (auch) in dessen
+        // Galerie (mehrere Bilder je Produkt). Bei Mehr-Item-Mahlzeiten wäre
+        // die Zuordnung mehrdeutig — dann bleibt es nur das Mahlzeitenfoto.
+        const productPhoto = payload!.imageBase64 ?? payload!.photo
+        if (items.length === 1 && productPhoto) await addFoodPhoto(food.id, productPhoto)
       }
       clearReview()
       navigate('/')
@@ -194,6 +200,9 @@ export function Review() {
         allergens: payload!.allergens,
         traces: payload!.traces,
       })
+      // Einkauf-Scan mit genau einem Produkt: Foto in die Produkt-Galerie.
+      const productPhoto = payload!.imageBase64 ?? payload!.photo
+      if (foods.length === 1 && productPhoto) await addFoodPhoto(foods[0].id, productPhoto)
       clearReview()
       showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
         await Promise.all(foods.map((f) => undoPantryAdd(f.id)))

@@ -2,11 +2,12 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, Sparkles, Star, X } from 'lucide-react'
+import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, ShoppingBasket, Sparkles, Star, X } from 'lucide-react'
 import type { FoodItem } from '@/db/types'
 import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type FoodValuesPatch } from '@/lib/foodEdit'
-import { getActiveGoalsMap, toggleFavorite } from '@/db/repo'
-import { setExpiry } from '@/lib/pantryStock'
+import { createFood, getActiveGoalsMap, getAllergies, toggleFavorite } from '@/db/repo'
+import { incrementPantry, setExpiry } from '@/lib/pantryStock'
+import { checkAllergens } from '@/lib/allergens'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
 import { formatEuro, parsePositiveNumber } from '@/lib/money'
@@ -14,12 +15,37 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Input'
 import { ExpiryBadge } from '@/components/ExpiryBadge'
 
+/**
+ * Vorbefüllung fürs Anlegen eines NEUEN Produkts (Draft-Modus): Scan-/KI-Flows
+ * und die Erfassen-Seite reichen hier ihre erkannten Werte + Fotos herein.
+ */
+export interface ProductDraft {
+  name?: string
+  per?: 'g' | 'ml'
+  kcal?: number
+  protein?: number
+  carbs?: number
+  fat?: number
+  micros?: Record<string, number>
+  /** Bereits aufgenommene Fotos (Data-URLs) — werden beim Anlegen zur Galerie. */
+  photos?: string[]
+  source?: FoodItem['source']
+  barcode?: string
+}
+
+/** Ziel beim Anlegen: in den Vorrat legen oder direkt weiter zum Loggen. */
+export type ProductCreateAction = 'pantry' | 'log'
+
 interface Props {
   /** null → Sheet geschlossen (Muster PortionSheet). */
   food: FoodItem | null
   onClose: () => void
   /** Nach erfolgreichem Speichern — Aufrufer kann eigene Anzeige nachziehen. */
   onSaved?: (food: FoodItem) => void
+  /** Draft-Modus: neues Produkt anlegen (Galerie/Felder identisch zum Editor). */
+  draft?: ProductDraft | null
+  /** Nach dem Anlegen — 'log' heißt: Aufrufer öffnet sein Mengen-Sheet. */
+  onCreated?: (food: FoodItem, action: ProductCreateAction) => void
 }
 
 /** Deutsche Dezimal-Eingabe → nicht-negative Zahl; ungültig/leer → null. */
@@ -29,19 +55,39 @@ function parseNonNegative(text: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
+/** Draft → Pseudo-FoodItem (id '' = Draft-Marker) für das gemeinsame Formular. */
+function draftFood(d: ProductDraft): FoodItem {
+  return {
+    id: '',
+    name: d.name ?? '',
+    source: d.source ?? 'manual',
+    barcode: d.barcode,
+    per: d.per ?? 'g',
+    kcal: d.kcal ?? 0,
+    protein: d.protein ?? 0,
+    carbs: d.carbs ?? 0,
+    fat: d.fat ?? 0,
+    micros: d.micros,
+    createdAt: 0,
+    updatedAt: 0,
+  }
+}
+
 /**
- * Produkt-Editor (Paket B): Name, Nährwerte je 100 g/ml (Makros + aufklappbare
- * Mikros aus dem Katalog), übliche Portion (Menge + Label), Packungspreis und
- * eine Foto-Galerie (mehrere Bilder je Produkt, horizontal scrollbar).
- * Bottom-Sheet-Muster wie PortionSheet/EditLogSheet; liegt eine Ebene ÜBER dem
- * PortionSheet (z-60/70), aus dem es geöffnet wird.
+ * DAS gemeinsame Produkt-Sheet der App: bearbeitet bestehende Produkte UND legt
+ * neue an (Draft-Modus) — mit Foto-Galerie (mehrere Bilder), Name, Nährwerten
+ * je 100 g/ml (+ Mikros), Tags, Beschreibung, Portionseinheiten, üblicher
+ * Portion, Packungspreis und MHD. Anlegen endet wahlweise im Vorrat oder im
+ * Mengen-Sheet („direkt verzehren"). Bottom-Sheet-Muster wie PortionSheet;
+ * liegt eine Ebene ÜBER dem PortionSheet (z-60/70), aus dem es geöffnet wird.
  */
-export function FoodDetailSheet({ food, onClose, onSaved }: Props) {
+export function FoodDetailSheet({ food, onClose, onSaved, draft, onCreated }: Props) {
   const { t } = useTranslation()
+  const subject = food ?? (draft ? draftFood(draft) : null)
 
   return (
     <AnimatePresence>
-      {food && (
+      {subject && (
         <>
           <motion.div
             initial={{ opacity: 0 }}
@@ -57,11 +103,18 @@ export function FoodDetailSheet({ food, onClose, onSaved }: Props) {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed inset-x-0 bottom-0 z-[70] mx-auto flex max-h-[88vh] max-w-md flex-col rounded-t-3xl bg-card shadow-lg"
             role="dialog"
-            aria-label={t('food.edit.title')}
+            aria-label={subject.id ? t('food.edit.title') : t('food.create.title')}
           >
             <div className="mx-auto mb-1 mt-3 h-1 w-10 shrink-0 rounded-full bg-muted" />
             <div className="overflow-y-auto p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)]">
-              <FoodDetailForm key={food.id} food={food} onClose={onClose} onSaved={onSaved} />
+              <FoodDetailForm
+                key={subject.id || 'draft'}
+                food={subject}
+                initialPhotos={draft?.photos}
+                onClose={onClose}
+                onSaved={onSaved}
+                onCreated={onCreated}
+              />
             </div>
           </motion.div>
         </>
@@ -70,10 +123,27 @@ export function FoodDetailSheet({ food, onClose, onSaved }: Props) {
   )
 }
 
+/** Alias fürs durchgängige Konzept: EIN Produkt-Sheet für Anlegen & Bearbeiten. */
+export const ProductSheet = FoodDetailSheet
+
 const MACROS = ['kcal', 'protein', 'carbs', 'fat'] as const
 
-function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) {
+function FoodDetailForm({
+  food,
+  initialPhotos,
+  onClose,
+  onSaved,
+  onCreated,
+}: {
+  food: FoodItem
+  initialPhotos?: string[]
+  onClose: () => void
+  onSaved?: (food: FoodItem) => void
+  onCreated?: (food: FoodItem, action: ProductCreateAction) => void
+}) {
   const { t } = useTranslation()
+  // Draft-Modus: id '' = Produkt existiert noch nicht (siehe draftFood).
+  const isDraft = !food.id
 
   const [name, setName] = useState(food.name)
   const [per, setPer] = useState<'g' | 'ml'>(food.per)
@@ -114,7 +184,14 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
 
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
-  const photos = useLiveQuery(() => getFoodPhotos(food.id), [food.id]) ?? []
+  // Bestehende Produkte: Galerie live aus der DB. Drafts: Fotos lokal sammeln
+  // (pendingPhotos) und erst beim Anlegen persistieren — gleiche UI für beides.
+  const storedPhotos = useLiveQuery(() => (food.id ? getFoodPhotos(food.id) : Promise.resolve([])), [food.id]) ?? []
+  const [pendingPhotos, setPendingPhotos] = useState<string[]>(initialPhotos ?? [])
+  // Namensbasierte Allergen-Warnung beim Anlegen (wie früher im Manuell-Formular).
+  const allergies = useLiveQuery(() => getAllergies(), []) ?? []
+  const [allergyAck, setAllergyAck] = useState(false)
+  const allergyHits = isDraft ? checkAllergens({ name }, allergies).contains : []
 
   // Jede Eingabe hebt das „Gespeichert"-Feedback wieder auf.
   function touch<T>(setter: (v: T) => void) {
@@ -140,39 +217,85 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
 
   const microsValid = NUTRIENTS.every((n) => !microText[n.key].trim() || parseNonNegative(microText[n.key]) != null)
 
-  const valid = name.trim().length > 0 && macrosValid && portionValid && priceValid && microsValid
+  const valid =
+    name.trim().length > 0 &&
+    macrosValid &&
+    portionValid &&
+    priceValid &&
+    microsValid &&
+    (allergyHits.length === 0 || allergyAck)
+
+  function collectPatch(): FoodValuesPatch {
+    const micros: Record<string, number> = {}
+    for (const n of NUTRIENTS) {
+      const v = parseNonNegative(microText[n.key])
+      if (v != null) micros[n.key] = v
+    }
+    return {
+      name: name.trim(),
+      per,
+      kcal: macros.kcal!,
+      protein: macros.protein!,
+      carbs: macros.carbs!,
+      fat: macros.fat!,
+      micros,
+      defaultPortion: portionVal
+        ? { amount: portionVal, unit: per, label: portionLabel.trim() || undefined }
+        : null,
+      price: priceVal != null && packVal != null ? { amount: priceVal, per: packVal } : null,
+      description,
+      tags,
+      servings: servingsList,
+    }
+  }
 
   async function save() {
     if (!valid || saving) return
     setSaving(true)
     try {
-      const micros: Record<string, number> = {}
-      for (const n of NUTRIENTS) {
-        const v = parseNonNegative(microText[n.key])
-        if (v != null) micros[n.key] = v
-      }
-      const patch: FoodValuesPatch = {
+      // MHD zuerst schreiben — updateFoodValues liest danach den frischen Stand
+      // und liefert ihn (inkl. expiryDate) an onSaved zurück.
+      if ((food.expiryDate ?? '') !== expiryText) await setExpiry(food.id, expiryText || null)
+      const updated = await updateFoodValues(food.id, collectPatch())
+      setSaved(true)
+      onSaved?.(updated)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /**
+   * Draft-Modus: Produkt anlegen (Upsert über createFood), gesammelte Fotos in
+   * die Galerie schreiben, restliche Felder per Patch nachziehen und je nach
+   * Ziel in den Vorrat legen ('pantry') oder ans Mengen-Sheet übergeben ('log').
+   */
+  async function create(action: ProductCreateAction) {
+    if (!valid || saving) return
+    setSaving(true)
+    try {
+      const base = await createFood({
         name: name.trim(),
         per,
         kcal: macros.kcal!,
         protein: macros.protein!,
         carbs: macros.carbs!,
         fat: macros.fat!,
-        micros,
-        defaultPortion: portionVal
-          ? { amount: portionVal, unit: per, label: portionLabel.trim() || undefined }
-          : null,
-        price: priceVal != null && packVal != null ? { amount: priceVal, per: packVal } : null,
-        description,
-        tags,
+        source: food.source,
+        barcode: food.barcode,
         servings: servingsList,
+      })
+      for (const dataUrl of pendingPhotos) await addFoodPhoto(base.id, dataUrl)
+      let created = await updateFoodValues(base.id, collectPatch())
+      if (expiryText) {
+        await setExpiry(base.id, expiryText)
+        created = { ...created, expiryDate: expiryText }
       }
-      // MHD zuerst schreiben — updateFoodValues liest danach den frischen Stand
-      // und liefert ihn (inkl. expiryDate) an onSaved zurück.
-      if ((food.expiryDate ?? '') !== expiryText) await setExpiry(food.id, expiryText || null)
-      const updated = await updateFoodValues(food.id, patch)
-      setSaved(true)
-      onSaved?.(updated)
+      if (action === 'pantry') {
+        await incrementPantry(base.id)
+        created = { ...created, pantry: true }
+      }
+      onCreated?.(created, action)
+      onClose()
     } finally {
       setSaving(false)
     }
@@ -185,7 +308,9 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
     setPhotoBusy(true)
     try {
       const dataUrl = await downscaleImage(file)
-      await addFoodPhoto(food.id, dataUrl)
+      // Draft: Foto lokal sammeln; bestehendes Produkt: direkt an die Galerie.
+      if (isDraft) setPendingPhotos((prev) => [...prev, dataUrl])
+      else await addFoodPhoto(food.id, dataUrl)
     } catch {
       // Kein Canvas/kaputtes Bild → Galerie bleibt einfach unverändert.
     } finally {
@@ -204,31 +329,47 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{t('food.edit.title')}</h2>
-        {/* Favoriten-Stern (1-Tap-Wiederholung) direkt im Detail. */}
-        <button
-          type="button"
-          onClick={() => void toggleFavorite(food.id).then(setFavorite)}
-          aria-pressed={favorite}
-          aria-label={t('food.edit.favToggle', { name: food.name })}
-          className={`focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-border ${
-            favorite ? 'text-warning' : 'text-muted-foreground'
-          }`}
-        >
-          <Star size={20} fill={favorite ? 'currentColor' : 'none'} />
-        </button>
+        <h2 className="text-lg font-semibold">{isDraft ? t('food.create.title') : t('food.edit.title')}</h2>
+        {/* Favoriten-Stern (1-Tap-Wiederholung) — erst wenn das Produkt existiert. */}
+        {!isDraft && (
+          <button
+            type="button"
+            onClick={() => void toggleFavorite(food.id).then(setFavorite)}
+            aria-pressed={favorite}
+            aria-label={t('food.edit.favToggle', { name: food.name })}
+            className={`focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-border ${
+              favorite ? 'text-warning' : 'text-muted-foreground'
+            }`}
+          >
+            <Star size={20} fill={favorite ? 'currentColor' : 'none'} />
+          </button>
+        )}
       </div>
 
-      {/* Foto-Galerie: horizontal scrollbar, Hinzufügen per Kamera/Galerie */}
+      {/* Foto-Galerie: horizontal scrollbar, Hinzufügen per Kamera/Galerie.
+          Draft: lokale Fotos (werden beim Anlegen persistiert) — gleiche Optik. */}
       <div className="space-y-2">
         <p className="text-sm font-medium text-muted-foreground">{t('food.edit.photos')}</p>
         <div className="flex gap-2 overflow-x-auto pb-1">
-          {photos.map((p) => (
+          {storedPhotos.map((p) => (
             <div key={p.id} className="relative shrink-0">
               <img src={p.dataUrl} alt="" className="h-20 w-20 rounded-xl object-cover" />
               <button
                 type="button"
                 onClick={() => void removeFoodPhoto(food.id, p.id)}
+                aria-label={t('food.edit.removePhoto')}
+                className="focus-ring absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+          {pendingPhotos.map((dataUrl, idx) => (
+            <div key={idx} className="relative shrink-0">
+              <img src={dataUrl} alt="" className="h-20 w-20 rounded-xl object-cover" />
+              <button
+                type="button"
+                onClick={() => setPendingPhotos((prev) => prev.filter((_, i) => i !== idx))}
                 aria-label={t('food.edit.removePhoto')}
                 className="focus-ring absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
               >
@@ -315,11 +456,31 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         />
       </Field>
 
-      <AiSummaryCard food={food} open={analysisOpen} onToggle={() => setAnalysisOpen((o) => !o)} />
+      {/* KI-Auswertung erst, wenn das Produkt existiert (Draft hat noch keine Quelle). */}
+      {!isDraft && <AiSummaryCard food={food} open={analysisOpen} onToggle={() => setAnalysisOpen((o) => !o)} />}
 
       <Field label={t('food.edit.name')}>
         <Input value={name} onChange={(e) => touch(setName)(e.target.value)} aria-invalid={!name.trim()} />
       </Field>
+
+      {/* Namensbasierte Allergen-Warnung beim Anlegen (Muster Manuell-Formular):
+          Anlegen erst nach ausdrücklicher Bestätigung. */}
+      {allergyHits.length > 0 && (
+        <div className="space-y-2">
+          <p className="rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-xs font-medium text-destructive">
+            ⚠️ {t('review.allergyWarn', { list: allergyHits.map((h) => t(`onboarding.allergens.${h}`, { defaultValue: h })).join(', ') })}
+          </p>
+          <label className="flex items-start gap-2 text-xs text-destructive">
+            <input
+              type="checkbox"
+              checked={allergyAck}
+              onChange={(e) => setAllergyAck(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-[hsl(var(--destructive))]"
+            />
+            <span>{t('review.allergyAck')}</span>
+          </label>
+        </div>
+      )}
 
       {/* Nährwerte je 100 g/ml + Basis-Toggle */}
       <div className="space-y-2">
@@ -524,14 +685,36 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         </p>
       )}
 
-      <div className="flex gap-3 pt-1">
-        <Button variant="ghost" className="flex-1 border border-input" onClick={onClose}>
-          {t('common.close')}
-        </Button>
-        <Button className="flex-1" onClick={() => void save()} disabled={!valid || saving}>
-          {t('food.edit.save')}
-        </Button>
-      </div>
+      {isDraft ? (
+        // Anlegen: Ziel wählen — Vorrat (Einkauf) oder direkt verzehren (Mengen-Sheet).
+        <div className="space-y-2 pt-1">
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => void create('pantry')}
+            disabled={!valid || saving}
+          >
+            <ShoppingBasket size={18} aria-hidden="true" /> {t('food.create.toPantry')}
+          </Button>
+          <div className="flex gap-3">
+            <Button variant="ghost" className="flex-1 border border-input" onClick={onClose}>
+              {t('common.cancel')}
+            </Button>
+            <Button className="flex-1" onClick={() => void create('log')} disabled={!valid || saving}>
+              {t('food.create.andLog')}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex gap-3 pt-1">
+          <Button variant="ghost" className="flex-1 border border-input" onClick={onClose}>
+            {t('common.close')}
+          </Button>
+          <Button className="flex-1" onClick={() => void save()} disabled={!valid || saving}>
+            {t('food.edit.save')}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
