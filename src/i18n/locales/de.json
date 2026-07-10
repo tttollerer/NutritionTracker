@@ -179,7 +179,8 @@
     "stockInc": "Eine Packung {{name}} hinzufügen",
     "stockDec": "Eine Packung {{name}} entfernen",
     "lowStock": "bald leer",
-    "lowFilter": "Bald leer"
+    "lowFilter": "Bald leer",
+    "scanReceipt": "Kassenbon"
   },
   "coach": {
     "title": "Coach",
@@ -484,7 +485,9 @@
     "mealTitle": "Essen fotografieren",
     "labelTitle": "Tabelle scannen",
     "barcodeTitle": "Barcode scannen",
+    "receiptTitle": "Kassenbon scannen",
     "take": "Essen fotografieren",
+    "takeReceipt": "Kassenbon fotografieren",
     "choose": "Aus Galerie wählen",
     "sheetTitle": "Erfassen",
     "sheetPhotoHint": "Mahlzeit per Kamera erkennen",
@@ -499,6 +502,7 @@
     "analyze": "Analysieren",
     "hintMeal": "Halte das ganze Essen ins Bild.",
     "hintLabel": "Fotografiere die Nährwerttabelle scharf und gerade.",
+    "hintReceipt": "Fotografiere den ganzen Kassenbon scharf und gerade — die KI liest die Positionen aus.",
     "manualBarcode": "Barcode eingeben",
     "scan": "Scannen",
     "notFound": "Produkt nicht gefunden — halte den nächsten Barcode ins Bild oder tippe ihn unten ein.",
@@ -542,6 +546,25 @@
     "refining": "Wird neu geschätzt …",
     "refineConfirm": "Ja, neu schätzen",
     "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut."
+  },
+  "receipt": {
+    "title": "Kassenbon prüfen",
+    "estimate": "KI hat den Bon gelesen — bitte Positionen prüfen.",
+    "empty": "Keine Lebensmittel-Positionen erkannt. Bitte erneut fotografieren.",
+    "retake": "Erneut fotografieren",
+    "name": "Position",
+    "qty_one": "1 Stück",
+    "qty_other": "{{count}} Stück",
+    "qtyDec": "Ein Stück {{name}} weniger",
+    "qtyInc": "Ein Stück {{name}} mehr",
+    "price": "Preis (€)",
+    "priceAria": "Preis der Position {{name}} in Euro",
+    "priceHint": "Preis je Position — bei mehreren Stück der Gesamtpreis. Er landet als Packungspreis in der Haushaltskasse.",
+    "remove": "Position {{name}} entfernen",
+    "toPantry": "Alle in den Vorrat",
+    "saving": "Wird übernommen …",
+    "saved_one": "1 Position im Vorrat",
+    "saved_other": "{{count}} Positionen im Vorrat"
   },
   "food": {
     "edit": {

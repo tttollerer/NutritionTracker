@@ -1,9 +1,12 @@
 import {
   AnalyzeItemSchema,
   AnalyzeResultSchema,
+  ReceiptResultSchema,
   type AnalyzeItem,
   type AnalyzeRequest,
   type AnalyzeResult,
+  type ReceiptItem,
+  type ReceiptResult,
 } from './apiContract'
 import { ApiError, apiErrorFromResponse, isOffline, toApiError } from './apiError'
 
@@ -16,20 +19,17 @@ export const AiResult = AnalyzeResultSchema
 export type AiItem = AnalyzeItem
 export type AiResult = AnalyzeResult
 export type AnalyzeMode = AnalyzeRequest['mode']
+export type { ReceiptItem, ReceiptResult }
 
 const ENDPOINT = import.meta.env.VITE_ANALYZE_URL ?? '/api/analyze'
 const TIMEOUT_MS = 30_000
 
 /**
- * Ruft die KI-Analyse-Function auf und validiert die Antwort.
- * Fehler kommen IMMER als typisierter ApiError (Mapping über `code`,
- * Anzeige über `t(err.i18nKey)`), nie als roher fetch-/Parse-Fehler.
+ * Gemeinsamer POST an die Analyse-Function. Fehler kommen IMMER als
+ * typisierter ApiError (Mapping über `code`, Anzeige über `t(err.i18nKey)`),
+ * nie als roher fetch-/Parse-Fehler.
  */
-export async function analyzeImage(
-  mode: AnalyzeMode,
-  imageBase64: string,
-  hint?: string,
-): Promise<AiResult> {
+async function postAnalyze(body: AnalyzeRequest): Promise<unknown> {
   if (isOffline()) throw new ApiError('OFFLINE')
 
   let res: Response
@@ -37,7 +37,7 @@ export async function analyzeImage(
     res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode, imageBase64, hint }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
   } catch (e) {
@@ -49,9 +49,33 @@ export async function analyzeImage(
   if (!res.ok) throw await apiErrorFromResponse(res)
 
   try {
-    return AnalyzeResultSchema.parse(await res.json())
+    return await res.json()
   } catch {
     // 200 mit kaputtem Body (z. B. HTML einer Zwischenschicht) → kein Parse-Crash
+    throw new ApiError('GENERIC')
+  }
+}
+
+/** Bildanalyse (meal | label | portion) — Antwort validiert gegen den Vertrag. */
+export async function analyzeImage(
+  mode: AnalyzeMode,
+  imageBase64: string,
+  hint?: string,
+): Promise<AiResult> {
+  const json = await postAnalyze({ mode, imageBase64, hint })
+  try {
+    return AnalyzeResultSchema.parse(json)
+  } catch {
+    throw new ApiError('GENERIC')
+  }
+}
+
+/** Kassenbon-Scan (Vertrag v1.3): eigenes Antwortschema — Bon-Positionen. */
+export async function analyzeReceipt(imageBase64: string, hint?: string): Promise<ReceiptResult> {
+  const json = await postAnalyze({ mode: 'receipt', imageBase64, hint })
+  try {
+    return ReceiptResultSchema.parse(json)
+  } catch {
     throw new ApiError('GENERIC')
   }
 }

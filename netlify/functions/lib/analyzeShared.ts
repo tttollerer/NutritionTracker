@@ -111,3 +111,52 @@ export function clampQuestions(raw: unknown): unknown {
     : []
   return cleaned.length ? { ...rest, questions: cleaned } : rest
 }
+
+// ---------------------------------------------------------------------------
+// Kassenbon-Antwort (Vertrag v1.3) — Sanitizing VOR der zod-Validierung
+// ---------------------------------------------------------------------------
+
+/** Obergrenze je Position — schützt vor Fehl-Lesungen (z. B. EAN-Ziffern als Stückzahl). */
+export const MAX_RECEIPT_QUANTITY = 99
+
+/** Endliche Zahl ≥ 0? (Makros/Preis dürfen nie negativ oder NaN sein) */
+function nonNegative(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0
+}
+
+/**
+ * Normalisiert eine rohe Kassenbon-Modellantwort auf das Vertragsformat,
+ * BEVOR ReceiptResultSchema.parse läuft — Bons sind schmutzige Inputs und
+ * Modelle liefern gern krumme Stückzahlen („2.0"), negative Pfand-Preise oder
+ * halb gefüllte per100-Objekte. Regeln:
+ * - Positionen ohne brauchbaren Namen fliegen raus (statt die Antwort zu kippen).
+ * - quantity: auf ganze Stück gerundet, geklemmt auf 1..MAX_RECEIPT_QUANTITY
+ *   (fehlend/kaputt → 1).
+ * - price: nur endliche Werte ≥ 0, auf Cent gerundet; sonst weggelassen.
+ * - per100: nur übernommen, wenn ALLE vier Makros endliche Werte ≥ 0 sind.
+ * Fehlt `items` ganz, bleibt die Antwort unverändert (zod → Retry/Envelope).
+ */
+export function clampReceipt(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const items = (raw as Record<string, unknown>).items
+  if (!Array.isArray(items)) return raw
+  const cleaned = items.flatMap((it) => {
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return []
+    const o = it as Record<string, unknown>
+    const name = typeof o.name === 'string' ? o.name.trim() : ''
+    if (!name) return []
+    const rawQty = typeof o.quantity === 'number' && Number.isFinite(o.quantity) ? Math.round(o.quantity) : 1
+    const quantity = Math.min(MAX_RECEIPT_QUANTITY, Math.max(1, rawQty))
+    const price = nonNegative(o.price) ? Math.round(o.price * 100) / 100 : undefined
+    let per100: { kcal: number; protein: number; carbs: number; fat: number } | undefined
+    const p = o.per100
+    if (p && typeof p === 'object' && !Array.isArray(p)) {
+      const m = p as Record<string, unknown>
+      if (nonNegative(m.kcal) && nonNegative(m.protein) && nonNegative(m.carbs) && nonNegative(m.fat)) {
+        per100 = { kcal: m.kcal, protein: m.protein, carbs: m.carbs, fat: m.fat }
+      }
+    }
+    return [{ name, quantity, ...(price != null ? { price } : {}), ...(per100 ? { per100 } : {}) }]
+  })
+  return { items: cleaned }
+}

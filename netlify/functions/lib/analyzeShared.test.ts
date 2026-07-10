@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { AnalyzeResultSchema, ApiErrorSchema } from '../../../src/lib/apiContract'
+import { AnalyzeResultSchema, ApiErrorSchema, ReceiptResultSchema } from '../../../src/lib/apiContract'
 import {
   ANALYZE_ERROR_TEXT,
   analyzeErrorResponse,
   clampQuestions,
+  clampReceipt,
   extractJson,
   MAX_QUESTIONS,
+  MAX_RECEIPT_QUANTITY,
   parseAnalyzeRequest,
 } from './analyzeShared'
 
@@ -102,6 +104,65 @@ describe('analyzeShared (Helfer der Analyze-Function, Vertrag §1/§2)', () => {
       const clamped = clampQuestions({ items: [item], questions: [long] }) as { questions: string[] }
       expect(clamped.questions[0]).toHaveLength(200)
       expect(AnalyzeResultSchema.safeParse(clamped).success).toBe(true)
+    })
+  })
+
+  describe('clampReceipt (Kassenbon-Sanitizing v1.3)', () => {
+    it('normalisiert krumme Stückzahlen, rundet Preise auf Cent und trimmt Namen', () => {
+      const raw = {
+        items: [
+          { name: '  H-Milch 3,5 %  ', quantity: 2.0, price: 2.379999 },
+          { name: 'Bananen', quantity: '3', price: 'unlesbar' }, // kaputte Typen → Defaults
+        ],
+      }
+      const clamped = clampReceipt(raw)
+      expect(clamped).toEqual({
+        items: [
+          { name: 'H-Milch 3,5 %', quantity: 2, price: 2.38 },
+          { name: 'Bananen', quantity: 1 },
+        ],
+      })
+      // Das Ergebnis besteht die Vertragsvalidierung — genau dafür ist das Kappen da.
+      expect(ReceiptResultSchema.safeParse(clamped).success).toBe(true)
+    })
+
+    it('klemmt die Stückzahl auf 1..MAX_RECEIPT_QUANTITY und verwirft negative Preise', () => {
+      const clamped = clampReceipt({
+        items: [
+          { name: 'Joghurt', quantity: -4, price: -0.25 },
+          { name: 'Kaugummi', quantity: 4012345, price: 1.29 },
+        ],
+      }) as { items: { quantity: number; price?: number }[] }
+      expect(clamped.items[0]).toEqual({ name: 'Joghurt', quantity: 1 })
+      expect(clamped.items[1].quantity).toBe(MAX_RECEIPT_QUANTITY)
+    })
+
+    it('übernimmt per100 nur vollständig (alle vier Makros ≥ 0), sonst gar nicht', () => {
+      const clamped = clampReceipt({
+        items: [
+          { name: 'Milch', quantity: 1, per100: { kcal: 64, protein: 3.4, carbs: 4.8, fat: 3.5 } },
+          { name: 'Brot', quantity: 1, per100: { kcal: 250 } }, // halb gefüllt → weg
+          { name: 'Käse', quantity: 1, per100: { kcal: -1, protein: 25, carbs: 0, fat: 28 } }, // negativ → weg
+        ],
+      }) as { items: { per100?: unknown }[] }
+      expect(clamped.items[0].per100).toEqual({ kcal: 64, protein: 3.4, carbs: 4.8, fat: 3.5 })
+      expect(clamped.items[1].per100).toBeUndefined()
+      expect(clamped.items[2].per100).toBeUndefined()
+      expect(ReceiptResultSchema.safeParse(clamped).success).toBe(true)
+    })
+
+    it('wirft Positionen ohne brauchbaren Namen raus, statt die Antwort zu kippen', () => {
+      const clamped = clampReceipt({
+        items: [{ name: '   ' }, null, 'PFAND 0,25', { name: 'Äpfel', quantity: 1 }],
+      })
+      expect(clamped).toEqual({ items: [{ name: 'Äpfel', quantity: 1 }] })
+    })
+
+    it('lässt Antworten ohne items-Array unverändert (zod → Retry/Envelope)', () => {
+      const noItems = { notes: 'nur Text' }
+      expect(clampReceipt(noItems)).toBe(noItems)
+      expect(clampReceipt(null)).toBe(null)
+      expect(clampReceipt('kein objekt')).toBe('kein objekt')
     })
   })
 })

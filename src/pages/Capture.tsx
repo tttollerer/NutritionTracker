@@ -4,10 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
-import { analyzeImage, type AnalyzeMode } from '@/lib/ai'
+import { analyzeImage, analyzeReceipt, type AnalyzeMode } from '@/lib/ai'
 import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
+import { setReceiptDraft } from '@/lib/receipt'
 import { peekPendingImage, clearPendingImage } from '@/lib/captureHandoff'
 import { getSettings, updateSettings } from '@/db/repo'
 import { useSpeechRecognition } from '@/lib/speech'
@@ -40,8 +41,10 @@ export function Capture() {
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
   const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
 
-  const title = mode === 'label' ? t('capture.labelTitle') : t('capture.mealTitle')
-  const uiHint = mode === 'label' ? t('capture.hintLabel') : t('capture.hintMeal')
+  const title =
+    mode === 'label' ? t('capture.labelTitle') : mode === 'receipt' ? t('capture.receiptTitle') : t('capture.mealTitle')
+  const uiHint =
+    mode === 'label' ? t('capture.hintLabel') : mode === 'receipt' ? t('capture.hintReceipt') : t('capture.hintMeal')
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -62,6 +65,14 @@ export function Capture() {
     setBusy(true)
     try {
       const trimmedHint = hint.trim() || undefined
+      // Kassenbon: eigenes Antwortschema + eigener Prüf-Screen (/receipt).
+      if (mode === 'receipt') {
+        const receipt = await analyzeReceipt(preview, trimmedHint)
+        setReceiptDraft(receipt.items)
+        clearPendingImage()
+        navigate('/receipt')
+        return
+      }
       const result = await analyzeImage(mode, preview, trimmedHint)
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
       // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
@@ -194,7 +205,7 @@ export function Capture() {
           ) : (
             <div className="grid gap-3">
               <Button onClick={() => cameraRef.current?.click()}>
-                <Camera size={20} /> {t('capture.take')}
+                <Camera size={20} /> {mode === 'receipt' ? t('capture.takeReceipt') : t('capture.take')}
               </Button>
               <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
                 <ImageIcon size={20} /> {t('capture.choose')}

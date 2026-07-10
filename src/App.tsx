@@ -18,6 +18,7 @@ const Barcode = lazy(() => import('@/pages/Barcode').then((m) => ({ default: m.B
 const Week = lazy(() => import('@/pages/Week').then((m) => ({ default: m.Week })))
 const Pantry = lazy(() => import('@/pages/Pantry').then((m) => ({ default: m.Pantry })))
 const Review = lazy(() => import('@/pages/Review').then((m) => ({ default: m.Review })))
+const ReceiptReview = lazy(() => import('@/pages/ReceiptReview').then((m) => ({ default: m.ReceiptReview })))
 const Coach = lazy(() => import('@/pages/Coach').then((m) => ({ default: m.Coach })))
 const Awards = lazy(() => import('@/pages/Awards').then((m) => ({ default: m.Awards })))
 const Trends = lazy(() => import('@/pages/Trends').then((m) => ({ default: m.Trends })))
@@ -68,6 +69,7 @@ const router = createBrowserRouter([
       { path: 'capture', element: <Capture /> },
       { path: 'barcode', element: lazyPage(<Barcode />) },
       { path: 'review', element: lazyPage(<Review />) },
+      { path: 'receipt', element: lazyPage(<ReceiptReview />) },
       { path: 'coach', element: lazyPage(<Coach />) },
       { path: 'awards', element: lazyPage(<Awards />) },
       { path: 'trends', element: lazyPage(<Trends />) },

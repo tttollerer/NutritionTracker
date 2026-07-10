@@ -15,9 +15,13 @@ import { z } from 'zod'
  *   nur Nährstoffe, die die App auch anzeigen/auswerten kann.
  * - Challenge-Vorschläge: optionales `rule`-Feld im Format von
  *   parseChallengeRule (src/lib/challenges.ts) für die Auto-Auswertung.
+ *
+ * v1.3 (Kassenbon-Scan, nur additiv):
+ * - /api/analyze bekommt den vierten Modus 'receipt' — er antwortet mit
+ *   ReceiptResultSchema (normalisierte Bon-Positionen) statt AnalyzeResultSchema.
  */
 
-export const API_CONTRACT_VERSION = '1.2'
+export const API_CONTRACT_VERSION = '1.3'
 
 // ---------------------------------------------------------------------------
 // Fehler-Envelope (gilt für ALLE Nicht-200-Antworten beider Endpunkte)
@@ -62,11 +66,12 @@ export function apiError(code: ApiErrorCode, error: string): ApiError {
 }
 
 // ---------------------------------------------------------------------------
-// /api/analyze — Bildanalyse (Modi meal | label | portion, PLAN.md §6)
+// /api/analyze — Bildanalyse (Modi meal | label | portion | receipt, PLAN.md §6)
 // ---------------------------------------------------------------------------
 
 export const AnalyzeRequestSchema = z.object({
-  mode: z.enum(['meal', 'label', 'portion']),
+  /** v1.3: 'receipt' (Kassenbon) antwortet mit ReceiptResultSchema, der Rest mit AnalyzeResultSchema. */
+  mode: z.enum(['meal', 'label', 'portion', 'receipt']),
   /** Data-URL oder rohes Base64 (JPEG angenommen, wenn ohne Präfix). */
   imageBase64: z.string().min(1),
   hint: z.string().max(280).optional(),
@@ -100,6 +105,39 @@ export const AnalyzeResultSchema = z.object({
 })
 export type AnalyzeItem = z.infer<typeof AnalyzeItemSchema>
 export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>
+
+// ---------------------------------------------------------------------------
+// /api/analyze mode 'receipt' — Kassenbon-Scan (v1.3)
+// ---------------------------------------------------------------------------
+
+/**
+ * Eine normalisierte Kassenbon-Position: `name` ist der GENERISCHE
+ * Lebensmittelname (Marke/Kürzel entfernt, z. B. „JA! H-MILCH 3,5%" →
+ * „H-Milch 3,5 %"), `quantity` die ganze Stückzahl der Position,
+ * `price` der Gesamtpreis der Position in EUR (bei quantity > 1 also
+ * Stückpreis × Stück; optional — nicht jeder Bon ist lesbar) und `per100`
+ * eine optionale Makro-Schätzung des Modells je 100 g/ml.
+ */
+export const ReceiptItemSchema = z.object({
+  name: z.string().min(1),
+  quantity: z.number().int().positive(),
+  price: z.number().nonnegative().optional(),
+  per100: z
+    .object({
+      kcal: z.number().nonnegative(),
+      protein: z.number().nonnegative(),
+      carbs: z.number().nonnegative(),
+      fat: z.number().nonnegative(),
+    })
+    .optional(),
+})
+
+/** Antwort des receipt-Modus — Non-Food (Pfand, Tüten, Rabatte) filtert der Server/Prompt. */
+export const ReceiptResultSchema = z.object({
+  items: z.array(ReceiptItemSchema),
+})
+export type ReceiptItem = z.infer<typeof ReceiptItemSchema>
+export type ReceiptResult = z.infer<typeof ReceiptResultSchema>
 
 // ---------------------------------------------------------------------------
 // /api/coach — Coach-Chat mit Token-Streaming (PLAN.md §9.3)

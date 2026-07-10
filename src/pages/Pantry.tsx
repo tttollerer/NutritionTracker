@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Minus, Plus, ScanBarcode, Search, ShoppingBasket, Sparkles, Utensils } from 'lucide-react'
+import { Minus, Plus, Receipt, ScanBarcode, Search, ShoppingBasket, Sparkles, Utensils } from 'lucide-react'
 import type { FoodItem, Photo } from '@/db/types'
 import { db } from '@/db'
 import { deleteLog, foodNameMatches, pantryFoods } from '@/db/repo'
@@ -92,15 +92,16 @@ export function Pantry() {
       {/* Einkaufsliste: einklappbarer Abschnitt über dem Vorrat. */}
       <ShoppingList />
 
-      {/* Scan-Einstiege: Barcode (Ziel Vorrat) & Foto/KI (Review → „Nur in den Vorrat"). */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Scan-Einstiege: Barcode (Ziel Vorrat), Foto/KI (Review → „Nur in den
+          Vorrat") & Kassenbon (alle Positionen → Vorrat). */}
+      <div className="grid grid-cols-3 gap-3">
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={() => navigate('/barcode?pantry=1')}
           className="focus-ring flex flex-col items-center gap-2 rounded-lg bg-brand-gradient p-4 text-primary-foreground shadow-glow"
         >
           <ScanBarcode size={26} />
-          <span className="text-sm font-bold">{t('pantryPage.scanBarcode')}</span>
+          <span className="text-center text-sm font-bold">{t('pantryPage.scanBarcode')}</span>
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -108,7 +109,15 @@ export function Pantry() {
           className="focus-ring flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 shadow-sm"
         >
           <Sparkles size={26} className="text-primary" />
-          <span className="text-sm font-bold">{t('pantryPage.photoAi')}</span>
+          <span className="text-center text-sm font-bold">{t('pantryPage.photoAi')}</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate('/capture?mode=receipt')}
+          className="focus-ring flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 shadow-sm"
+        >
+          <Receipt size={26} className="text-primary" />
+          <span className="text-center text-sm font-bold">{t('pantryPage.scanReceipt')}</span>
         </motion.button>
       </div>
 
