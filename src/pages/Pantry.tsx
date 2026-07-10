@@ -7,7 +7,7 @@ import { Minus, Plus, Receipt, ScanBarcode, Search, ShoppingBasket, Sparkles, Ut
 import type { FoodItem, Photo } from '@/db/types'
 import { db } from '@/db'
 import { deleteLog, foodNameMatches, pantryFoods } from '@/db/repo'
-import { decrementPantryOnLog, effectivePantryQty, incrementPantry, isExpiringSoon, setPantryQty } from '@/lib/pantryStock'
+import { decrementPantryOnLog, effectivePantryQty, incrementPantry, isExpiringSoon, setPantryQty, undoPantryAdd } from '@/lib/pantryStock'
 import { formatEuro } from '@/lib/money'
 import { defaultMeal } from '@/lib/meal'
 import { cn } from '@/lib/utils'
@@ -16,7 +16,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { ShoppingList } from '@/components/ShoppingList'
 import { PortionSheet } from '@/components/PortionSheet'
-import { FoodDetailSheet } from '@/components/FoodDetailSheet'
+import { FoodDetailSheet, type ProductDraft } from '@/components/FoodDetailSheet'
 import { ExpiryBadge } from '@/components/ExpiryBadge'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
@@ -40,6 +40,8 @@ export function Pantry() {
   const [expiringOnly, setExpiringOnly] = useState(false)
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
   const [detailFood, setDetailFood] = useState<FoodItem | null>(null)
+  // Neues Produkt übers gemeinsame Produkt-Sheet (Draft-Modus) anlegen.
+  const [creating, setCreating] = useState<ProductDraft | null>(null)
 
   // Erste Produktfotos für die Thumbnails der Liste.
   const thumbs = useLiveQuery(async () => {
@@ -90,6 +92,15 @@ export function Pantry() {
   return (
     <div className="space-y-4">
       <PageHeader title={t('pantryPage.title')} subtitle={subtitle}>
+        {/* Neues Produkt von Hand anlegen — gleiches Produkt-Sheet wie überall. */}
+        <button
+          type="button"
+          onClick={() => setCreating({})}
+          aria-label={t('add.newProduct')}
+          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
+        >
+          <Plus size={20} />
+        </button>
         <ProfileAvatar />
       </PageHeader>
 
@@ -211,7 +222,22 @@ export function Pantry() {
       />
 
       {/* Lebensmittel-Detail (Galerie · Beschreibung · KI · Preis · Tags). */}
-      <FoodDetailSheet food={detailFood} onClose={() => setDetailFood(null)} onSaved={(f) => setDetailFood(f)} />
+      <FoodDetailSheet
+        food={detailFood}
+        draft={creating}
+        onClose={() => {
+          setDetailFood(null)
+          setCreating(null)
+        }}
+        onSaved={(f) => setDetailFood(f)}
+        onCreated={(food, action) => {
+          setCreating(null)
+          // Auf der Einkauf-Seite ist der Vorrat das natürliche Ziel; „Anlegen
+          // & loggen" öffnet das Mengen-Sheet für den direkten Verzehr.
+          if (action === 'log') setPortionFood(food)
+          else showUndo(t('food.create.createdPantry', { name: food.name }), () => undoPantryAdd(food.id))
+        }}
+      />
     </div>
   )
 }

@@ -141,7 +141,8 @@
     "pantryPriceTitle": "Haushaltskasse (optional)",
     "pantryPrice": "Preis (€)",
     "pantryPackSize": "Packung ({{unit}})",
-    "pantryCost": "Kostet ca. {{cost}}"
+    "pantryCost": "Kostet ca. {{cost}}",
+    "newProduct": "Neues Produkt anlegen"
   },
   "week": {
     "title": "Woche",
@@ -601,7 +602,18 @@
       "servingLabelPh": "z. B. Stück",
       "servingAmount": "Menge ({{unit}})",
       "addServing": "Einheit hinzufügen",
-      "removeServing": "Einheit {{label}} entfernen"
+      "removeServing": "Einheit {{label}} entfernen",
+      "portionPhoto": "Portion fotografieren — KI schätzt die Menge",
+      "portionDefaultLabel": "Portion",
+      "portionEstimated": "KI-Schätzung: {{amount}} {{unit}} — unten prüfen und mit + übernehmen.",
+      "portionEstimateNone": "Keine Mengenschätzung erkennbar — bitte Menge von Hand eintragen."
+    },
+    "create": {
+      "title": "Neues Produkt",
+      "toPantry": "In den Vorrat",
+      "andLog": "Anlegen & loggen",
+      "createdPantry": "{{name}} im Vorrat",
+      "created": "{{name}} angelegt"
     },
     "expiry": {
       "label": "MHD (optional)",

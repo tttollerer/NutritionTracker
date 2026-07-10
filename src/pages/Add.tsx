@@ -1,39 +1,34 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, CookingPot, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
+import { Camera, CookingPot, ScanText, ScanBarcode, ImagePlus, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
 import {
   copyYesterday,
-  createFood,
   deleteLog,
   favoriteFoods,
-  getAllergies,
   logFood,
   pantryFoods,
   quickLogCatalog,
   recentFoods,
-  savePhoto,
   searchFoods,
   setPantry,
   toggleFavorite,
   yesterdayLogCount,
 } from '@/db/repo'
-import { checkAllergens } from '@/lib/allergens'
-import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
+import { decrementPantryOnLog, incrementPantry, undoPantryAdd } from '@/lib/pantryStock'
 import { useOverlays } from '@/lib/overlays-context'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
-import { downscaleImage } from '@/lib/image'
 import { todayKey } from '@/lib/utils'
 import { describePortion } from '@/lib/portion'
 import { PageHeader } from '@/components/PageHeader'
 import { PortionSheet } from '@/components/PortionSheet'
-import { Card } from '@/components/ui/Card'
+import { ProductSheet, type ProductDraft } from '@/components/FoodDetailSheet'
 import { Button } from '@/components/ui/Button'
-import { Field, Input } from '@/components/ui/Input'
+import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
 
 export function Add() {
@@ -49,29 +44,12 @@ export function Add() {
   const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
   // Kontext für „Gestern kopieren" (Befund 11): Zähler der gewählten Mahlzeit.
   const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(todayKey(), meal), [meal]) ?? 0
-  const allergies = useLiveQuery(() => getAllergies(), []) ?? []
-  const [ack, setAck] = useState(false)
-
   // Katalog-Suche (live über db.foods)
   const [query, setQuery] = useState('')
   const results = useLiveQuery(() => searchFoods(query), [query])
 
-  // Manuelles Formular
-  const [name, setName] = useState('')
-  const [per, setPer] = useState<'g' | 'ml'>('g')
-  const [kcal, setKcal] = useState('')
-  const [protein, setProtein] = useState('')
-  const [carbs, setCarbs] = useState('')
-  const [fat, setFat] = useState('')
-  const [amount, setAmount] = useState('100')
-  const [photo, setPhoto] = useState<string | null>(null)
-  const photoRef = useRef<HTMLInputElement>(null)
-
-  async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (file) setPhoto(await downscaleImage(file))
-  }
+  // Neues Produkt übers gemeinsame Produkt-Sheet (Draft-Modus) anlegen.
+  const [creating, setCreating] = useState<ProductDraft | null>(null)
 
   const captureOptions = [
     { icon: Camera, key: 'photo', to: `/capture?mode=meal&meal=${meal}` },
@@ -95,7 +73,13 @@ export function Add() {
       amount: food.defaultPortion?.amount ?? 100,
       unit: food.defaultPortion?.unit ?? (food.per as 'g' | 'ml'),
     })
-    showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+    // Vorrats-Produkte: 1-Tap-Log verhält sich wie das Mengen-Sheet — eine
+    // Packung geht vom Bestand ab, das Undo legt sie zurück.
+    const took = food.pantry ? await decrementPantryOnLog(food.id) : false
+    showUndo(t('capture.added', { name: food.name }), async () => {
+      await deleteLog(entry.id)
+      if (took) await incrementPantry(food.id)
+    })
     navigate('/')
   }
 
@@ -114,28 +98,6 @@ export function Add() {
     showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
       await Promise.all(copied.map((c) => deleteLog(c.id)))
     })
-    navigate('/')
-  }
-
-  // Namens-basierte Allergen-Warnung für manuell erfasste Lebensmittel.
-  const manualHits = checkAllergens({ name }, allergies).contains
-  const allergenNames = (keys: string[]) =>
-    keys.map((h) => t(`onboarding.allergens.${h}`, { defaultValue: h })).join(', ')
-
-  async function saveManual() {
-    if (!name.trim() || !kcal) return
-    if (manualHits.length > 0 && !ack) return
-    const food = await createFood({
-      name,
-      per,
-      kcal: Number(kcal) || 0,
-      protein: Number(protein) || 0,
-      carbs: Number(carbs) || 0,
-      fat: Number(fat) || 0,
-    })
-    const photoBlobId = photo ? await savePhoto(photo) : undefined
-    const entry = await logFood({ food, date: todayKey(), meal, amount: Number(amount) || 100, unit: per, photoBlobId })
-    showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
     navigate('/')
   }
 
@@ -282,91 +244,16 @@ export function Add() {
         onPick={(id) => void logCatalog(id)}
       />
 
-      {/* Manuelles Erfassen */}
-      <Card className="space-y-3 p-4">
-        <h2 className="font-semibold">{t('entry.title')}</h2>
-        <Field label={t('entry.name')}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('entry.namePh')} />
-        </Field>
-        {manualHits.length > 0 && (
-          <div className="space-y-2">
-            <p className="rounded-lg border border-destructive/40 bg-destructive/15 px-3 py-2 text-xs font-medium text-destructive">
-              ⚠️ {t('review.allergyWarn', { list: allergenNames(manualHits) })}
-            </p>
-            <label className="flex items-start gap-2 text-xs text-destructive">
-              <input
-                type="checkbox"
-                checked={ack}
-                onChange={(e) => setAck(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-[hsl(var(--destructive))]"
-              />
-              <span>{t('review.allergyAck')}</span>
-            </label>
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={t('entry.per')}>
-            <div role="group" aria-label={t('entry.unitToggle')} className="grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
-              {(['g', 'ml'] as const).map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  aria-pressed={per === u}
-                  onClick={() => setPer(u)}
-                  className={`focus-ring min-h-[44px] rounded-sm text-sm font-medium ${
-                    per === u ? 'bg-card shadow-sm' : 'text-muted-foreground'
-                  }`}
-                >
-                  {u}
-                </button>
-              ))}
-            </div>
-          </Field>
-          <Field label={t('entry.kcal')}>
-            <Input type="number" inputMode="numeric" value={kcal} onChange={(e) => setKcal(e.target.value)} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label={t('entry.protein')}>
-            <Input type="number" inputMode="decimal" value={protein} onChange={(e) => setProtein(e.target.value)} />
-          </Field>
-          <Field label={t('entry.carbs')}>
-            <Input type="number" inputMode="decimal" value={carbs} onChange={(e) => setCarbs(e.target.value)} />
-          </Field>
-          <Field label={t('entry.fat')}>
-            <Input type="number" inputMode="decimal" value={fat} onChange={(e) => setFat(e.target.value)} />
-          </Field>
-        </div>
-        <Field label={`${t('entry.amount')} (${per})`}>
-          <Input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </Field>
-
-        {/* Optionales Mahlzeitenfoto */}
-        {photo ? (
-          <div className="relative w-fit">
-            <img src={photo} alt="" className="h-20 w-20 rounded-md object-cover" />
-            <button
-              onClick={() => setPhoto(null)}
-              aria-label={t('common.delete')}
-              className="focus-ring absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
-            >
-              <X size={14} />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => photoRef.current?.click()}
-            className="focus-ring flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-input py-2.5 text-sm text-muted-foreground"
-          >
-            <ImagePlus size={18} /> {t('entry.photo')}
-          </button>
-        )}
-        <input ref={photoRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
-
-        <Button className="w-full" onClick={saveManual} disabled={!name.trim() || !kcal || (manualHits.length > 0 && !ack)}>
-          {t('entry.save')}
-        </Button>
-      </Card>
+      {/* Neues Produkt anlegen — durchgängig über DAS gemeinsame Produkt-Sheet
+          (Galerie mit mehreren Fotos, Tags, Portionseinheiten, Preis, MHD).
+          Der Suchbegriff wird als Name vorbefüllt. */}
+      <button
+        type="button"
+        onClick={() => setCreating({ name: query.trim() || undefined })}
+        className="focus-ring flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-input py-2.5 text-sm font-medium text-muted-foreground"
+      >
+        <ImagePlus size={18} aria-hidden="true" /> {t('add.newProduct')}
+      </button>
 
       {/* Mengen-Sheet für den Verzehr aus dem Vorrat — Loggen zieht eine
           Packung vom Bestand ab; Undo legt sie zurück. */}
@@ -383,6 +270,19 @@ export function Add() {
             })
           })()
           navigate('/')
+        }}
+      />
+
+      {/* DAS gemeinsame Produkt-Sheet im Draft-Modus: „In den Vorrat" bleibt
+          hier, „Anlegen & loggen" reicht das frische Produkt ans Mengen-Sheet. */}
+      <ProductSheet
+        food={null}
+        draft={creating}
+        onClose={() => setCreating(null)}
+        onCreated={(food, action) => {
+          setCreating(null)
+          if (action === 'log') setPortionFood(food)
+          else showUndo(t('food.create.createdPantry', { name: food.name }), () => undoPantryAdd(food.id))
         }}
       />
     </div>

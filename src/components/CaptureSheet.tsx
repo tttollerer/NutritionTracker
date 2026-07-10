@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Camera, CookingPot, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { recentFoods, deleteLog } from '@/db/repo'
+import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
@@ -205,13 +206,20 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
     </AnimatePresence>
 
     {/* Mengen-Sheet für „Zuletzt benutzt" — lebt außerhalb des open-Zweigs,
-        damit es das Schließen des Quick-Sheets überlebt. */}
+        damit es das Schließen des Quick-Sheets überlebt. Vorrats-Produkte
+        verhalten sich wie überall: eine Packung ab, Undo legt sie zurück. */}
     <PortionSheet
       food={portionFood}
       initialMeal={meal}
       onClose={() => setPortionFood(null)}
       onLogged={(entry, food) => {
-        showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+        void (async () => {
+          const took = food.pantry ? await decrementPantryOnLog(food.id) : false
+          showUndo(t('capture.added', { name: food.name }), async () => {
+            await deleteLog(entry.id)
+            if (took) await incrementPantry(food.id)
+          })
+        })()
       }}
     />
     </>

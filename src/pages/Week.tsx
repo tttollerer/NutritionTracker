@@ -404,6 +404,7 @@ export function Week() {
                             key={l.id}
                             log={l}
                             name={foods.get(l.foodId)?.name ?? '—'}
+                            onOpen={() => setEditing(l)}
                             onConfirm={() => void confirmEntry(l)}
                             onRemove={() => removePlanned(l)}
                           />
@@ -523,11 +524,14 @@ export function Week() {
 function PlannedRow({
   log,
   name,
+  onOpen,
   onConfirm,
   onRemove,
 }: {
   log: LogEntry
   name: string
+  /** Öffnet den Log-Editor — auch geplante Portionen sind korrigierbar. */
+  onOpen: () => void
   onConfirm: () => void
   onRemove: () => void
 }) {
@@ -537,12 +541,17 @@ function PlannedRow({
       <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
         {t('plan.plannedBadge')}
       </span>
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
-        {name}
-      </span>
-      <span className="shrink-0 text-xs italic tabular-nums text-muted-foreground opacity-80">
-        {Math.round(log.computed.kcal)}
-      </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={t('today.edit.open', { name })}
+        className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center gap-2 rounded-md text-left"
+      >
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">{name}</span>
+        <span className="shrink-0 text-xs italic tabular-nums text-muted-foreground opacity-80">
+          {Math.round(log.computed.kcal)}
+        </span>
+      </button>
       <button
         type="button"
         onClick={onConfirm}
