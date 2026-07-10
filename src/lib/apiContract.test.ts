@@ -3,6 +3,7 @@ import { z } from 'zod'
 import {
   API_ERROR_CODES,
   API_ERROR_STATUS,
+  AnalyzeRequestSchema,
   AnalyzeResultSchema,
   ApiErrorSchema,
   apiError,
@@ -10,6 +11,8 @@ import {
   CoachChallengeRuleSchema,
   CoachRequestSchema,
   CoachSuggestionsSchema,
+  ReceiptItemSchema,
+  ReceiptResultSchema,
   encodeCoachStreamError,
   extractCoachStreamError,
 } from './apiContract'
@@ -74,6 +77,40 @@ describe('AnalyzeResultSchema v1.2 — optionales questions-Feld (Paket B)', () 
   it('lehnt mehr als 2 Fragen und leere Strings ab', () => {
     expect(AnalyzeResultSchema.safeParse({ items: [item], questions: ['a?', 'b?', 'c?'] }).success).toBe(false)
     expect(AnalyzeResultSchema.safeParse({ items: [item], questions: [''] }).success).toBe(false)
+  })
+})
+
+describe('Kassenbon-Scan v1.3 — mode receipt + ReceiptResultSchema', () => {
+  it('AnalyzeRequestSchema akzeptiert den neuen Modus "receipt" (additiv)', () => {
+    expect(AnalyzeRequestSchema.safeParse({ mode: 'receipt', imageBase64: 'QUJD' }).success).toBe(true)
+    // Bestehende Modi bleiben unverändert gültig.
+    for (const mode of ['meal', 'label', 'portion']) {
+      expect(AnalyzeRequestSchema.safeParse({ mode, imageBase64: 'QUJD' }).success).toBe(true)
+    }
+  })
+
+  it('parst eine typische Bon-Position (price und per100 optional)', () => {
+    const full = {
+      name: 'H-Milch 3,5 %',
+      quantity: 2,
+      price: 2.38,
+      per100: { kcal: 64, protein: 3.4, carbs: 4.8, fat: 3.5 },
+    }
+    expect(ReceiptItemSchema.parse(full)).toEqual(full)
+    // Minimalform: nur Name + Stückzahl.
+    expect(ReceiptItemSchema.safeParse({ name: 'Bananen', quantity: 1 }).success).toBe(true)
+    expect(ReceiptResultSchema.safeParse({ items: [full, { name: 'Bananen', quantity: 1 }] }).success).toBe(true)
+  })
+
+  it('lehnt leeren Namen, krumme/negative Stückzahl und negativen Preis ab', () => {
+    expect(ReceiptItemSchema.safeParse({ name: '', quantity: 1 }).success).toBe(false)
+    expect(ReceiptItemSchema.safeParse({ name: 'Milch', quantity: 0 }).success).toBe(false)
+    expect(ReceiptItemSchema.safeParse({ name: 'Milch', quantity: 1.5 }).success).toBe(false)
+    expect(ReceiptItemSchema.safeParse({ name: 'Pfand', quantity: 1, price: -0.25 }).success).toBe(false)
+  })
+
+  it('lehnt halb gefülltes per100 ab — entweder alle vier Makros oder gar keins', () => {
+    expect(ReceiptItemSchema.safeParse({ name: 'Milch', quantity: 1, per100: { kcal: 64 } }).success).toBe(false)
   })
 })
 

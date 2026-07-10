@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
+import { Camera, CookingPot, ScanText, ScanBarcode, ImagePlus, X, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
 import {
   copyYesterday,
   createFood,
@@ -21,6 +21,7 @@ import {
   yesterdayLogCount,
 } from '@/db/repo'
 import { checkAllergens } from '@/lib/allergens'
+import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
 import { useOverlays } from '@/lib/overlays-context'
 import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
@@ -168,6 +169,11 @@ export function Add() {
         ))}
       </div>
 
+      {/* Eigene Rezepte: anlegen, bearbeiten und in einem Rutsch loggen */}
+      <Button variant="secondary" className="w-full" onClick={() => navigate('/recipes')}>
+        <CookingPot size={18} /> {t('recipes.entry')}
+      </Button>
+
       {/* Katalog-Suche über die eigenen Lebensmittel */}
       <section className="space-y-2">
         <div className="relative">
@@ -185,7 +191,7 @@ export function Add() {
           results.length > 0 ? (
             <div className="space-y-2">
               {results.map((f) => (
-                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
               ))}
             </div>
           ) : (
@@ -221,7 +227,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('add.favorites')}</h2>
           <div className="space-y-2">
             {favorites.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -258,7 +264,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('entry.recent')}</h2>
           <div className="space-y-2">
             {recentsWithoutFavs.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -362,13 +368,20 @@ export function Add() {
         </Button>
       </Card>
 
-      {/* Mengen-Sheet für den Verzehr aus dem Vorrat */}
+      {/* Mengen-Sheet für den Verzehr aus dem Vorrat — Loggen zieht eine
+          Packung vom Bestand ab; Undo legt sie zurück. */}
       <PortionSheet
         food={portionFood}
         initialMeal={meal}
         onClose={() => setPortionFood(null)}
         onLogged={(entry, food) => {
-          showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+          void (async () => {
+            const took = await decrementPantryOnLog(food.id)
+            showUndo(t('capture.added', { name: food.name }), async () => {
+              await deleteLog(entry.id)
+              if (took) await incrementPantry(food.id)
+            })
+          })()
           navigate('/')
         }}
       />

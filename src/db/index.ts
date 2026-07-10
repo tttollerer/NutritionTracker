@@ -11,7 +11,9 @@ import type {
   Measurement,
   Photo,
   Profile,
+  Recipe,
   Settings,
+  ShoppingItem,
   WaterLog,
 } from './types'
 
@@ -34,6 +36,8 @@ export class NutritionDB extends Dexie {
   settings!: Table<Settings, string>
   glucose!: Table<GlucoseReading, string>
   measurements!: Table<Measurement, string>
+  shoppingList!: Table<ShoppingItem, string>
+  recipes!: Table<Recipe, string>
 
   constructor(name = 'nutritiontracker') {
     super(name)
@@ -84,6 +88,12 @@ export class NutritionDB extends Dexie {
             if (p.updatedAt == null) p.updatedAt = t
           })
       })
+    // v6: Einkaufsliste & Rezepte (Wochenplaner/Einkauf-Ausbau). Rein additive
+    // neue Tabellen — Bestandsdaten bleiben unangetastet, kein upgrade() nötig.
+    this.version(6).stores({
+      shoppingList: 'id, checked, updatedAt, deletedAt',
+      recipes: 'id, name, updatedAt, deletedAt',
+    })
   }
 }
 

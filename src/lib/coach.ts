@@ -40,7 +40,8 @@ export async function buildCoachContext() {
   const [profile, goalsMap, logs, settings] = await Promise.all([
     db.profile.get('me'),
     getActiveGoalsMap(),
-    db.logs.filter((l) => !l.deletedAt).toArray(),
+    // planned-Einträge (Wochenplan) sind kein Verzehr → für den Coach ausblenden.
+    db.logs.filter((l) => !l.deletedAt && !l.planned).toArray(),
     db.settings.get('app'),
   ])
 

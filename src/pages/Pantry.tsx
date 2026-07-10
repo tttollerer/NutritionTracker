@@ -3,18 +3,21 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ScanBarcode, Search, ShoppingBasket, Sparkles, Utensils } from 'lucide-react'
+import { Minus, Plus, Receipt, ScanBarcode, Search, ShoppingBasket, Sparkles, Utensils } from 'lucide-react'
 import type { FoodItem, Photo } from '@/db/types'
 import { db } from '@/db'
 import { deleteLog, foodNameMatches, pantryFoods } from '@/db/repo'
+import { decrementPantryOnLog, effectivePantryQty, incrementPantry, isExpiringSoon, setPantryQty } from '@/lib/pantryStock'
 import { formatEuro } from '@/lib/money'
 import { defaultMeal } from '@/lib/meal'
 import { cn } from '@/lib/utils'
 import { useOverlays } from '@/lib/overlays-context'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
+import { ShoppingList } from '@/components/ShoppingList'
 import { PortionSheet } from '@/components/PortionSheet'
 import { FoodDetailSheet } from '@/components/FoodDetailSheet'
+import { ExpiryBadge } from '@/components/ExpiryBadge'
 import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 
@@ -31,6 +34,10 @@ export function Pantry() {
   const pantry = useLiveQuery(() => pantryFoods(), [])
   const [query, setQuery] = useState('')
   const [tag, setTag] = useState<string | null>(null)
+  // „Bald leer"-Filter: nur Artikel mit höchstens 1 Packung im Bestand.
+  const [lowOnly, setLowOnly] = useState(false)
+  // „Läuft ab"-Filter: nur Artikel, deren MHD im Fenster liegt (inkl. abgelaufener).
+  const [expiringOnly, setExpiringOnly] = useState(false)
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
   const [detailFood, setDetailFood] = useState<FoodItem | null>(null)
 
@@ -73,7 +80,11 @@ export function Pantry() {
 
   const searching = query.trim().length > 0
   const filtered = pantry.filter(
-    (f) => (!searching || foodNameMatches(f.name, query)) && (!tag || (f.tags ?? []).includes(tag)),
+    (f) =>
+      (!searching || foodNameMatches(f.name, query)) &&
+      (!tag || (f.tags ?? []).includes(tag)) &&
+      (!lowOnly || effectivePantryQty(f) <= 1) &&
+      (!expiringOnly || isExpiringSoon(f)),
   )
 
   return (
@@ -82,15 +93,19 @@ export function Pantry() {
         <ProfileAvatar />
       </PageHeader>
 
-      {/* Scan-Einstiege: Barcode (Ziel Vorrat) & Foto/KI (Review → „Nur in den Vorrat"). */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Einkaufsliste: einklappbarer Abschnitt über dem Vorrat. */}
+      <ShoppingList />
+
+      {/* Scan-Einstiege: Barcode (Ziel Vorrat), Foto/KI (Review → „Nur in den
+          Vorrat") & Kassenbon (alle Positionen → Vorrat). */}
+      <div className="grid grid-cols-3 gap-3">
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={() => navigate('/barcode?pantry=1')}
           className="focus-ring flex flex-col items-center gap-2 rounded-lg bg-brand-gradient p-4 text-primary-foreground shadow-glow"
         >
           <ScanBarcode size={26} />
-          <span className="text-sm font-bold">{t('pantryPage.scanBarcode')}</span>
+          <span className="text-center text-sm font-bold">{t('pantryPage.scanBarcode')}</span>
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -98,7 +113,15 @@ export function Pantry() {
           className="focus-ring flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 shadow-sm"
         >
           <Sparkles size={26} className="text-primary" />
-          <span className="text-sm font-bold">{t('pantryPage.photoAi')}</span>
+          <span className="text-center text-sm font-bold">{t('pantryPage.photoAi')}</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate('/capture?mode=receipt')}
+          className="focus-ring flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 shadow-sm"
+        >
+          <Receipt size={26} className="text-primary" />
+          <span className="text-center text-sm font-bold">{t('pantryPage.scanReceipt')}</span>
         </motion.button>
       </div>
 
@@ -119,10 +142,30 @@ export function Pantry() {
         />
       </div>
 
-      {/* Tag-Filter — nur wenn der Vorrat überhaupt Tags hat. */}
-      {tags.length > 0 && (
+      {/* Filter: „Bald leer" (Bestand ≤ 1) + Tag-Chips aus dem Vorrat. */}
+      {pantry.length > 0 && (
         <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4">
-          <FilterChip label={t('pantryPage.all')} selected={tag === null} onClick={() => setTag(null)} />
+          <FilterChip
+            label={t('pantryPage.all')}
+            selected={tag === null && !lowOnly && !expiringOnly}
+            onClick={() => {
+              setTag(null)
+              setLowOnly(false)
+              setExpiringOnly(false)
+            }}
+          />
+          <FilterChip
+            label={t('pantryPage.lowFilter')}
+            selected={lowOnly}
+            warning
+            onClick={() => setLowOnly((v) => !v)}
+          />
+          <FilterChip
+            label={t('pantryPage.expiringFilter')}
+            selected={expiringOnly}
+            warning
+            onClick={() => setExpiringOnly((v) => !v)}
+          />
           {tags.map((tg) => (
             <FilterChip key={tg} label={tg} selected={tag === tg} onClick={() => setTag(tag === tg ? null : tg)} />
           ))}
@@ -149,14 +192,21 @@ export function Pantry() {
         </div>
       )}
 
-      {/* Verzehr aus dem Vorrat: Mengen-Sheet (Menge + Einheit + Mahlzeit). */}
+      {/* Verzehr aus dem Vorrat: Mengen-Sheet (Menge + Einheit + Mahlzeit).
+          Loggen zieht eine Packung vom Bestand ab; Undo legt sie zurück. */}
       <PortionSheet
         food={portionFood}
         initialMeal={defaultMeal()}
         onClose={() => setPortionFood(null)}
         onLogged={(entry, food) => {
           setPortionFood(null)
-          showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+          void (async () => {
+            const took = await decrementPantryOnLog(food.id)
+            showUndo(t('capture.added', { name: food.name }), async () => {
+              await deleteLog(entry.id)
+              if (took) await incrementPantry(food.id)
+            })
+          })()
         }}
       />
 
@@ -166,7 +216,18 @@ export function Pantry() {
   )
 }
 
-function FilterChip({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+function FilterChip({
+  label,
+  selected,
+  warning = false,
+  onClick,
+}: {
+  label: string
+  selected: boolean
+  /** Amber-Variante für den „Bald leer"-Filter (warning-Tokens). */
+  warning?: boolean
+  onClick: () => void
+}) {
   return (
     <button
       type="button"
@@ -174,7 +235,11 @@ function FilterChip({ label, selected, onClick }: { label: string; selected: boo
       aria-pressed={selected}
       className={cn(
         'focus-ring min-h-[40px] shrink-0 rounded-full border px-4 text-sm font-medium',
-        selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground',
+        selected
+          ? warning
+            ? 'border-warning bg-warning/15 text-warning-text'
+            : 'border-primary bg-primary text-primary-foreground'
+          : 'border-border bg-card text-foreground',
       )}
     >
       {label}
@@ -195,46 +260,84 @@ function PantryRow({
 }) {
   const { t } = useTranslation()
   const firstTag = food.tags?.[0]
+  const qty = effectivePantryQty(food)
   // Sekundärzeile: Packung · Preis (Haushaltskasse), sonst kcal-Dichte.
   const meta = food.price
     ? `${food.price.per} ${food.per} · ${formatEuro(food.price.amount)}`
     : `${food.kcal} kcal / 100 ${food.per}`
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5 shadow-sm">
-      <button
-        type="button"
-        onClick={onOpen}
-        aria-label={t('pantryPage.open', { name: food.name })}
-        className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center gap-3 rounded-md text-left"
-      >
-        {photoUrl ? (
-          <img src={photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
-        ) : (
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <ShoppingBasket size={20} />
+    <div className="rounded-lg border border-border bg-card p-2.5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={t('pantryPage.open', { name: food.name })}
+          className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center gap-3 rounded-md text-left"
+        >
+          {photoUrl ? (
+            <img src={photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
+          ) : (
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+              <ShoppingBasket size={20} />
+            </span>
+          )}
+          <span className="min-w-0">
+            <span className="flex items-center gap-2">
+              <span className="truncate font-semibold">{food.name}</span>
+              {firstTag && (
+                <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {firstTag}
+                </span>
+              )}
+            </span>
+            <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>
           </span>
-        )}
-        <span className="min-w-0">
-          <span className="flex items-center gap-2">
-            <span className="truncate font-semibold">{food.name}</span>
-            {firstTag && (
-              <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary">
-                {firstTag}
-              </span>
-            )}
+        </button>
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          type="button"
+          onClick={onConsume}
+          aria-label={t('pantryPage.consume', { name: food.name })}
+          className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary"
+        >
+          <Utensils size={20} />
+        </motion.button>
+      </div>
+
+      {/* Bestand: Stepper zum Korrigieren + „bald leer"-Chip (qty ≤ 1). */}
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void setPantryQty(food.id, qty - 1)}
+            disabled={qty <= 0}
+            aria-label={t('pantryPage.stockDec', { name: food.name })}
+            className="focus-ring flex h-12 w-12 items-center justify-center rounded-md bg-muted text-foreground disabled:opacity-40"
+          >
+            <Minus size={18} />
+          </button>
+          <span className="min-w-[6.5rem] text-center text-xs tabular-nums text-muted-foreground">
+            {t('pantryPage.stock', { count: qty })}
           </span>
-          <span className="mt-0.5 block truncate text-xs tabular-nums text-muted-foreground">{meta}</span>
-        </span>
-      </button>
-      <motion.button
-        whileTap={{ scale: 0.9 }}
-        type="button"
-        onClick={onConsume}
-        aria-label={t('pantryPage.consume', { name: food.name })}
-        className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary"
-      >
-        <Utensils size={20} />
-      </motion.button>
+          <button
+            type="button"
+            onClick={() => void setPantryQty(food.id, qty + 1)}
+            aria-label={t('pantryPage.stockInc', { name: food.name })}
+            className="focus-ring flex h-12 w-12 items-center justify-center rounded-md bg-muted text-foreground"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {/* MHD-Badge: gleiche Regel wie der „Läuft ab"-Filter (isExpiringSoon). */}
+          {isExpiringSoon(food) && <ExpiryBadge expiryDate={food.expiryDate!} />}
+          {qty <= 1 && (
+            <span className="shrink-0 rounded-full border border-warning/40 bg-warning/15 px-2.5 py-1 text-[11px] font-semibold text-warning-text">
+              {t('pantryPage.lowStock')}
+            </span>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

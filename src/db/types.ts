@@ -35,10 +35,35 @@ export interface FoodItem {
    */
   pantry?: boolean
   /**
+   * Packungen im Vorrat. Konvention: pantry=true + pantryQty undefined == 1;
+   * 0 heißt „leer" (pantry-Flag bleibt dabei erhalten → Nachkauf-Kandidat).
+   * Nicht indiziert und optional — keine Dexie-Migration nötig.
+   */
+  pantryQty?: number
+  /**
+   * MHD ('YYYY-MM-DD') der aktuell offenen Packung. Nicht indiziert und
+   * optional — keine Dexie-Migration nötig.
+   */
+  expiryDate?: string
+  /**
+   * Ältere Packungspreise (Preis-Verlauf, neueste zuerst, max. 20 Einträge) —
+   * der aktuelle Preis bleibt in `price`. `at` = Zeitpunkt der Ablösung.
+   * Nicht indiziert und optional — keine Dexie-Migration nötig.
+   */
+  priceHistory?: { amount: number; per: number; at: number }[]
+  /**
    * Gemerkte übliche Portion. `label` ist ein optionaler Anzeige-Name der
    * Portion (z. B. „Tasse", „Riegel") → UI zeigt „1 Tasse (80 g)".
    */
   defaultPortion?: { amount: number; unit: Unit; label?: string }
+  /**
+   * Benannte Portionseinheiten des Produkts („Stück" = 22 g, „Dose" = 500 ml,
+   * „Cup" = 90 g …); `amount` je 1 Einheit in der Basis-Einheit (per). Quelle:
+   * Nutzer (Detail-Editor) oder OFF-Portions-/Packungsangabe beim Scan. Logs
+   * speichern weiterhin Basis-Mengen — die Einheit ist reine Eingabe-/Anzeige-
+   * Hilfe. Nicht indiziert und optional — keine Dexie-Migration nötig.
+   */
+  servings?: { label: string; amount: number }[]
   /**
    * Optionaler Packungspreis (Haushaltskasse): `amount` in EUR für eine
    * Packung von `per` g bzw. ml. Kosten eines Logs = verzehrte Menge / per
@@ -84,6 +109,19 @@ export interface LogEntry {
    * auch wenn der Packungspreis später geändert wird. Optional & additiv.
    */
   cost?: number
+  /**
+   * Geplante, noch nicht gegessene Mahlzeit (Wochenplaner). Zählt NICHT in
+   * Verzehr-Summen/Gamification — wird dort zentral wie deletedAt gefiltert.
+   * confirmPlanned() entfernt das Flag beim tatsächlichen Essen. Optional &
+   * additiv — keine Dexie-Migration nötig.
+   */
+  planned?: boolean
+  /**
+   * Anzeige-Snapshot, wenn in einer benannten Portionseinheit erfasst wurde
+   * („2 Stück"): `amount`/`unit` halten weiterhin die Basis-Menge (z. B. 44 g),
+   * gerechnet wird NUR damit. Optional & additiv — keine Dexie-Migration nötig.
+   */
+  serving?: { label: string; count: number }
   photoBlobId?: string
   aiRaw?: unknown
   updatedAt: number
@@ -190,7 +228,44 @@ export interface Settings {
   labValues?: boolean // opt-in: Laborwerte (Ferritin, Vitamin D, B12, HbA1c, Blutfette)
   vitals?: boolean // opt-in: Vitalwerte (Blutdruck, Ruhepuls)
   photoConsent?: boolean // einmalige Einwilligung: Fotos an KI-Dienst senden
+  weeklyBudget?: number // Lebensmittel-Budget in EUR pro Woche (Haushaltskasse), optional
   updatedAt: number
+}
+
+/**
+ * Eintrag der Einkaufsliste (eigene Tabelle, Dexie v6). `source` hält fest,
+ * wie der Eintrag entstand: 'auto' (Vorrat fast leer), 'manual' (Nutzer),
+ * 'plan' (fehlende Zutat aus dem Wochenplan). `foodId` verknüpft optional mit
+ * dem Katalog — Abhaken legt die Packung dann in den Vorrat.
+ */
+export interface ShoppingItem {
+  id: string
+  name: string
+  foodId?: string
+  qty?: number
+  note?: string
+  source: 'auto' | 'manual' | 'plan'
+  checked: boolean
+  updatedAt: number
+  deletedAt?: number
+}
+
+/** Zutat eines Rezepts; `amount` gilt für das GANZE Rezept (alle Portionen). */
+export interface RecipeIngredient {
+  foodId: string
+  amount: number
+  unit: Unit
+}
+
+/** Eigenes Rezept (eigene Tabelle, Dexie v6). Loggen skaliert die Zutaten. */
+export interface Recipe {
+  id: string
+  name: string
+  portions: number
+  ingredients: RecipeIngredient[]
+  description?: string
+  updatedAt: number
+  deletedAt?: number
 }
 
 /**

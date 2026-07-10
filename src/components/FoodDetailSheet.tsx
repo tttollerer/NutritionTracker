@@ -6,11 +6,13 @@ import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, Spa
 import type { FoodItem } from '@/db/types'
 import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type FoodValuesPatch } from '@/lib/foodEdit'
 import { getActiveGoalsMap, toggleFavorite } from '@/db/repo'
+import { setExpiry } from '@/lib/pantryStock'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
-import { parsePositiveNumber } from '@/lib/money'
+import { formatEuro, parsePositiveNumber } from '@/lib/money'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Input'
+import { ExpiryBadge } from '@/components/ExpiryBadge'
 
 interface Props {
   /** null → Sheet geschlossen (Muster PortionSheet). */
@@ -92,10 +94,18 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
   // Haushaltskasse (optional), gleiche Semantik wie im PortionSheet.
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
   const [packText, setPackText] = useState(food.price ? String(food.price.per) : '')
+  // MHD der offenen Packung ('YYYY-MM-DD' vom date-Input, leer = keins).
+  const [expiryText, setExpiryText] = useState(food.expiryDate ?? '')
   // Beschreibung & Tags (Design 1d) — gespeichert wie Name/Portion/Preis.
   const [description, setDescription] = useState(food.description ?? '')
   const [tags, setTags] = useState<string[]>(food.tags ?? [])
   const [tagInput, setTagInput] = useState('')
+  // Benannte Portionseinheiten („Stück" = 22 g) — Chips im Mengen-/Log-Editor.
+  const [servingsList, setServingsList] = useState<{ label: string; amount: number }[]>(
+    food.servings ?? [],
+  )
+  const [servingLabel, setServingLabel] = useState('')
+  const [servingAmount, setServingAmount] = useState('')
   const [favorite, setFavorite] = useState(!!food.favorite)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -155,7 +165,11 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         price: priceVal != null && packVal != null ? { amount: priceVal, per: packVal } : null,
         description,
         tags,
+        servings: servingsList,
       }
+      // MHD zuerst schreiben — updateFoodValues liest danach den frischen Stand
+      // und liefert ihn (inkl. expiryDate) an onSaved zurück.
+      if ((food.expiryDate ?? '') !== expiryText) await setExpiry(food.id, expiryText || null)
       const updated = await updateFoodValues(food.id, patch)
       setSaved(true)
       onSaved?.(updated)
@@ -396,6 +410,71 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         </div>
       </div>
 
+      {/* Portionseinheiten: benannte Mengen („Stück" = 22 g, „Cup" = 90 g …) —
+          erscheinen als Einheiten-Chips beim Loggen/Verzehren/Korrigieren. */}
+      <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+        <p className="text-xs font-medium text-muted-foreground">{t('food.edit.servingsTitle')}</p>
+        {servingsList.length > 0 && (
+          <ul className="space-y-1.5">
+            {servingsList.map((s) => (
+              <li key={s.label} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate">
+                  1 {s.label}{' '}
+                  <span className="tabular-nums text-muted-foreground">
+                    = {String(s.amount).replace('.', ',')} {per}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => touch(setServingsList)(servingsList.filter((x) => x.label !== s.label))}
+                  aria-label={t('food.edit.removeServing', { label: s.label })}
+                  className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="flex items-end gap-2">
+          <Field label={t('food.edit.servingLabel')}>
+            <Input
+              value={servingLabel}
+              onChange={(e) => setServingLabel(e.target.value)}
+              placeholder={t('food.edit.servingLabelPh')}
+            />
+          </Field>
+          <Field label={t('food.edit.servingAmount', { unit: per })}>
+            <Input
+              type="text"
+              inputMode="decimal"
+              value={servingAmount}
+              onChange={(e) => setServingAmount(e.target.value)}
+              placeholder="22"
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={() => {
+              const label = servingLabel.trim()
+              const amount = parsePositiveNumber(servingAmount)
+              if (!label || amount == null) return
+              touch(setServingsList)([
+                ...servingsList.filter((x) => x.label.toLowerCase() !== label.toLowerCase()),
+                { label, amount },
+              ])
+              setServingLabel('')
+              setServingAmount('')
+            }}
+            disabled={!servingLabel.trim() || parsePositiveNumber(servingAmount) == null}
+            aria-label={t('food.edit.addServing')}
+            className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-dashed border-input text-muted-foreground disabled:opacity-40"
+          >
+            <Plus size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
       {/* Haushaltskasse: Packungspreis (optional) */}
       <div className="space-y-2 rounded-lg bg-muted/50 p-3">
         <p className="text-xs font-medium text-muted-foreground">{t('add.pantryPriceTitle')}</p>
@@ -421,6 +500,21 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
             />
           </Field>
         </div>
+        <PriceHistory food={food} />
+      </div>
+
+      {/* MHD der offenen Packung + Ablauf-Badge (warning/destructive). */}
+      <div className="space-y-2 rounded-lg bg-muted/50 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-muted-foreground">{t('food.expiry.label')}</p>
+          {expiryText && <ExpiryBadge expiryDate={expiryText} />}
+        </div>
+        <Input
+          type="date"
+          value={expiryText}
+          onChange={(e) => touch(setExpiryText)(e.target.value)}
+          aria-label={t('food.expiry.label')}
+        />
       </div>
 
       {!valid && <p className="text-xs text-destructive">{t('food.edit.invalid')}</p>}
@@ -438,6 +532,33 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
           {t('food.edit.save')}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Mini-Preis-Historie unter dem Packungspreis: die letzten 5 abgelösten
+ * Preise (Datum + Preis, mono) — bewusst nur eine Liste, keine Chart-Library.
+ */
+function PriceHistory({ food }: { food: FoodItem }) {
+  const { t, i18n } = useTranslation()
+  const history = (food.priceHistory ?? []).slice(0, 5)
+  if (history.length === 0) return null
+
+  const dateFmt = new Intl.DateTimeFormat(i18n.language, { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return (
+    <div className="space-y-1 border-t border-border/60 pt-2">
+      <p className="text-[10px] font-medium uppercase text-muted-foreground">{t('food.edit.priceHistory')}</p>
+      <ul>
+        {history.map((p) => (
+          <li key={p.at} className="flex items-baseline justify-between py-0.5 font-mono text-xs tabular-nums text-muted-foreground">
+            <span>{dateFmt.format(new Date(p.at))}</span>
+            <span>
+              {formatEuro(p.amount)} / {p.per} {food.per}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

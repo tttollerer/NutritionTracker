@@ -71,11 +71,29 @@ export function mapProduct(barcode: string, p: NonNullable<OffRaw['product']>): 
       traces,
       source: 'openfoodfacts',
       barcode,
+      servings: offServings(p),
     },
     allergens,
     traces,
     packageSize: packageSize(p.product_quantity),
   }
+}
+
+/**
+ * Benannte Portionseinheiten aus den OFF-Angaben: Portionsgröße
+ * (serving_quantity, z. B. Riegel/Glas) und Packungsgröße (product_quantity,
+ * z. B. Dose/Flasche) — beide in der Basis-Einheit g/ml. Identische Werte
+ * werden nicht doppelt angeboten; ohne verwertbare Angabe: undefined.
+ */
+export function offServings(
+  p: Pick<NonNullable<OffRaw['product']>, 'serving_quantity' | 'product_quantity'>,
+): { label: string; amount: number }[] | undefined {
+  const out: { label: string; amount: number }[] = []
+  const sq = Number(p.serving_quantity)
+  if (Number.isFinite(sq) && sq > 0) out.push({ label: 'Portion', amount: sq })
+  const pq = Number(p.product_quantity)
+  if (Number.isFinite(pq) && pq > 0 && pq !== sq) out.push({ label: 'Packung', amount: pq })
+  return out.length ? out : undefined
 }
 
 /** Einheiten, die eindeutig auf Flüssigkeit (Nährwerte je 100 ml) hindeuten. */

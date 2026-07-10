@@ -59,6 +59,26 @@ describe('analyze.mts (Function-Verhalten, Vertrag v1.1 + Paket 3)', () => {
     expect(body.items[0].name).toBe('Apfel')
   })
 
+  it('receipt-Modus → 200 mit sanitisiertem ReceiptResult (Vertrag v1.3)', async () => {
+    // Modell liefert typischen Bon-Schmutz: krumme Stückzahl, ungerundeter Preis, halbes per100.
+    const receiptContent = JSON.stringify({
+      items: [
+        { name: ' H-Milch 3,5 % ', quantity: 2.0, price: 2.379999, per100: { kcal: 64, protein: 3.4, carbs: 4.8, fat: 3.5 } },
+        { name: 'Bananen', per100: { kcal: 89 } },
+      ],
+    })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(orResponse(receiptContent))))
+    const handler = await freshHandler()
+    const res = await handler(analyzeRequest({ mode: 'receipt', imageBase64: 'QUJD' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({
+      items: [
+        { name: 'H-Milch 3,5 %', quantity: 2, price: 2.38, per100: { kcal: 64, protein: 3.4, carbs: 4.8, fat: 3.5 } },
+        { name: 'Bananen', quantity: 1 },
+      ],
+    })
+  })
+
   it('405 bei falscher Methode — Envelope mit INVALID_REQUEST', async () => {
     const handler = await freshHandler()
     const res = await handler(new Request('http://localhost/api/analyze', { method: 'GET' }))

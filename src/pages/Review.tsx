@@ -9,7 +9,8 @@ import { getReview, setReview, clearReview, presetsFor, presetLabel, amountForUn
 import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
 import { useOverlays } from '@/lib/overlays-context'
-import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry, setPantry } from '@/db/repo'
+import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
+import { undoPantryAdd } from '@/lib/pantryStock'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -180,8 +181,8 @@ export function Review() {
 
   /**
    * „Nur in den Vorrat": geprüfte Items als FoodItems upserten (pantry=true,
-   * eingestellte Menge als übliche Portion) — OHNE LogEntries. Undo nimmt das
-   * Vorrat-Flag wieder zurück.
+   * bereits vorrätige Produkte +1 Packung, eingestellte Menge als übliche
+   * Portion) — OHNE LogEntries. Undo nimmt je Item eine Packung zurück.
    */
   async function toPantry() {
     if (busy || (hasContains && !ack)) return
@@ -195,7 +196,7 @@ export function Review() {
       })
       clearReview()
       showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
-        await Promise.all(foods.map((f) => setPantry(f.id, false)))
+        await Promise.all(foods.map((f) => undoPantryAdd(f.id)))
       })
       navigate('/add')
     } finally {

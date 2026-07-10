@@ -1,5 +1,6 @@
 import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
+import { PRICE_HISTORY_MAX } from '@/db/repo'
 import type { FoodItem, Micros, Photo, Unit } from '@/db/types'
 
 /**
@@ -33,6 +34,12 @@ export interface FoodValuesPatch {
   description?: string
   /** Leeres Array entfernt alle Tags, `undefined` lässt sie unverändert. */
   tags?: string[]
+  /**
+   * Benannte Portionseinheiten („Stück" = 22 g). Leeres Array entfernt alle,
+   * `undefined` lässt sie unverändert. Labels werden getrimmt und (case-
+   * insensitiv) dedupliziert, Einträge ohne positiven Wert verworfen.
+   */
+  servings?: { label: string; amount: number }[]
 }
 
 const NUTRIENT_KEYS = ['per', 'kcal', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'micros'] as const
@@ -63,6 +70,17 @@ export async function updateFoodValues(id: string, patch: FoodValuesPatch): Prom
     else delete updated.defaultPortion
   }
   if (patch.price !== undefined) {
+    // Abgelöste (geänderte/entfernte) Preise wandern wie bei setFoodPrice in
+    // die priceHistory — der Editor ist sonst der einzige Preis-Pfad ohne Verlauf.
+    const old = food.price
+    const changed =
+      old && (!patch.price || old.amount !== patch.price.amount || old.per !== patch.price.per)
+    if (changed) {
+      updated.priceHistory = [{ ...old, at: now() }, ...(food.priceHistory ?? [])].slice(
+        0,
+        PRICE_HISTORY_MAX,
+      )
+    }
     if (patch.price) updated.price = patch.price
     else delete updated.price
   }
@@ -77,6 +95,18 @@ export async function updateFoodValues(id: string, patch: FoodValuesPatch): Prom
     const tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))]
     if (tags.length) updated.tags = tags
     else delete updated.tags
+  }
+  if (patch.servings !== undefined) {
+    const seen = new Set<string>()
+    const servings = patch.servings.flatMap((s) => {
+      const label = s.label.trim()
+      const key = label.toLowerCase()
+      if (!label || !(s.amount > 0) || seen.has(key)) return []
+      seen.add(key)
+      return [{ label, amount: s.amount }]
+    })
+    if (servings.length) updated.servings = servings
+    else delete updated.servings
   }
 
   const nutrientsChanged = NUTRIENT_KEYS.some(

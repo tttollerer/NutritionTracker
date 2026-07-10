@@ -60,7 +60,8 @@ export function overridesFromGoals(goals: Record<string, Goal>): {
 export function sumMicros(logs: LogEntry[], date: string): Record<string, number> {
   const out: Record<string, number> = {}
   for (const l of logs) {
-    if (l.date !== date || l.deletedAt || !l.computed.micros) continue
+    // planned = nur geplant, nicht gegessen → zählt wie deletedAt nicht mit.
+    if (l.date !== date || l.deletedAt || l.planned || !l.computed.micros) continue
     for (const [k, v] of Object.entries(l.computed.micros)) out[k] = (out[k] ?? 0) + v
   }
   return out
@@ -69,7 +70,7 @@ export function sumMicros(logs: LogEntry[], date: string): Record<string, number
 export function computeDayNutrition(logs: LogEntry[], date: string, opts: DeficitOpts = {}): DayNutrition {
   const micros = sumMicros(logs, date)
   const proteinConsumed = logs
-    .filter((l) => l.date === date && !l.deletedAt)
+    .filter((l) => l.date === date && !l.deletedAt && !l.planned)
     .reduce((a, l) => a + l.computed.protein, 0)
 
   const benefits: NutrientStatus[] = []

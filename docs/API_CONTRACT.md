@@ -1,4 +1,4 @@
-# NutriScan API-Vertrag v1.2
+# NutriScan API-Vertrag v1.3
 
 Vertrag zwischen Client (`src/`) und Netlify Functions (`netlify/functions/analyze.mts`,
 `netlify/functions/coach.mts`). Bezug: [PLAN.md](../PLAN.md) §6/§9.3,
@@ -13,7 +13,8 @@ Dokument + apiContract.ts der Soll-Zustand**, der Code der Ist-Zustand.
 |---|---|
 | v1.0 | Ist-Stand im Code (Stand Audit 2026-07-05) |
 | v1.1 | Error-Envelope, `memory` nullish, Stream-Fehler-Event, serverseitig validierte Suggestions, optionales Coach-Foto |
-| v1.2 | Dieser Vertrag — Nutrient-Enum für Coach-Ziele, optionale Challenge-`rule` für die Auto-Auswertung (Erwartungs-Audit Befund 4 + 8), nur additiv zu v1.1 |
+| v1.2 | Nutrient-Enum für Coach-Ziele, optionale Challenge-`rule` für die Auto-Auswertung (Erwartungs-Audit Befund 4 + 8), nur additiv zu v1.1 |
+| v1.3 | Dieser Vertrag — vierter analyze-Modus `receipt` (Kassenbon-Scan) mit eigenem Antwortschema `ReceiptResultSchema`, nur additiv zu v1.2 |
 
 ---
 
@@ -58,14 +59,14 @@ erneut versuchen"-UX; `BUDGET_EXCEEDED` → heute nicht mehr anbieten; `PAYLOAD_
 
 ## 2) POST `/api/analyze`
 
-Bildanalyse in drei Modi (PLAN.md §6). Serverseitige zod-Validierung der Modellantwort,
+Bildanalyse in vier Modi (PLAN.md §6). Serverseitige zod-Validierung der Modellantwort,
 1 Retry bei kaputtem JSON (Ist-Stand `analyze.mts:117–127`, bleibt in v1.1).
 
 ### Request (`AnalyzeRequestSchema`)
 
 ```jsonc
 {
-  "mode": "meal" | "label" | "portion",
+  "mode": "meal" | "label" | "portion" | "receipt",   // "receipt" neu in v1.3
   "imageBase64": "<Data-URL oder rohes Base64, JPEG angenommen>",
   "hint": "optional, max. 280 Zeichen"
 }
@@ -88,6 +89,25 @@ Bildanalyse in drei Modi (PLAN.md §6). Serverseitige zod-Validierung der Modell
     }
   ],
   "notes": "optional"
+}
+```
+
+### Response 200 bei `mode: "receipt"` (`ReceiptResultSchema`, v1.3)
+
+Kassenbon-Positionen als Lebensmittel normalisiert (Marke → generischer Name); Non-Food
+(Pfand, Rabatte, Tüten) filtert der Prompt, den Rest normalisiert der Server defensiv
+(`clampReceipt`: Stückzahl 1–99, Preise auf Cent gerundet, halbes `per100` verworfen).
+
+```jsonc
+{
+  "items": [
+    {
+      "name": "H-Milch 3,5 %",       // generisch, ohne Marke/Händler-Kürzel
+      "quantity": 2,                  // ganze Stückzahl der Position
+      "price": 2.38,                  // optional: Gesamtpreis der Position in EUR
+      "per100": { "kcal": 64, "protein": 3.4, "carbs": 4.8, "fat": 3.5 }  // optional
+    }
+  ]
 }
 ```
 

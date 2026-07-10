@@ -15,8 +15,10 @@ import { MODE_KEY, VARIANT_KEY, THEME_RESTORED_EVENT } from './theme-context'
  * - v2 (additiv): optionales `theme`-Feld (Modus/Variante aus localStorage), damit
  *   die Darstellung ein Backup übersteht. Alte Dateien ohne das Feld importieren
  *   unverändert; unbekannte Werte werden beim Import ignoriert.
+ * - v3: zusätzlich `shoppingList` & `recipes` (Dexie v6) — gleiche Regel wie v2:
+ *   fehlende Tabellen in älteren Dateien bleiben beim Import unangetastet.
  */
-export const BACKUP_VERSION = 2
+export const BACKUP_VERSION = 3
 
 /** Alle Tabellen, die im Backup landen — Reihenfolge = Export-Reihenfolge. */
 const TABLES = [
@@ -33,6 +35,8 @@ const TABLES = [
   'settings',
   'glucose',
   'measurements',
+  'shoppingList',
+  'recipes',
 ] as const
 
 // Jeder Datensatz braucht mindestens eine String-ID (Primary Key aller Stores);
@@ -63,6 +67,8 @@ const backupSchema = z.object({
   settings: tableSchema,
   glucose: tableSchema,
   measurements: tableSchema,
+  shoppingList: tableSchema,
+  recipes: tableSchema,
 })
 
 export type BackupFile = z.infer<typeof backupSchema>

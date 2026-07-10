@@ -1,5 +1,5 @@
-import { AnalyzeResultSchema } from '../../src/lib/apiContract'
-import { analyzeErrorResponse, clampQuestions, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
+import { AnalyzeResultSchema, ReceiptResultSchema } from '../../src/lib/apiContract'
+import { analyzeErrorResponse, clampQuestions, clampReceipt, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
 import { isAbortError } from './lib/coachShared'
 import { createGuard } from './lib/guard'
 
@@ -32,6 +32,8 @@ const SYSTEM: Record<string, string> = {
     'Schätze die Menge des abgebildeten Lebensmittels so genau wie möglich. Gib ein Item mit geschätzter Menge und Nährwerten je 100 g/ml zurück.',
   label:
     'Lies die abfotografierte Nährwerttabelle exakt aus. Gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100).',
+  receipt:
+    'Du bist ein Kassenbon-Parser für eine Ernährungs-App. Lies die Positionen des abfotografierten Kassenbons aus. Übernimm NUR Lebensmittel und Getränke — Pfand, Leergut, Rabatte, Tüten und Non-Food-Artikel lässt du weg. Normalisiere jeden Artikelnamen zu einem generischen deutschen Lebensmittelnamen ohne Marke und Händler-Kürzel (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"). Extrahiere je Position die ganze Stückzahl (Standard 1) und den Gesamtpreis der Position in EUR. Wenn du typische Nährwerte des Produkts sicher einschätzen kannst, gib sie je 100 g/ml als per100 an — sonst lasse per100 weg.',
 }
 
 // Mikronährstoff-Schlüssel + Einheiten (deckungsgleich mit src/lib/nutrients.ts).
@@ -43,8 +45,12 @@ const JSON_INSTRUCTION =
   MICRO_INSTRUCTION +
   ' Keine Erklärungen, kein Markdown.'
 
+// Kassenbon (Vertrag v1.3): eigenes Antwortschema — Positionen statt Mengen-Schätzung.
+const RECEIPT_JSON_INSTRUCTION =
+  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"quantity":number,"price":number?,"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}?}]}. quantity ist die ganze Stückzahl der Position, price der Gesamtpreis der Position in EUR (Felder mit ? weglassen, wenn unbekannt). Keine Erklärungen, kein Markdown.'
+
 // Verfeinerungsschleife (Vertrag v1.2, Paket B): nur meal/portion — bei einer
-// abfotografierten Nährwerttabelle gibt es nichts nachzufragen.
+// abfotografierten Nährwerttabelle oder einem Kassenbon gibt es nichts nachzufragen.
 const QUESTIONS_INSTRUCTION =
   ' Wenn eine Zusatzangabe die Schätzung deutlich verbessern würde (z. B. Saucen-Art wie "Joghurtsauce oder Mayo?", Zubereitungsart, verstecktes Fett), stelle bis zu 2 kurze Rückfragen im Feld "questions". Sonst lasse "questions" weg.'
 
@@ -60,7 +66,8 @@ async function callOpenRouter(model: string, key: string, system: string, imageB
       model,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: `${system}\n\n${JSON_INSTRUCTION}` },
+        // `system` enthält bereits die modus-spezifische JSON-Instruktion.
+        { role: 'system', content: system },
         {
           role: 'user',
           content: [
@@ -113,8 +120,13 @@ export default async (req: Request): Promise<Response> => {
   if (exhausted) return exhausted
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
+  const mode = parsed.data.mode
+  // Rückfragen nur bei den Schätz-Modi; receipt bekommt sein eigenes JSON-Schema.
   const system =
-    SYSTEM[parsed.data.mode] + (parsed.data.mode === 'label' ? '' : QUESTIONS_INSTRUCTION)
+    SYSTEM[mode] +
+    (mode === 'meal' || mode === 'portion' ? QUESTIONS_INSTRUCTION : '') +
+    '\n\n' +
+    (mode === 'receipt' ? RECEIPT_JSON_INSTRUCTION : JSON_INSTRUCTION)
 
   // Ein Retry, falls das Modell mal kein sauberes JSON liefert; nach einem
   // Timeout wird NICHT erneut versucht (sonst wartet der Client bis zu 40 s).
@@ -122,9 +134,12 @@ export default async (req: Request): Promise<Response> => {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const content = await callOpenRouter(model, key, system, parsed.data.imageBase64, parsed.data.hint)
-      // clampQuestions: überzählige/leere Rückfragen kappen, statt eine sonst
-      // gültige Antwort an der v1.2-Validierung scheitern zu lassen.
-      const result = AnalyzeResultSchema.parse(clampQuestions(extractJson(content)))
+      // clampQuestions/clampReceipt: Modell-Schmutz kappen, statt eine sonst
+      // gültige Antwort an der Vertrags-Validierung scheitern zu lassen.
+      const result =
+        mode === 'receipt'
+          ? ReceiptResultSchema.parse(clampReceipt(extractJson(content)))
+          : AnalyzeResultSchema.parse(clampQuestions(extractJson(content)))
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

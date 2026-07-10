@@ -44,7 +44,7 @@ describe('Dexie v4 → v5 Migration', () => {
     const before = Date.now()
     const fresh = new NutritionDB(name)
     await fresh.open()
-    expect(fresh.verno).toBe(5)
+    expect(fresh.verno).toBe(6)
 
     // Bestandsdaten intakt + updatedAt nachgerüstet.
     const w1 = await fresh.water.get('w1')
@@ -73,6 +73,44 @@ describe('Dexie v4 → v5 Migration', () => {
     const fresh = new NutritionDB(name)
     await fresh.open()
     expect((await fresh.water.get('w1'))!.updatedAt).toBe(111)
+    await fresh.delete()
+  })
+})
+
+/** Schema-Stand v5 (vor der v6-Migration) — exakt wie historisch ausgeliefert. */
+function openV5(name: string) {
+  const d = openV4(name)
+  d.version(5).stores({
+    water: 'id, date, loggedAt, updatedAt, deletedAt',
+    photos: 'id, createdAt, updatedAt, deletedAt',
+  })
+  return d
+}
+
+describe('Dexie v5 → v6 Migration (Einkaufsliste & Rezepte)', () => {
+  it('legt die neuen Tabellen an und lässt Bestandsdaten unangetastet', async () => {
+    const name = `migration-v6-${Date.now()}`
+    const old = openV5(name)
+    await old.table('foods').put({ id: 'f1', name: 'Apfel', per: 'g', kcal: 52, protein: 0.3, carbs: 14, fat: 0.2, source: 'manual', createdAt: 1, updatedAt: 1 })
+    await old.table('logs').put({ id: 'l1', foodId: 'f1', date: '2026-07-01', meal: 'snack', loggedAt: 5, amount: 100, unit: 'g', computed: { kcal: 52, protein: 0.3, carbs: 14, fat: 0.2 }, updatedAt: 5 })
+    old.close()
+
+    const fresh = new NutritionDB(name)
+    await fresh.open()
+    expect(fresh.verno).toBe(6)
+
+    // Bestandsdaten intakt.
+    expect(await fresh.foods.get('f1')).toMatchObject({ name: 'Apfel', updatedAt: 1 })
+    expect(await fresh.logs.get('l1')).toMatchObject({ foodId: 'f1', amount: 100 })
+
+    // Neue Tabellen leer, aber les-/schreibbar (Index auf checked/name nutzbar).
+    expect(await fresh.shoppingList.count()).toBe(0)
+    expect(await fresh.recipes.count()).toBe(0)
+    await fresh.shoppingList.put({ id: 's1', name: 'Milch', source: 'manual', checked: false, updatedAt: 1 })
+    await fresh.recipes.put({ id: 'r1', name: 'Curry', portions: 4, ingredients: [], updatedAt: 1 })
+    expect((await fresh.shoppingList.get('s1'))!.name).toBe('Milch')
+    expect((await fresh.recipes.where('name').equals('Curry').first())!.id).toBe('r1')
+
     await fresh.delete()
   })
 })

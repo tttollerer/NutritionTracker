@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
-import { inferPer, mapProduct } from './openfoodfacts'
+import { inferPer, mapProduct, offServings } from './openfoodfacts'
 import { AiResult } from './ai'
+
+describe('offServings', () => {
+  it('liefert Portion (serving_quantity) und Packung (product_quantity)', () => {
+    expect(offServings({ serving_quantity: 25, product_quantity: 500 })).toEqual([
+      { label: 'Portion', amount: 25 },
+      { label: 'Packung', amount: 500 },
+    ])
+  })
+
+  it('dedupliziert identische Werte und toleriert String-Mengen', () => {
+    expect(offServings({ serving_quantity: 330, product_quantity: '330' })).toEqual([
+      { label: 'Portion', amount: 330 },
+    ])
+  })
+
+  it('undefined ohne verwertbare Angaben (fehlend, 0, unparsebar)', () => {
+    expect(offServings({})).toBeUndefined()
+    expect(offServings({ serving_quantity: 0, product_quantity: 'ca. eine Handvoll' })).toBeUndefined()
+  })
+})
 
 describe('mapProduct', () => {
   it('maps OFF nutriments to a food per 100 g', () => {

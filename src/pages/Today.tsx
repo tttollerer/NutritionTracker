@@ -22,6 +22,7 @@ import { NutrientPanel } from '@/components/NutrientPanel'
 import { GlucoseCard } from '@/components/GlucoseCard'
 import { DueMeasurements } from '@/components/DueMeasurements'
 import { NudgeCard } from '@/components/NudgeCard'
+import { ExpiryHint } from '@/components/ExpiryHint'
 import { CaptureCta } from '@/components/CaptureCta'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
@@ -35,7 +36,8 @@ export function Today() {
   const [editing, setEditing] = useState<LogEntry | null>(null)
 
   const logs = useLiveQuery(
-    () => db.logs.where('date').equals(date).filter((l) => !l.deletedAt).toArray(),
+    // planned = nur vorgeplant (Wochenplaner) → zählt nicht als Verzehr des Tages.
+    () => db.logs.where('date').equals(date).filter((l) => !l.deletedAt && !l.planned).toArray(),
     [date],
   )
   // Gezielt nur die Foods/Fotos der Tages-Logs laden (bulkGet) statt alle Stores.
@@ -147,6 +149,9 @@ export function Today() {
       <CaptureCta />
 
       <DueMeasurements />
+
+      {/* Bald ablaufende Vorrats-Artikel → heute verbrauchen (Link zum Einkauf). */}
+      <ExpiryHint today={date} />
 
       <NudgeCard
         logs={logs}
@@ -310,7 +315,11 @@ export function Today() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{foodName(l.foodId)}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {l.amount} {l.unit === 'portion' ? t('today.edit.unitPortion') : l.unit} · {Math.round(l.computed.kcal)} kcal
+                            {/* In benannter Einheit erfasst („2 Stück") → genau so anzeigen. */}
+                            {l.serving
+                              ? `${String(l.serving.count).replace('.', ',')} ${l.serving.label}`
+                              : `${l.amount} ${l.unit === 'portion' ? t('today.edit.unitPortion') : l.unit}`}
+                            {' · '}{Math.round(l.computed.kcal)} kcal
                           </span>
                         </span>
                       </button>

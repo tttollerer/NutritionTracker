@@ -57,6 +57,58 @@ describe('updateLog', () => {
     expect(updated!.computed).toEqual(entry.computed)
   })
 
+  it('Portionseinheiten: serving-Snapshot wird gesetzt, umgerechnet und bereinigt', async () => {
+    const food = await createFood({
+      name: 'Double Choc Cookies',
+      per: 'g',
+      kcal: 500,
+      protein: 5,
+      carbs: 60,
+      fat: 25,
+      servings: [{ label: 'Stück', amount: 22 }],
+    })
+    // „Ganze Packung" (225 g) geloggt …
+    const entry = await logFood({ food, date: '2026-07-10', meal: 'breakfast', amount: 225, unit: 'g' })
+    expect(entry.computed.kcal).toBe(1125)
+    expect(entry.serving).toBeUndefined()
+
+    // … und auf „2 Stück" korrigiert: Basis-Menge 44 g, Snapshot fürs UI.
+    const updated = await updateLog(entry.id, {
+      amount: 44,
+      unit: 'g',
+      serving: { label: 'Stück', count: 2 },
+    })
+    expect(updated!.computed.kcal).toBe(220)
+    expect(updated!.serving).toEqual({ label: 'Stück', count: 2 })
+
+    // Mengenänderung OHNE serving-Patch macht „2 Stück" unwahr → Snapshot weg.
+    const replain = await updateLog(entry.id, { amount: 50 })
+    expect(replain!.serving).toBeUndefined()
+    expect((await db.logs.get(entry.id))!.serving).toBeUndefined()
+  })
+
+  it('logFood persistiert den serving-Snapshot (Anzeige „2 Stück")', async () => {
+    const food = await createFood({
+      name: 'Wulle Hell',
+      per: 'ml',
+      kcal: 42,
+      protein: 0.5,
+      carbs: 3,
+      fat: 0,
+      servings: [{ label: 'Dose', amount: 500 }],
+    })
+    const entry = await logFood({
+      food,
+      date: '2026-07-10',
+      meal: 'dinner',
+      amount: 500,
+      unit: 'ml',
+      serving: { label: 'Dose', count: 1 },
+    })
+    expect(entry.computed.kcal).toBe(210)
+    expect((await db.logs.get(entry.id))!.serving).toEqual({ label: 'Dose', count: 1 })
+  })
+
   it('fasst gelöschte oder fehlende Einträge nicht an', async () => {
     const { entry } = await seedLog()
     await deleteLog(entry.id)
