@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 interface ToggleProps {
@@ -33,7 +32,16 @@ export function Toggle({ checked, onChange, icon, label, hint }: ToggleProps) {
           checked ? 'bg-primary-fill' : 'bg-muted-foreground',
         )}
       >
-        <motion.span layout className="h-6 w-6 rounded-full bg-card shadow-sm" style={{ marginLeft: checked ? 'auto' : 0 }} />
+        {/* CSS-Transform statt framer `layout`: ein layout-Projection-Knoten im
+            exit-enden Seiten-Baum ließ den Seitenwechsel (AnimatePresence
+            mode="wait" in Layout.tsx) hängen — die Folgeseite blieb auf
+            opacity 0. Track 48px − Knopf 24px − 2×2px Padding = 20px Weg. */}
+        <span
+          className={cn(
+            'h-6 w-6 rounded-full bg-card shadow-sm transition-transform duration-200 motion-reduce:transition-none',
+            checked && 'translate-x-5',
+          )}
+        />
       </span>
     </button>
   )
