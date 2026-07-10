@@ -73,7 +73,13 @@ export function Add() {
       amount: food.defaultPortion?.amount ?? 100,
       unit: food.defaultPortion?.unit ?? (food.per as 'g' | 'ml'),
     })
-    showUndo(t('capture.added', { name: food.name }), () => deleteLog(entry.id))
+    // Vorrats-Produkte: 1-Tap-Log verhält sich wie das Mengen-Sheet — eine
+    // Packung geht vom Bestand ab, das Undo legt sie zurück.
+    const took = food.pantry ? await decrementPantryOnLog(food.id) : false
+    showUndo(t('capture.added', { name: food.name }), async () => {
+      await deleteLog(entry.id)
+      if (took) await incrementPantry(food.id)
+    })
     navigate('/')
   }
 
