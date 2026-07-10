@@ -51,6 +51,17 @@ export interface FoodItem {
    * keine Dexie-Migration nötig. Reihenfolge = Anzeige-Reihenfolge.
    */
   photoIds?: string[]
+  /**
+   * Freitext-Beschreibung des Produkts (Lebensmittel-Detail). Wie `favorite`
+   * bewusst NICHT indiziert und optional — additiv, keine Dexie-Migration nötig.
+   */
+  description?: string
+  /**
+   * Kategorie-/Frei-Tags (z. B. „Milchprodukt", „Frühstück") für Filter im
+   * Einkauf/Vorrat und Chips im Detail. Nicht indiziert — Abfragen laufen über
+   * .filter(), daher keine Dexie-Schemaversion nötig.
+   */
+  tags?: string[]
   createdAt: number
   updatedAt: number
   deletedAt?: number

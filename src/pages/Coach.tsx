@@ -5,6 +5,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { Camera, Image as ImageIcon, ImagePlus, Mic, RotateCcw, Send, ShieldCheck, Volume2, VolumeX, Target, Trophy, Plus, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -181,14 +182,15 @@ export function Coach() {
 
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col">
-      <PageHeader title={t('coach.title')}>
+      <PageHeader title={t('coach.title')} subtitle={t('coach.subtitle')}>
         <button
           onClick={() => setMuted((m) => !m)}
           aria-label={muted ? t('coach.speak') : t('coach.mute')}
-          className="text-muted-foreground"
+          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
         >
-          {muted ? <VolumeX size={22} /> : <Volume2 size={22} />}
+          {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>
+        <ProfileAvatar />
       </PageHeader>
 
       {/* role="log" + aria-live: gestreamte Coach-Antworten erreichen Screenreader. */}

@@ -11,7 +11,7 @@ export function CaptureCta() {
     <motion.button
       whileTap={{ scale: 0.99 }}
       onClick={openCapture}
-      className="focus-ring flex w-full items-center gap-4 rounded-lg bg-primary p-4 text-left text-primary-foreground shadow-sm"
+      className="focus-ring flex w-full items-center gap-4 rounded-lg bg-brand-gradient p-4 text-left text-primary-foreground shadow-glow"
     >
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20">
         <Camera size={26} strokeWidth={2.2} />
