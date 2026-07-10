@@ -5,8 +5,8 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Camera, CookingPot, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
-import { recentFoods, deleteLog } from '@/db/repo'
-import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
+import { pantryFoods, recentFoods, deleteLog } from '@/db/repo'
+import { decrementPantryOnLog, effectivePantryQty, incrementPantry } from '@/lib/pantryStock'
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
@@ -29,6 +29,9 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
   const recents = useLiveQuery(() => recentFoods(6), [])
+  // „Gegessen aus dem Vorrat": die naheliegendste Quelle beim Tracken —
+  // nur Produkte mit Bestand (> 0 Packungen), frisch benutzte zuerst.
+  const pantry = useLiveQuery(async () => (await pantryFoods()).filter((f) => effectivePantryQty(f) > 0), [])
   const sheetRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
 
@@ -170,20 +173,55 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               <ShoppingBasket size={16} aria-hidden="true" /> {t('capture.pantryEntry')}
             </button>
 
-            {/* Zuletzt benutzt: 1 Tipp */}
-            {recents && recents.length > 0 && (
+            {/* Mein Vorrat: gegessen wird meist, was da ist — Tap öffnet das
+                Mengen-Sheet (wieviel? in Stück/Gramm/Dose …), Bestand zählt runter. */}
+            {pantry && pantry.length > 0 && (
               <div className="mt-4">
-                <p className="mb-2 text-xs font-medium text-muted-foreground">{t('entry.recent')}</p>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">{t('add.pantry')}</p>
+                  {pantry.length > 8 && (
+                    <button
+                      onClick={() => go('/pantry')}
+                      className="focus-ring rounded-md text-xs font-medium text-primary"
+                    >
+                      {t('capture.pantryAll', { count: pantry.length })}
+                    </button>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  {recents.map((f) => (
+                  {pantry.slice(0, 8).map((f) => (
                     <button
                       key={f.id}
                       onClick={() => pickRecent(f)}
+                      aria-label={t('pantryPage.consume', { name: f.name })}
                       className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
                     >
-                      <Check size={14} className="text-primary" /> {f.name}
+                      <ShoppingBasket size={14} className="text-primary" aria-hidden="true" /> {f.name}
+                      {effectivePantryQty(f) > 1 && (
+                        <span className="text-xs tabular-nums text-muted-foreground">×{effectivePantryQty(f)}</span>
+                      )}
                     </button>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Zuletzt benutzt: 1 Tipp — ohne Dubletten zur Vorrats-Sektion. */}
+            {recents && recents.filter((f) => !pantry?.some((p) => p.id === f.id)).length > 0 && (
+              <div className="mt-4">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">{t('entry.recent')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {recents
+                    .filter((f) => !pantry?.some((p) => p.id === f.id))
+                    .map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => pickRecent(f)}
+                        className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
+                      >
+                        <Check size={14} className="text-primary" /> {f.name}
+                      </button>
+                    ))}
                 </div>
               </div>
             )}
