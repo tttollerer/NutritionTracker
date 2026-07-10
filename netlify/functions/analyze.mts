@@ -1,5 +1,5 @@
 import { AnalyzeResultSchema, ReceiptResultSchema } from '../../src/lib/apiContract'
-import { analyzeErrorResponse, clampQuestions, clampReceipt, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
+import { analyzeErrorResponse, clampBarcode, clampQuestions, clampReceipt, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
 import { isAbortError } from './lib/coachShared'
 import { createGuard } from './lib/guard'
 
@@ -31,7 +31,7 @@ const SYSTEM: Record<string, string> = {
   portion:
     'Schätze die Menge des abgebildeten Lebensmittels so genau wie möglich. Gib ein Item mit geschätzter Menge und Nährwerten je 100 g/ml zurück.',
   label:
-    'Lies die abfotografierte Nährwerttabelle exakt aus. Gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100).',
+    'Du bist ein Produkt-Scanner. Auf dem Foto ist eine Verpackung, eine Nährwerttabelle und/oder ein Strichcode. Lies eine sichtbare Nährwerttabelle exakt aus und gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100). Ist KEINE Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes.',
   receipt:
     'Du bist ein Kassenbon-Parser für eine Ernährungs-App. Lies die Positionen des abfotografierten Kassenbons aus. Übernimm NUR Lebensmittel und Getränke — Pfand, Leergut, Rabatte, Tüten und Non-Food-Artikel lässt du weg. Normalisiere jeden Artikelnamen zu einem generischen deutschen Lebensmittelnamen ohne Marke und Händler-Kürzel (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"). Extrahiere je Position die ganze Stückzahl (Standard 1) und den Gesamtpreis der Position in EUR. Wenn du typische Nährwerte des Produkts sicher einschätzen kannst, gib sie je 100 g/ml als per100 an — sonst lasse per100 weg.',
 }
@@ -40,9 +40,15 @@ const SYSTEM: Record<string, string> = {
 const MICRO_INSTRUCTION =
   'Schätze in per100 zusätzlich ein Objekt "micros" mit den Mikronährstoffen je 100 g/ml, die du sinnvoll einschätzen kannst (unbekannte weglassen). Erlaubte Schlüssel und Einheiten: fiber (g), sugar (g), satFat (g), sodium (mg), iron (mg), calcium (mg), magnesium (mg), zinc (mg), potassium (mg), vitaminC (mg), vitaminD (µg), vitaminB12 (µg), omega3 (g). Werte sind Schätzungen für typische Lebensmittel dieser Art.'
 
+// Vertrag v1.4: Strichcode-Ziffern vom Bild ablesen — ersetzt den nativen
+// BarcodeDetector (fehlt in iOS Safari); der Client macht den OFF-Lookup.
+const BARCODE_INSTRUCTION =
+  ' Wenn auf dem Bild ein EAN/UPC-Strichcode mit lesbaren Ziffern zu sehen ist, gib die Ziffern (ohne Leerzeichen) als "barcode" zurück — sonst lasse das Feld weg. Rate NIEMALS Ziffern.'
+
 const JSON_INSTRUCTION =
-  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?,"questions":string[]?}. ' +
+  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?,"questions":string[]?,"barcode":string?}. ' +
   MICRO_INSTRUCTION +
+  BARCODE_INSTRUCTION +
   ' Keine Erklärungen, kein Markdown.'
 
 // Kassenbon (Vertrag v1.3): eigenes Antwortschema — Positionen statt Mengen-Schätzung.
@@ -139,7 +145,7 @@ export default async (req: Request): Promise<Response> => {
       const result =
         mode === 'receipt'
           ? ReceiptResultSchema.parse(clampReceipt(extractJson(content)))
-          : AnalyzeResultSchema.parse(clampQuestions(extractJson(content)))
+          : AnalyzeResultSchema.parse(clampQuestions(clampBarcode(extractJson(content))))
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

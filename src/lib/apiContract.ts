@@ -102,6 +102,17 @@ export const AnalyzeResultSchema = z.object({
    * kappt überzählige/leere Einträge vor der Validierung (clampQuestions).
    */
   questions: z.array(z.string().min(1).max(200)).max(2).optional(),
+  /**
+   * v1.4 (additiv): Vom Bild abgelesene EAN/UPC-Ziffern (8–14 Stellen), falls
+   * ein Strichcode lesbar ist — ersetzt den nativen BarcodeDetector (fehlt in
+   * iOS Safari). Der Client reichert damit per OpenFoodFacts-Lookup exakte
+   * Produktdaten an. Der Server normalisiert vor der Validierung
+   * (clampBarcode); fehlt das Feld, war kein Code lesbar — abwärtskompatibel.
+   */
+  barcode: z
+    .string()
+    .regex(/^\d{8,14}$/)
+    .optional(),
 })
 export type AnalyzeItem = z.infer<typeof AnalyzeItemSchema>
 export type AnalyzeResult = z.infer<typeof AnalyzeResultSchema>

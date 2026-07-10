@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Minus, Plus, Receipt, ScanBarcode, Search, ShoppingBasket, Sparkles, Utensils } from 'lucide-react'
+import { Minus, Plus, Receipt, ScanBarcode, Search, ShoppingBasket, Utensils } from 'lucide-react'
 import type { FoodItem, Photo } from '@/db/types'
 import { db } from '@/db'
 import { deleteLog, foodNameMatches, pantryFoods } from '@/db/repo'
@@ -107,24 +107,17 @@ export function Pantry() {
       {/* Einkaufsliste: einklappbarer Abschnitt über dem Vorrat. */}
       <ShoppingList />
 
-      {/* Scan-Einstiege: Barcode (Ziel Vorrat), Foto/KI (Review → „Nur in den
-          Vorrat") & Kassenbon (alle Positionen → Vorrat). */}
-      <div className="grid grid-cols-3 gap-3">
-        <motion.button
-          whileTap={{ scale: 0.97 }}
-          onClick={() => navigate('/barcode?pantry=1')}
-          className="focus-ring flex flex-col items-center gap-2 rounded-lg bg-brand-gradient p-4 text-primary-foreground shadow-glow"
-        >
-          <ScanBarcode size={26} />
-          <span className="text-center text-sm font-bold">{t('pantryPage.scanBarcode')}</span>
-        </motion.button>
+      {/* Scan-Einstiege: EIN Produkt-Scan (Nährwerttabelle ODER Barcode — die
+          KI liest beides vom Foto, Review → „Nur in den Vorrat") & Kassenbon
+          (alle Positionen → Vorrat). Barcode-Nummer manuell: Link darunter. */}
+      <div className="grid grid-cols-2 gap-3">
         <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={() => navigate('/capture?mode=label')}
-          className="focus-ring flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 shadow-sm"
+          className="focus-ring flex flex-col items-center gap-2 rounded-lg bg-brand-gradient p-4 text-primary-foreground shadow-glow"
         >
-          <Sparkles size={26} className="text-primary" />
-          <span className="text-center text-sm font-bold">{t('pantryPage.photoAi')}</span>
+          <ScanBarcode size={26} />
+          <span className="text-center text-sm font-bold">{t('pantryPage.scanProduct')}</span>
         </motion.button>
         <motion.button
           whileTap={{ scale: 0.97 }}
@@ -135,6 +128,14 @@ export function Pantry() {
           <span className="text-center text-sm font-bold">{t('pantryPage.scanReceipt')}</span>
         </motion.button>
       </div>
+      {/* Fallback ohne Kamera: EAN-Nummer von Hand (auf Android auch Live-Scanner). */}
+      <button
+        type="button"
+        onClick={() => navigate('/barcode?pantry=1')}
+        className="focus-ring -mt-1 flex min-h-[44px] w-full items-center justify-center rounded-md text-xs font-medium text-muted-foreground"
+      >
+        {t('pantryPage.barcodeManual')}
+      </button>
 
       {/* Suche */}
       <div className="relative">

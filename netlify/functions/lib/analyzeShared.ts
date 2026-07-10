@@ -113,6 +113,28 @@ export function clampQuestions(raw: unknown): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// barcode-Feld (Vertrag v1.4) — Sanitizing VOR der zod-Validierung
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalisiert das `barcode`-Feld einer rohen Modellantwort: Modelle liefern
+ * gern „4 012345 678901" oder Zahlen statt Strings. Ziffern extrahieren;
+ * nur 8–14 Stellen sind ein plausibler EAN/UPC — sonst fliegt das Feld raus,
+ * statt eine sonst gültige Antwort an der Validierung scheitern zu lassen.
+ */
+export function clampBarcode(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const obj = raw as Record<string, unknown>
+  if (!('barcode' in obj)) return raw
+  const { barcode, ...rest } = obj
+  const digits =
+    typeof barcode === 'string' || typeof barcode === 'number'
+      ? String(barcode).replace(/\D/g, '')
+      : ''
+  return digits.length >= 8 && digits.length <= 14 ? { ...rest, barcode: digits } : rest
+}
+
+// ---------------------------------------------------------------------------
 // Kassenbon-Antwort (Vertrag v1.3) — Sanitizing VOR der zod-Validierung
 // ---------------------------------------------------------------------------
 

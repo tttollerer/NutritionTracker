@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, CookingPot, ScanText, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
+import { Camera, CookingPot, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { pantryFoods, recentFoods, deleteLog } from '@/db/repo'
 import { decrementPantryOnLog, effectivePantryQty, incrementPantry } from '@/lib/pantryStock'
@@ -158,16 +158,17 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               <ImageIcon size={16} /> {t('capture.choose')}
             </button>
 
-            {/* Sekundär: Tabelle (Kamera direkt) + Barcode + eigene Rezepte */}
-            <div className="mt-3 grid grid-cols-3 gap-3">
-              <SheetTile icon={ScanText} label={t('add.label')} onClick={() => labelCamRef.current?.click()} />
-              <SheetTile icon={ScanBarcode} label={t('add.barcode')} onClick={() => go(`/barcode?meal=${meal}`)} />
+            {/* Sekundär: EIN Produkt-Scan (Nährwerttabelle ODER Barcode — die KI
+                liest beides vom Foto) + eigene Rezepte. */}
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <SheetTile icon={ScanBarcode} label={t('add.label')} onClick={() => labelCamRef.current?.click()} />
               <SheetTile icon={CookingPot} label={t('recipes.tile')} onClick={() => go('/recipes')} />
             </div>
 
-            {/* Dezenter Einstieg: Einkauf scannen → Vorrat (Batch-Scan ohne Loggen) */}
+            {/* Dezenter Einstieg: ganzer Einkauf per Kassenbon-Foto → Vorrat
+                (funktioniert überall — kein nativer Barcode-Scanner nötig). */}
             <button
-              onClick={() => go('/barcode?pantry=1')}
+              onClick={() => go('/capture?mode=receipt')}
               className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md text-sm text-muted-foreground"
             >
               <ShoppingBasket size={16} aria-hidden="true" /> {t('capture.pantryEntry')}

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, CookingPot, ScanText, ScanBarcode, ImagePlus, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
+import { Camera, CookingPot, ScanBarcode, ImagePlus, Star, Search, History, ShoppingBasket, Scale } from 'lucide-react'
 import {
   copyYesterday,
   deleteLog,
@@ -51,10 +51,11 @@ export function Add() {
   // Neues Produkt übers gemeinsame Produkt-Sheet (Draft-Modus) anlegen.
   const [creating, setCreating] = useState<ProductDraft | null>(null)
 
+  // EIN Produkt-Scan statt Tabelle/Barcode getrennt: die KI liest beides vom
+  // Foto (Vertrag v1.4); die Barcode-Nummern-Eingabe bleibt auf /barcode.
   const captureOptions = [
     { icon: Camera, key: 'photo', to: `/capture?mode=meal&meal=${meal}` },
-    { icon: ScanText, key: 'label', to: `/capture?mode=label&meal=${meal}` },
-    { icon: ScanBarcode, key: 'barcode', to: `/barcode?meal=${meal}` },
+    { icon: ScanBarcode, key: 'label', to: `/capture?mode=label&meal=${meal}` },
   ] as const
 
   async function logCatalog(id: string) {
@@ -117,7 +118,7 @@ export function Add() {
       </div>
 
       {/* KI- & Barcode-Erfassung — der schnellste Weg zuerst (PLAN §7.2) */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {captureOptions.map(({ icon: Icon, key, to }) => (
           <motion.button
             key={key}
