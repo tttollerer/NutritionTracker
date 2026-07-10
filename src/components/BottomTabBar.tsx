@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Home, Trophy, MessageCircleHeart, User, Plus } from 'lucide-react'
+import { Home, CalendarDays, MessageCircleHeart, ShoppingBasket, Plus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { useOverlays } from '@/lib/overlays-context'
@@ -13,11 +13,13 @@ interface Tab {
   key: string
 }
 
+// Neue Navigation (Design-Handoff): Heute · Woche · [+] · Einkauf · Coach.
+// Profil liegt als Avatar oben rechts auf den Hauptscreens, Erfolge unter Profil.
 const tabs: Tab[] = [
   { to: '/', icon: Home, key: 'today' },
-  { to: '/awards', icon: Trophy, key: 'awards' },
+  { to: '/week', icon: CalendarDays, key: 'week' },
+  { to: '/pantry', icon: ShoppingBasket, key: 'pantry' },
   { to: '/coach', icon: MessageCircleHeart, key: 'coach' },
-  { to: '/profile', icon: User, key: 'profile' },
 ]
 
 /** Daumenfreundliche untere Navigation mit zentralem FAB (PLAN.md §8). */

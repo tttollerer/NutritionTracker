@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Trash2, Trophy, Wallet } from 'lucide-react'
+import { Flame, Trash2, Trophy, Wallet } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Photo } from '@/db/types'
 import { deleteLog, getActiveGoalsMap, getAllergies, getSettings, restoreLog } from '@/db/repo'
@@ -25,10 +25,11 @@ import { NudgeCard } from '@/components/NudgeCard'
 import { CaptureCta } from '@/components/CaptureCta'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
+import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 export function Today() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const date = useTodayKey() // reaktiv über Mitternacht (Befund 1)
   const { showUndo } = useOverlays()
   const [editing, setEditing] = useState<LogEntry | null>(null)
@@ -55,6 +56,8 @@ export function Today() {
   const allergies = useLiveQuery(() => getAllergies(), [])
   const settings = useLiveQuery(() => getSettings(), [])
   const challenges = useLiveQuery(() => activeChallenges(), [])
+  // Streak für den Flame-Chip im Header — die globale Engine (Layout) pflegt den Wert.
+  const streak = useLiveQuery(async () => (await db.gamification.get('me'))?.streaks.overall ?? 0, [])
 
   if (logs === undefined || foods === undefined || goals === undefined) {
     return (
@@ -117,9 +120,29 @@ export function Today() {
   // Tages-Summen inkl. getrackter micros (sugar/fiber/sodium) für Challenges.
   const challengeSums = sumsByDate(logs)
 
+  // „Do, 10. Juli" unter dem Titel (Design 1a) — Intl statt String-Bastelei.
+  const dateLabel = new Intl.DateTimeFormat(i18n.language, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'long',
+  })
+    .format(new Date(`${date}T12:00:00`))
+    .replace('.,', ',')
+
   return (
     <div className="space-y-6">
-      <PageHeader title={t('today.title')} />
+      <PageHeader title={t('today.title')} subtitle={dateLabel}>
+        {typeof streak === 'number' && streak > 0 && (
+          <span
+            aria-label={t('today.streak', { count: streak })}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 shadow-sm"
+          >
+            <Flame size={16} className="text-warning" aria-hidden="true" />
+            <span className="text-sm font-bold tabular-nums">{streak}</span>
+          </span>
+        )}
+        <ProfileAvatar />
+      </PageHeader>
 
       <CaptureCta />
 

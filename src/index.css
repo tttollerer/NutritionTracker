@@ -86,6 +86,15 @@
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
+  /* Horizontale Scroller (Tag-Strip, Panels, Galerien) ohne sichtbare Scrollbar. */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
   /* Lade-Platzhalter: ruhiger Schimmer über die Tokens skeleton-base/skeleton-hi.
      Wird durch prefers-reduced-motion (unten) automatisch statisch. */
   .skeleton-shimmer {

@@ -29,6 +29,10 @@ export interface FoodValuesPatch {
   defaultPortion?: { amount: number; unit: Unit; label?: string } | null
   /** `null` entfernt den Packungspreis, `undefined` lässt ihn unverändert. */
   price?: { amount: number; per: number } | null
+  /** Leerer String entfernt die Beschreibung, `undefined` lässt sie unverändert. */
+  description?: string
+  /** Leeres Array entfernt alle Tags, `undefined` lässt sie unverändert. */
+  tags?: string[]
 }
 
 const NUTRIENT_KEYS = ['per', 'kcal', 'protein', 'carbs', 'fat', 'fiber', 'sugar', 'micros'] as const
@@ -61,6 +65,18 @@ export async function updateFoodValues(id: string, patch: FoodValuesPatch): Prom
   if (patch.price !== undefined) {
     if (patch.price) updated.price = patch.price
     else delete updated.price
+  }
+  // Beschreibung & Tags (Lebensmittel-Detail): rein beschreibende Felder,
+  // ändern die Quelle NICHT (analog Name/Portion/Preis).
+  if (patch.description !== undefined) {
+    const text = patch.description.trim()
+    if (text) updated.description = text
+    else delete updated.description
+  }
+  if (patch.tags !== undefined) {
+    const tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))]
+    if (tags.length) updated.tags = tags
+    else delete updated.tags
   }
 
   const nutrientsChanged = NUTRIENT_KEYS.some(

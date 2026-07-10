@@ -4,7 +4,9 @@
   },
   "nav": {
     "today": "Heute",
+    "week": "Woche",
     "add": "Erfassen",
+    "pantry": "Einkauf",
     "coach": "Coach",
     "awards": "Erfolge",
     "profile": "Profil"
@@ -34,6 +36,7 @@
       "undo": "Letztes rückgängig"
     },
     "entryDeleted": "{{name}} gelöscht",
+    "streak": "{{count}} Tage Streak",
     "foodCost": "Essenskosten heute",
     "challenges": "Deine Challenges",
     "edit": {
@@ -138,8 +141,39 @@
     "pantryPackSize": "Packung ({{unit}})",
     "pantryCost": "Kostet ca. {{cost}}"
   },
+  "week": {
+    "title": "Woche",
+    "range": "{{from}}–{{to}}",
+    "prevWeek": "Vorherige Woche",
+    "nextWeek": "Nächste Woche",
+    "todayChip": "heute",
+    "dayLabel": "{{day}} auswählen",
+    "noKcal": "— kcal",
+    "nothingLogged": "noch nichts geloggt",
+    "emptyTitle": "Noch nichts erfasst",
+    "emptyBody": "Aus dem Vorrat vorausplanen oder direkt loggen.",
+    "planFromPantry": "Aus Vorrat planen",
+    "avgKcal": "Ø kcal",
+    "mealsCount": "Mahlzeiten",
+    "cost": "Kosten"
+  },
+  "pantryPage": {
+    "title": "Einkauf",
+    "subtitle_one": "1 Artikel im Vorrat",
+    "subtitle_other": "{{count}} Artikel im Vorrat",
+    "scanBarcode": "Barcode scannen",
+    "photoAi": "Foto & KI",
+    "searchPh": "Vorrat durchsuchen …",
+    "all": "Alle",
+    "searchNone": "Nichts gefunden.",
+    "empty": "Dein Vorrat ist leer. Scanne deinen Einkauf per Barcode oder Foto — die KI erfasst die Nährwerte.",
+    "consume": "{{name}} in Verzehr",
+    "open": "{{name}} öffnen",
+    "inPantry": "im Vorrat"
+  },
   "coach": {
     "title": "Coach",
+    "subtitle": "dein Ernährungscoach",
     "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Eiweißziel zu treffen?\"",
     "inputPh": "Nachricht oder Mikrofon …",
     "send": "Senden",
@@ -444,8 +478,8 @@
     "choose": "Aus Galerie wählen",
     "sheetTitle": "Erfassen",
     "sheetPhotoHint": "Mahlzeit per Kamera erkennen",
-    "ctaTitle": "Essen erfassen",
-    "ctaHint": "Foto, Barcode oder manuell – in 2 Tipps",
+    "ctaTitle": "Mahlzeit erfassen",
+    "ctaHint": "Foto — die KI erkennt Nährwerte",
     "added": "{{name}} hinzugefügt",
     "analyzing": "Analysiere …",
     "error": "Analyse fehlgeschlagen",
@@ -517,7 +551,26 @@
       "removePhoto": "Foto löschen",
       "save": "Speichern",
       "saved": "Gespeichert",
-      "invalid": "Bitte prüfe die markierten Felder — Zahlen dürfen nicht negativ sein."
+      "invalid": "Bitte prüfe die markierten Felder — Zahlen dürfen nicht negativ sein.",
+      "description": "Beschreibung",
+      "descriptionPh": "z. B. Cremig, mild-säuerlich. Basis fürs Frühstück …",
+      "tags": "Tags",
+      "addTag": "Tag",
+      "addTagPh": "z. B. Milchprodukt",
+      "removeTag": "Tag {{tag}} entfernen",
+      "favToggle": "{{name}} als Favorit"
+    },
+    "ai": {
+      "title": "KI-Auswertung",
+      "sourceAi": "KI-analysiert",
+      "sourceOff": "Datenbank",
+      "sourceUsda": "Datenbank",
+      "sourceManual": "manuell erfasst",
+      "summaryProtein": "Deckt {{pct}} % deines Tages-Proteins pro Portion ({{portion}}).",
+      "summaryNoGoal": "Liefert {{protein}} g Protein pro Portion ({{portion}}).",
+      "fullAnalysis": "Vollständige Analyse ({{count}} Nährstoffe)",
+      "hideAnalysis": "Analyse einklappen",
+      "noMicros": "Noch keine Mikronährstoffe erfasst — scanne Etikett oder Barcode, damit die KI sie ergänzt."
     }
   },
   "pwa": {

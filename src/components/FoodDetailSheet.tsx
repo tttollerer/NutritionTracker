@@ -2,9 +2,10 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Camera, Check, ChevronDown, Image as ImageIcon, X } from 'lucide-react'
+import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, Sparkles, Star, X } from 'lucide-react'
 import type { FoodItem } from '@/db/types'
 import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type FoodValuesPatch } from '@/lib/foodEdit'
+import { getActiveGoalsMap, toggleFavorite } from '@/db/repo'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
 import { parsePositiveNumber } from '@/lib/money'
@@ -91,6 +92,12 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
   // Haushaltskasse (optional), gleiche Semantik wie im PortionSheet.
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
   const [packText, setPackText] = useState(food.price ? String(food.price.per) : '')
+  // Beschreibung & Tags (Design 1d) — gespeichert wie Name/Portion/Preis.
+  const [description, setDescription] = useState(food.description ?? '')
+  const [tags, setTags] = useState<string[]>(food.tags ?? [])
+  const [tagInput, setTagInput] = useState('')
+  const [favorite, setFavorite] = useState(!!food.favorite)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
@@ -146,6 +153,8 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
           ? { amount: portionVal, unit: per, label: portionLabel.trim() || undefined }
           : null,
         price: priceVal != null && packVal != null ? { amount: priceVal, per: packVal } : null,
+        description,
+        tags,
       }
       const updated = await updateFoodValues(food.id, patch)
       setSaved(true)
@@ -170,9 +179,31 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
     }
   }
 
+  function addTag() {
+    const tag = tagInput.trim()
+    if (!tag) return
+    setSaved(false)
+    setTags((prev) => (prev.some((x) => x.toLowerCase() === tag.toLowerCase()) ? prev : [...prev, tag]))
+    setTagInput('')
+  }
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">{t('food.edit.title')}</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">{t('food.edit.title')}</h2>
+        {/* Favoriten-Stern (1-Tap-Wiederholung) direkt im Detail. */}
+        <button
+          type="button"
+          onClick={() => void toggleFavorite(food.id).then(setFavorite)}
+          aria-pressed={favorite}
+          aria-label={t('food.edit.favToggle', { name: food.name })}
+          className={`focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-border ${
+            favorite ? 'text-warning' : 'text-muted-foreground'
+          }`}
+        >
+          <Star size={20} fill={favorite ? 'currentColor' : 'none'} />
+        </button>
+      </div>
 
       {/* Foto-Galerie: horizontal scrollbar, Hinzufügen per Kamera/Galerie */}
       <div className="space-y-2">
@@ -213,6 +244,64 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
         <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onPhotoFile(e)} />
         <input ref={galleryRef} type="file" accept="image/*" hidden onChange={(e) => void onPhotoFile(e)} />
       </div>
+
+      {/* Tags (Kategorie/Frei-Tags) — Filtergrundlage im Einkauf/Vorrat. */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-muted-foreground">{t('food.edit.tags')}</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 rounded-full bg-primary-soft py-1 pl-3 pr-1.5 text-xs font-semibold text-primary"
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => touch(setTags)(tags.filter((x) => x !== tag))}
+                aria-label={t('food.edit.removeTag', { tag })}
+                className="focus-ring flex h-5 w-5 items-center justify-center rounded-full"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+          <input
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addTag()
+              }
+            }}
+            placeholder={t('food.edit.addTagPh')}
+            aria-label={t('food.edit.addTag')}
+            className="min-h-[32px] w-36 rounded-full border border-dashed border-input bg-transparent px-3 text-xs outline-none ring-ring focus:ring-2"
+          />
+          <button
+            type="button"
+            onClick={addTag}
+            disabled={!tagInput.trim()}
+            aria-label={t('food.edit.addTag')}
+            className="focus-ring flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-input text-muted-foreground disabled:opacity-40"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+      </div>
+
+      {/* Freitext-Beschreibung */}
+      <Field label={t('food.edit.description')}>
+        <textarea
+          value={description}
+          onChange={(e) => touch(setDescription)(e.target.value)}
+          placeholder={t('food.edit.descriptionPh')}
+          rows={3}
+          className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2.5 text-base outline-none ring-ring focus:ring-2"
+        />
+      </Field>
+
+      <AiSummaryCard food={food} open={analysisOpen} onToggle={() => setAnalysisOpen((o) => !o)} />
 
       <Field label={t('food.edit.name')}>
         <Input value={name} onChange={(e) => touch(setName)(e.target.value)} aria-invalid={!name.trim()} />
@@ -349,6 +438,116 @@ function FoodDetailForm({ food, onClose, onSaved }: Props & { food: FoodItem }) 
           {t('food.edit.save')}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Anzeige-Label der Quelle für das Badge der KI-Auswertung. */
+const SOURCE_BADGE: Record<FoodItem['source'], string> = {
+  ai: 'food.ai.sourceAi',
+  openfoodfacts: 'food.ai.sourceOff',
+  usda: 'food.ai.sourceUsda',
+  manual: 'food.ai.sourceManual',
+}
+
+/**
+ * KI-Auswertung (Design 1d): fasst die erfassten Nährwerte fürs Profil
+ * zusammen — Protein-Beitrag pro Portion gegen das aktive Tagesziel,
+ * Kennzahlen-Kacheln und eine aufklappbare vollständige Nährstoff-Analyse.
+ * Bewusst deterministisch aus den gespeicherten Werten berechnet (die KI hat
+ * sie beim Scan geliefert); es findet KEIN weiterer API-Call statt.
+ */
+function AiSummaryCard({ food, open, onToggle }: { food: FoodItem; open: boolean; onToggle: () => void }) {
+  const { t, i18n } = useTranslation()
+  const goals = useLiveQuery(() => getActiveGoalsMap(), [])
+  // Deutsche Dezimalschreibweise („27,5" statt „27.5") für alle Kennzahlen.
+  const fmt = (n: number) => (Math.round(n * 10) / 10).toLocaleString(i18n.language)
+
+  // Bezugsgröße: gemerkte übliche Portion, sonst 100 g/ml.
+  const portionAmount = food.defaultPortion?.unit !== 'portion' ? (food.defaultPortion?.amount ?? 100) : 100
+  const factor = portionAmount / 100
+  const portionLabel = `${portionAmount} ${food.per}`
+  const proteinPerPortion = food.protein * factor
+
+  const proteinTarget = goals?.protein?.target
+  const summary = proteinTarget
+    ? t('food.ai.summaryProtein', {
+        pct: Math.round((proteinPerPortion / proteinTarget) * 100),
+        portion: portionLabel,
+      })
+    : t('food.ai.summaryNoGoal', { protein: fmt(proteinPerPortion), portion: portionLabel })
+
+  // Erfasste Mikronährstoffe in Katalog-Reihenfolge (inkl. sugar/fiber-Spiegelfelder).
+  const microValue = (key: string): number | undefined =>
+    food.micros?.[key] ?? (key === 'sugar' ? food.sugar : key === 'fiber' ? food.fiber : undefined)
+  const present = NUTRIENTS.flatMap((n) => {
+    const value = microValue(n.key)
+    return value != null ? [{ ...n, value }] : []
+  })
+
+  // Kennzahlen-Kacheln: Protein + die ersten zwei erfassten Mikros, sonst Makros.
+  const tiles: { label: string; value: string }[] = [
+    { label: t('today.macros.protein'), value: `${fmt(proteinPerPortion)} g` },
+    ...present.slice(0, 2).map((n) => ({
+      label: t(`nutrients.names.${n.key}`, { defaultValue: n.key }),
+      value: `${fmt(n.value * factor)} ${n.unit}`,
+    })),
+  ]
+  while (tiles.length < 3) {
+    const k = tiles.length === 2 ? 'fat' : 'carbs'
+    tiles.push({
+      label: t(`today.macros.${k}`),
+      value: `${Math.round(food[k] * factor)} g`,
+    })
+  }
+
+  return (
+    <div className="space-y-3 rounded-lg border border-primary/25 bg-primary-soft p-4">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-9 w-9 items-center justify-center rounded-md bg-brand-gradient text-primary-foreground">
+          <Sparkles size={18} />
+        </span>
+        <span className="font-bold">{t('food.ai.title')}</span>
+        <span className="ml-auto rounded-full bg-card px-2.5 py-1 text-[11px] font-bold text-primary">
+          {t(SOURCE_BADGE[food.source])}
+        </span>
+      </div>
+      <p className="text-sm leading-relaxed text-foreground/90">{summary}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {tiles.map((tile) => (
+          <div key={tile.label} className="rounded-md bg-card/70 px-2 py-2 text-center">
+            <div className="font-mono text-sm font-bold tabular-nums">{tile.value}</div>
+            <div className="text-[10px] font-semibold text-primary">{tile.label}</div>
+          </div>
+        ))}
+      </div>
+      {present.length > 0 ? (
+        <>
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={open}
+            className="focus-ring flex min-h-[40px] w-full items-center justify-center gap-1 rounded-md text-sm font-bold text-primary"
+          >
+            {open ? t('food.ai.hideAnalysis') : t('food.ai.fullAnalysis', { count: present.length })}
+            <ChevronRight size={15} className={open ? 'rotate-90' : ''} />
+          </button>
+          {open && (
+            <ul className="divide-y divide-border/60 rounded-md bg-card/70 px-3">
+              {present.map((n) => (
+                <li key={n.key} className="flex items-baseline justify-between py-2 text-sm">
+                  <span>{t(`nutrients.names.${n.key}`, { defaultValue: n.key })}</span>
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                    {fmt(n.value)} {n.unit} / 100 {food.per}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p className="text-xs text-muted-foreground">{t('food.ai.noMicros')}</p>
+      )}
     </div>
   )
 }

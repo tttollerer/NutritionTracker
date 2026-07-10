@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Upload, RefreshCw, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle } from 'lucide-react'
+import { Download, Upload, RefreshCw, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle, Trophy } from 'lucide-react'
 import {
   getCoachMemory,
   getGoals,
@@ -130,6 +130,14 @@ export function Profile({ onReset }: { onReset: () => void }) {
           <span className="flex items-center gap-3">
             <LineChart size={20} className="text-muted-foreground" />
             {t('profile.trends')}
+          </span>
+          <ChevronRight size={18} className="text-muted-foreground" />
+        </Link>
+        {/* Erfolge haben keinen eigenen Tab mehr (neue Navigation) → Einstieg hier. */}
+        <Link to="/awards" className="flex w-full items-center justify-between p-4 text-left">
+          <span className="flex items-center gap-3">
+            <Trophy size={20} className="text-muted-foreground" />
+            {t('nav.awards')}
           </span>
           <ChevronRight size={18} className="text-muted-foreground" />
         </Link>

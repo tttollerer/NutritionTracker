@@ -15,6 +15,8 @@ import { UpdatePrompt } from '@/components/UpdatePrompt'
 // Schwere, nicht-kritische Routen lazy laden (Code-Splitting): Kernflows
 // Heute/Erfassen/Capture bleiben im Haupt-Chunk, damit sie sofort da sind.
 const Barcode = lazy(() => import('@/pages/Barcode').then((m) => ({ default: m.Barcode })))
+const Week = lazy(() => import('@/pages/Week').then((m) => ({ default: m.Week })))
+const Pantry = lazy(() => import('@/pages/Pantry').then((m) => ({ default: m.Pantry })))
 const Review = lazy(() => import('@/pages/Review').then((m) => ({ default: m.Review })))
 const Coach = lazy(() => import('@/pages/Coach').then((m) => ({ default: m.Coach })))
 const Awards = lazy(() => import('@/pages/Awards').then((m) => ({ default: m.Awards })))
@@ -59,6 +61,8 @@ const router = createBrowserRouter([
     element: <RootGate />,
     children: [
       { index: true, element: <Today /> },
+      { path: 'week', element: lazyPage(<Week />) },
+      { path: 'pantry', element: lazyPage(<Pantry />) },
       { path: 'add', element: <Add /> },
       { path: 'capture', element: <Capture /> },
       { path: 'barcode', element: lazyPage(<Barcode />) },

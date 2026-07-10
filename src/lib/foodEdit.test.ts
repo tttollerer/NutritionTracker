@@ -66,6 +66,25 @@ describe('foodEdit (Produkt-Editor, Paket B)', () => {
       expect('price' in stored).toBe(false)
     })
 
+    it('Beschreibung & Tags: setzen, normalisieren, entfernen — Quelle bleibt', async () => {
+      const food = await createFood({ name: 'Skyr', ...base, source: 'ai' })
+
+      const updated = await updateFoodValues(food.id, {
+        description: '  Fettarmer isländischer Skyr. ',
+        tags: [' Milchprodukt', 'Protein', 'Protein', ' '],
+      })
+
+      expect(updated.description).toBe('Fettarmer isländischer Skyr.')
+      expect(updated.tags).toEqual(['Milchprodukt', 'Protein'])
+      expect(updated.source).toBe('ai') // rein beschreibend → keine manual-Markierung
+
+      const cleared = await updateFoodValues(food.id, { description: '', tags: [] })
+      const stored = (await db.foods.get(food.id))!
+      expect('description' in stored).toBe(false)
+      expect('tags' in stored).toBe(false)
+      expect(cleared.source).toBe('ai')
+    })
+
     it('wirft für unbekannte/gelöschte Produkte', async () => {
       await expect(updateFoodValues('nope', { kcal: 1 })).rejects.toThrow()
       const food = await createFood({ name: 'Weg', ...base })
