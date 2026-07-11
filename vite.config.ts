@@ -38,6 +38,25 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           orientation: 'portrait',
           start_url: '/',
+          // App-Shortcuts (Homescreen-Longpress): direkt in die häufigsten Flows.
+          // Nur vorhandene Icons referenzieren (min. 96px laut Spec, 192px vorhanden).
+          shortcuts: [
+            {
+              name: 'Mahlzeit fotografieren',
+              url: '/capture?mode=meal',
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+            {
+              name: 'Einkauf scannen',
+              url: '/capture?mode=receipt',
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+            {
+              name: 'Woche',
+              url: '/week',
+              icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+            },
+          ],
           icons: [
             { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
             { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
