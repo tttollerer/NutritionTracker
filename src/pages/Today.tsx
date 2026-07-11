@@ -24,6 +24,7 @@ import { DueMeasurements } from '@/components/DueMeasurements'
 import { NudgeCard } from '@/components/NudgeCard'
 import { ExpiryHint } from '@/components/ExpiryHint'
 import { CaptureCta } from '@/components/CaptureCta'
+import { WeekBarsMini } from '@/components/WeekBarsCard'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
@@ -254,6 +255,9 @@ export function Today() {
           </p>
         )}
       </Card>
+
+      {/* Kompakte Wochen-Balken (planned zählt nicht) — Sprungbrett zur Woche. */}
+      <WeekBarsMini today={date} kcalGoal={kcalGoal} />
 
       <NutrientPanel
         logs={logs}
