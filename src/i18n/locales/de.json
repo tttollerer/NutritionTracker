@@ -560,6 +560,8 @@
     "toPantry": "Nur in den Vorrat",
     "pantrySaved_one": "1 Produkt im Vorrat",
     "pantrySaved_other": "{{count}} Produkte im Vorrat",
+    "photosTitle": "Produkt-Fotos",
+    "photosHint": "Front, Nährwerttabelle, Zutaten — alle Bilder landen in der Galerie des Produkts.",
     "refineTitle": "Schätzung verbessern",
     "refineHint": "Gib der KI eine Zusatzinfo — sie schätzt das Bild damit neu.",
     "refinePlaceholder": "z. B. Das ist Joghurtsauce, nicht Mayo",
@@ -623,7 +625,9 @@
       "portionPhoto": "Portion fotografieren — KI schätzt die Menge",
       "portionDefaultLabel": "Portion",
       "portionEstimated": "KI-Schätzung: {{amount}} {{unit}} — unten prüfen und mit + übernehmen.",
-      "portionEstimateNone": "Keine Mengenschätzung erkennbar — bitte Menge von Hand eintragen."
+      "portionEstimateNone": "Keine Mengenschätzung erkennbar — bitte Menge von Hand eintragen.",
+      "estimateCta": "Nährwerte per KI schätzen",
+      "estimateDone": "KI-Schätzung übernommen — bitte prüfen und bei Bedarf korrigieren."
     },
     "create": {
       "title": "Neues Produkt",

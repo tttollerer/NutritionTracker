@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Info, ShoppingBasket, Sparkles } from 'lucide-react'
+import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Image as ImageIcon, Info, ShoppingBasket, Sparkles, X } from 'lucide-react'
 import { analyzeImage, type AiItem } from '@/lib/ai'
 import { toApiError } from '@/lib/apiError'
 import { getReview, setReview, clearReview, presetsFor, presetLabel, amountForUnitSwitch } from '@/lib/reviewStore'
@@ -13,6 +13,7 @@ import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveRevie
 import { addFoodPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
 import { clearScanRun, decrementScanRun, incrementScanRun } from '@/lib/scanRun'
+import { downscaleImage } from '@/lib/image'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -40,6 +41,32 @@ export function Review() {
   // mit der gemerkten üblichen Portion vorbelegt wurden.
   const [knownNames, setKnownNames] = useState<Set<string>>(new Set())
   const allergies = useLiveQuery(() => getAllergies(), []) ?? []
+  // Produkt-Galerie (Design 1d): das Scan-Foto plus weitere Bilder (Front,
+  // Nährwerttabelle, Zutaten …) — sie wandern beim Übernehmen bzw. beim
+  // Vorrat-Speichern ALLE in die Galerie des Produkts (nur bei genau 1 Item,
+  // sonst wäre die Zuordnung mehrdeutig).
+  const [productPhotos, setProductPhotos] = useState<string[]>(() => {
+    const first = payload?.imageBase64 ?? payload?.photo
+    return first ? [first] : []
+  })
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const photoCamRef = useRef<HTMLInputElement>(null)
+  const photoGalRef = useRef<HTMLInputElement>(null)
+
+  async function onProductPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || photoBusy) return
+    setPhotoBusy(true)
+    try {
+      const dataUrl = await downscaleImage(file)
+      setProductPhotos((prev) => [...prev, dataUrl])
+    } catch {
+      // Kein Canvas/kaputtes Bild → Galerie bleibt unverändert.
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (!payload) navigate('/add', { replace: true })
@@ -188,8 +215,9 @@ export function Review() {
         // Genau EIN erkanntes Produkt → das Scan-Foto gehört (auch) in dessen
         // Galerie (mehrere Bilder je Produkt). Bei Mehr-Item-Mahlzeiten wäre
         // die Zuordnung mehrdeutig — dann bleibt es nur das Mahlzeitenfoto.
-        const productPhoto = payload!.imageBase64 ?? payload!.photo
-        if (items.length === 1 && productPhoto) await addFoodPhoto(food.id, productPhoto)
+        if (items.length === 1) {
+          for (const dataUrl of productPhotos) await addFoodPhoto(food.id, dataUrl)
+        }
       }
       clearReview()
       clearScanRun() // Loggen als Mahlzeit beendet einen laufenden Einräum-Scan-Loop
@@ -215,8 +243,9 @@ export function Review() {
         traces: payload!.traces,
       })
       // Einkauf-Scan mit genau einem Produkt: Foto in die Produkt-Galerie.
-      const productPhoto = payload!.imageBase64 ?? payload!.photo
-      if (foods.length === 1 && productPhoto) await addFoodPhoto(foods[0].id, productPhoto)
+      if (foods.length === 1) {
+        for (const dataUrl of productPhotos) await addFoodPhoto(foods[0].id, dataUrl)
+      }
       clearReview()
       showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
         await Promise.all(foods.map((f) => undoPantryAdd(f.id)))
@@ -373,6 +402,50 @@ export function Review() {
             </Card>
           )
         })
+      )}
+
+      {/* ── Produkt-Fotos (Design 1d): Scan-Foto + weitere Bilder — alle landen
+          in der Produkt-Galerie. Nur bei genau EINEM erkannten Produkt. ── */}
+      {items.length === 1 && (
+        <Card className="space-y-2 p-4">
+          <p className="text-sm font-semibold">{t('review.photosTitle')}</p>
+          <p className="text-xs text-muted-foreground">{t('review.photosHint')}</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {productPhotos.map((dataUrl, idx) => (
+              <div key={idx} className="relative shrink-0">
+                <img src={dataUrl} alt="" className="h-20 w-20 rounded-xl object-cover" />
+                <button
+                  type="button"
+                  onClick={() => setProductPhotos((prev) => prev.filter((_, i) => i !== idx))}
+                  aria-label={t('food.edit.removePhoto')}
+                  className="focus-ring absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-sm"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => photoCamRef.current?.click()}
+              disabled={photoBusy}
+              aria-label={t('food.edit.addPhoto')}
+              className="focus-ring flex h-20 w-14 shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-input text-muted-foreground disabled:opacity-50"
+            >
+              <Camera size={20} />
+            </button>
+            <button
+              type="button"
+              onClick={() => photoGalRef.current?.click()}
+              disabled={photoBusy}
+              aria-label={t('food.edit.addFromGallery')}
+              className="focus-ring flex h-20 w-14 shrink-0 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-input text-muted-foreground disabled:opacity-50"
+            >
+              <ImageIcon size={20} />
+            </button>
+          </div>
+          <input ref={photoCamRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onProductPhotoFile(e)} />
+          <input ref={photoGalRef} type="file" accept="image/*" hidden onChange={(e) => void onProductPhotoFile(e)} />
+        </Card>
       )}
 
       {/* ── Schätzung verbessern (Paket B): nur mit vorhandenem Analyse-Bild ── */}

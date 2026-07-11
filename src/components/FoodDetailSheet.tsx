@@ -8,7 +8,7 @@ import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type Fo
 import { createFood, getActiveGoalsMap, getAllergies, getSettings, toggleFavorite, updateSettings } from '@/db/repo'
 import { incrementPantry, setExpiry } from '@/lib/pantryStock'
 import { checkAllergens } from '@/lib/allergens'
-import { analyzeImage } from '@/lib/ai'
+import { analyzeImage, estimateNutrients } from '@/lib/ai'
 import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
@@ -182,6 +182,10 @@ function FoodDetailForm({
   const [portionBusy, setPortionBusy] = useState(false)
   const [portionHint, setPortionHint] = useState<string | null>(null)
   const [portionError, setPortionError] = useState<string | null>(null)
+  // „Nährwerte per KI schätzen" (v1.5): reine Text-Schätzung aus dem Namen.
+  const [estimateBusy, setEstimateBusy] = useState(false)
+  const [estimateHint, setEstimateHint] = useState<string | null>(null)
+  const [estimateError, setEstimateError] = useState<string | null>(null)
   const [favorite, setFavorite] = useState(!!food.favorite)
   const [analysisOpen, setAnalysisOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -370,6 +374,50 @@ function FoodDetailForm({
     setSaved(false)
     setTags((prev) => (prev.some((x) => x.toLowerCase() === tag.toLowerCase()) ? prev : [...prev, tag]))
     setTagInput('')
+  }
+
+  /**
+   * Nährwerte NUR aus dem Produktnamen schätzen (Vertrag v1.5): füllt die
+   * Werte-Felder (Makros + bekannte Mikros), setzt die Basis-Einheit aus der
+   * KI-Antwort und — falls leer — die übliche Portion. Alles bleibt editierbar;
+   * ohne Bildübertragung ist keine Foto-Einwilligung nötig.
+   */
+  async function estimateFromName() {
+    if (estimateBusy || !name.trim()) return
+    setEstimateBusy(true)
+    setEstimateError(null)
+    setEstimateHint(null)
+    try {
+      const result = await estimateNutrients(name)
+      const item = result.items[0]
+      if (!item) {
+        setEstimateError('errors.generic')
+        return
+      }
+      setSaved(false)
+      if (item.unit === 'g' || item.unit === 'ml') setPer(item.unit)
+      setMacroText({
+        kcal: String(Math.round(item.per100.kcal)),
+        protein: String(item.per100.protein),
+        carbs: String(item.per100.carbs),
+        fat: String(item.per100.fat),
+      })
+      // Nur Katalog-Mikros übernehmen; nicht geschätzte Felder leeren, damit
+      // keine alten Werte fälschlich als „geschätzt" stehen bleiben.
+      setMicroText(
+        Object.fromEntries(
+          NUTRIENTS.map((n) => [n.key, item.per100.micros?.[n.key] != null ? String(item.per100.micros[n.key]) : '']),
+        ),
+      )
+      if (!portionAmount.trim() && item.unit !== 'portion' && item.amount > 0) {
+        setPortionAmount(String(Math.round(item.amount)))
+      }
+      setEstimateHint(t('food.edit.estimateDone'))
+    } catch (err) {
+      setEstimateError(toApiError(err).i18nKey)
+    } finally {
+      setEstimateBusy(false)
+    }
   }
 
   return (
@@ -595,6 +643,24 @@ function FoodDetailForm({
             ))}
           </div>
         )}
+
+        {/* Nährwerte NUR aus dem Namen schätzen (v1.5) — für reine Texterfassung
+            („Leberkäse Brötchen"): kein Foto nötig, daher auch keine Einwilligung. */}
+        <button
+          type="button"
+          onClick={() => void estimateFromName()}
+          disabled={estimateBusy || !name.trim()}
+          className="focus-ring flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-dashed border-input text-sm font-medium text-muted-foreground disabled:opacity-50"
+        >
+          <Sparkles size={16} aria-hidden="true" className="text-primary" />
+          {estimateBusy ? t('capture.analyzing') : t('food.edit.estimateCta')}
+        </button>
+        {estimateHint && (
+          <p className="text-xs font-medium text-primary" role="status">
+            {estimateHint}
+          </p>
+        )}
+        {estimateError && <p className="text-xs text-destructive">{t(estimateError)}</p>}
       </div>
 
       {/* Übliche Portion: Menge in Basis-Einheit + Anzeige-Label */}
