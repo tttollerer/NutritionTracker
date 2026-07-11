@@ -11,7 +11,7 @@ import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
 import { setReceiptDraft } from '@/lib/receipt'
 import { peekPendingImage, clearPendingImage } from '@/lib/captureHandoff'
-import { clearScanRun, readScanRun, startScanRun } from '@/lib/scanRun'
+import { clearScanRun, onScanRunChange, readScanRun, startScanRun } from '@/lib/scanRun'
 import { getSettings, updateSettings } from '@/db/repo'
 import { useSpeechRecognition } from '@/lib/speech'
 import type { Meal } from '@/db/types'
@@ -46,14 +46,21 @@ export function Capture() {
 
   // Batch-Runde beim Betreten sicherstellen und beim echten Verlassen beenden.
   // Der Transition-Doppelmount (siehe captureHandoff) und der Weg zur Analyse
-  // (/review) zählen NICHT als Verlassen — dort läuft die Runde weiter.
+  // (/review) zählen NICHT als Verlassen — dort läuft die Runde weiter. Ein
+  // Wechsel zu einem Nicht-Batch-Capture (z. B. Quick-Sheet-Foto) beendet sie.
   useEffect(() => {
     if (!batch) return
     startScanRun()
     setRunCount(readScanRun())
+    // Live nachziehen, wenn der Undo-Toast von „Nur in den Vorrat" zurückzählt.
+    const off = onScanRunChange(() => setRunCount(readScanRun()))
     return () => {
-      const path = window.location.pathname
-      if (path !== '/capture' && path !== '/review') clearScanRun()
+      off()
+      const { pathname, search } = window.location
+      const stillInLoop =
+        pathname === '/review' ||
+        (pathname === '/capture' && new URLSearchParams(search).get('batch') === '1')
+      if (!stillInLoop) clearScanRun()
     }
   }, [batch])
 

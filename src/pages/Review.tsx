@@ -12,7 +12,7 @@ import { useOverlays } from '@/lib/overlays-context'
 import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
 import { addFoodPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
-import { clearScanRun, incrementScanRun } from '@/lib/scanRun'
+import { clearScanRun, decrementScanRun, incrementScanRun } from '@/lib/scanRun'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -44,6 +44,18 @@ export function Review() {
   useEffect(() => {
     if (!payload) navigate('/add', { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Einräum-Zähler beim echten Verlassen räumen (z. B. Abbruch über die
+  // Tab-Leiste): nur der Weg zurück in den Scan-Loop (/capture) und der
+  // Transition-Doppelmount (/review) erhalten die Runde — sonst zählt ein
+  // liegen gebliebener Alt-Stand in einer späteren Runde falsch weiter
+  // (Muster: Unmount-Cleanup in Capture.tsx).
+  useEffect(() => {
+    return () => {
+      const path = window.location.pathname
+      if (path !== '/capture' && path !== '/review') clearScanRun()
+    }
   }, [])
 
   // Lernschleife/Vorausfüllen: bekannte Lebensmittel (Namens-Match gegen den
@@ -208,6 +220,9 @@ export function Review() {
       clearReview()
       showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
         await Promise.all(foods.map((f) => undoPantryAdd(f.id)))
+        // Undo nimmt auch den Batch-Zähler zurück — sonst zeigte der Chip in
+        // Capture weiterhin „N eingeräumt", obwohl real nichts eingeräumt ist.
+        decrementScanRun(foods.length)
       })
       // Scan-Loop beim Einräumen: Zähler hochsetzen und direkt zurück zur
       // Kamera — das nächste Produkt ist nur einen Foto-Tap entfernt.

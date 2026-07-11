@@ -13,7 +13,8 @@ import { affinityStartKey, mealAffinityCounts, sortByMealAffinity } from '@/lib/
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
-import { cn, todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
+import { cn } from '@/lib/utils'
 import { Chip } from '@/components/ui/Chip'
 import { PortionSheet } from '@/components/PortionSheet'
 
@@ -32,6 +33,10 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
+  // Das Sheet ist app-weit permanent gemountet (overlays.tsx) — der Tages-
+  // Schlüssel muss deshalb reaktiv über Mitternacht sein (Muster Today.tsx),
+  // sonst zeigen „wie gestern" und die Affinität morgens den Vortagsstand.
+  const today = useTodayKey()
   // Größerer Kandidaten-Pool als angezeigt wird (6): die Affinitäts-Sortierung
   // kann so z. B. morgens Frühstücks-Produkte von weiter hinten nach vorn holen.
   const recents = useLiveQuery(() => recentFoods(12), [])
@@ -39,17 +44,17 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   // nur Produkte mit Bestand (> 0 Packungen), frisch benutzte zuerst.
   const pantry = useLiveQuery(async () => (await pantryFoods()).filter((f) => effectivePantryQty(f) > 0), [])
   // Routine-Chip „{Mahlzeit} wie gestern": reagiert auf die Mahlzeit-Auswahl.
-  const yesterday = useLiveQuery(() => yesterdayMealSummary(meal), [meal])
+  const yesterday = useLiveQuery(() => yesterdayMealSummary(meal, today), [meal, today])
   // Tageszeit-Affinität: Verzehr-Logs der letzten 14 Tage (ohne planned —
   // Wochenplan-Einträge zählen nie als Verzehr) einmal laden, pure sortieren.
   const affinityLogs = useLiveQuery(
     () =>
       db.logs
         .where('date')
-        .between(affinityStartKey(), todayKey(), true, true)
+        .between(affinityStartKey(today), today, true, true)
         .filter((l) => !l.deletedAt && !l.planned)
         .toArray(),
-    [],
+    [today],
   )
   const sheetRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
@@ -62,6 +67,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
       setMeal(defaultMeal())
       setMultiSelect(false)
       setSelectedIds(new Set())
+      setBusy(false)
     }
   }, [open])
 
@@ -145,8 +151,14 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
       return next
     })
   }
+  // Doppel-Tap-Schutz (Muster Review.confirm): busy sperrt beide Log-Aktionen
+  // und bleibt nach dem Schließen bis zum nächsten Öffnen gesetzt — der Button
+  // wäre sonst während der Exit-Animation weiter tappbar (doppelte Logs +
+  // doppelter Bestand-Abzug, und nur der zweite Batch wäre undo-bar).
+  const [busy, setBusy] = useState(false)
   async function logSelected(foods: FoodItem[]) {
-    if (foods.length === 0) return
+    if (busy || foods.length === 0) return
+    setBusy(true)
     const logged = await logMany(foods, meal)
     showUndo(t('capture.multiAdded', { count: logged.length }), () => undoLogMany(logged))
     onClose()
@@ -155,8 +167,13 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   // „Wie gestern": die gestrige Mahlzeit 1:1 auf heute kopieren (Muster
   // Add.tsx copyFromYesterday) — das Undo löscht alle Kopien wieder.
   async function logLikeYesterday() {
+    if (busy) return
+    setBusy(true)
     const copied = await copyYesterday(meal)
-    if (copied.length === 0) return
+    if (copied.length === 0) {
+      setBusy(false) // nichts kopiert — Sheet bleibt offen und bedienbar
+      return
+    }
     showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
       await Promise.all(copied.map((c) => deleteLog(c.id)))
     })
@@ -166,7 +183,12 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   // Vorrat & „Zuletzt benutzt" nach Tageszeit-Affinität: was zur gewählten
   // Mahlzeit oft gegessen wird, steht vorn (morgens die Frühstücks-Produkte).
   const affinity = mealAffinityCounts(affinityLogs ?? [], meal)
-  const pantryChips = sortByMealAffinity(pantry ?? [], affinity).slice(0, 8)
+  // Top 8 plus bereits gewählte Produkte: das Affinitäts-Resort beim
+  // Mahlzeit-Wechsel darf eine bestehende Auswahl nicht still aus Anzeige
+  // und „N eintragen" kippen.
+  const pantryChips = sortByMealAffinity(pantry ?? [], affinity).filter(
+    (f, i) => i < 8 || selectedIds.has(f.id),
+  )
   // Für den Footer-Button: gewählte Produkte + kcal-Schätzung der üblichen Portionen.
   const selectedFoods = pantryChips.filter((f) => selectedIds.has(f.id))
   const selectedKcal = selectedFoods.reduce((sum, f) => sum + usualPortionKcal(f), 0)
@@ -214,7 +236,8 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             {yesterday && yesterday.count > 0 && (
               <button
                 onClick={() => void logLikeYesterday()}
-                className="focus-ring mb-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-primary-soft px-4 text-sm font-semibold text-primary"
+                disabled={busy}
+                className="focus-ring mb-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-primary-soft px-4 text-sm font-semibold text-primary disabled:opacity-50"
               >
                 <History size={16} aria-hidden="true" />
                 {t('capture.likeYesterday', {
@@ -267,14 +290,16 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                 Produkte, der Button darunter loggt alle in EINEM Vorgang. */}
             {pantry && pantry.length > 0 && (
               <div className="mt-4">
-                <div className="mb-2 flex items-baseline justify-between gap-2">
+                {/* 48-px-Targets auch für die Text-Buttons — daneben liegt
+                    „alle N →", ein Fehl-Tap würde zum Vorrat navigieren. */}
+                <div className="mb-1 flex items-center justify-between gap-2">
                   <p className="text-xs font-medium text-muted-foreground">{t('add.pantry')}</p>
-                  <div className="flex items-baseline gap-3">
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={toggleMultiSelect}
                       aria-pressed={multiSelect}
                       className={cn(
-                        'focus-ring rounded-md text-xs font-medium',
+                        'focus-ring min-h-[48px] rounded-md px-2 text-xs font-medium',
                         multiSelect ? 'text-primary' : 'text-muted-foreground',
                       )}
                     >
@@ -283,7 +308,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                     {pantry.length > 8 && (
                       <button
                         onClick={() => go('/pantry')}
-                        className="focus-ring rounded-md text-xs font-medium text-primary"
+                        className="focus-ring min-h-[48px] rounded-md px-2 text-xs font-medium text-primary"
                       >
                         {t('capture.pantryAll', { count: pantry.length })}
                       </button>
@@ -320,7 +345,8 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                 {multiSelect && selectedFoods.length > 0 && (
                   <button
                     onClick={() => void logSelected(selectedFoods)}
-                    className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground"
+                    disabled={busy}
+                    className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
                   >
                     {t('capture.multiLog', { count: selectedFoods.length, kcal: selectedKcal })}
                   </button>

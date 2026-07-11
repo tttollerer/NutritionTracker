@@ -6,6 +6,9 @@
  */
 
 const KEY = 'nt-scan-run'
+// Eigenes Event statt 'storage' (feuert nur cross-tab): der Batch-Chip in
+// Capture soll live mitzählen, wenn z. B. das Undo des Toasts zurückzählt.
+const CHANGE_EVENT = 'nt-scan-run-changed'
 
 function write(count: number): void {
   try {
@@ -13,6 +16,7 @@ function write(count: number): void {
   } catch {
     // Flüchtiger Arbeitszustand — volle Quota darf den Flow nicht crashen.
   }
+  window.dispatchEvent(new Event(CHANGE_EVENT))
 }
 
 /** Runde beginnen (Zähler 0). Eine bereits laufende Runde bleibt unangetastet. */
@@ -28,6 +32,18 @@ export function incrementScanRun(by = 1): number {
   return next
 }
 
+/**
+ * Zähler zurücknehmen (Undo von „Nur in den Vorrat") — nie unter 0. Ohne
+ * laufende Runde passiert nichts (das Undo darf keine neue Runde eröffnen).
+ */
+export function decrementScanRun(by = 1): number | null {
+  const current = readScanRun()
+  if (current == null) return null
+  const next = Math.max(0, current - by)
+  write(next)
+  return next
+}
+
 /** Aktueller Stand der Runde — null, wenn keine läuft (oder Wert kaputt ist). */
 export function readScanRun(): number | null {
   const raw = sessionStorage.getItem(KEY)
@@ -39,4 +55,11 @@ export function readScanRun(): number | null {
 /** Runde beenden („Fertig" / Capture verlassen). */
 export function clearScanRun(): void {
   sessionStorage.removeItem(KEY)
+  window.dispatchEvent(new Event(CHANGE_EVENT))
+}
+
+/** Auf Zähler-Änderungen hören (Batch-Chip). Gibt die Abmelde-Funktion zurück. */
+export function onScanRunChange(listener: () => void): () => void {
+  window.addEventListener(CHANGE_EVENT, listener)
+  return () => window.removeEventListener(CHANGE_EVENT, listener)
 }

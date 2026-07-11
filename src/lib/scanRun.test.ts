@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { clearScanRun, incrementScanRun, readScanRun, startScanRun } from './scanRun'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  clearScanRun,
+  decrementScanRun,
+  incrementScanRun,
+  onScanRunChange,
+  readScanRun,
+  startScanRun,
+} from './scanRun'
 
 describe('scanRun (Einräum-Zähler, sessionStorage)', () => {
   beforeEach(() => sessionStorage.clear())
@@ -32,6 +39,32 @@ describe('scanRun (Einräum-Zähler, sessionStorage)', () => {
     incrementScanRun()
     clearScanRun()
     expect(readScanRun()).toBeNull()
+  })
+
+  it('decrementScanRun zählt zurück (Undo von „Nur in den Vorrat"), nie unter 0', () => {
+    incrementScanRun(3)
+    expect(decrementScanRun()).toBe(2)
+    expect(decrementScanRun(5)).toBe(0)
+    expect(readScanRun()).toBe(0)
+  })
+
+  it('decrementScanRun ohne laufende Runde eröffnet KEINE neue', () => {
+    expect(decrementScanRun()).toBeNull()
+    expect(readScanRun()).toBeNull()
+  })
+
+  it('benachrichtigt Zuhörer bei jeder Änderung (Batch-Chip zählt live mit)', () => {
+    const listener = vi.fn()
+    const off = onScanRunChange(listener)
+    incrementScanRun()
+    expect(listener).toHaveBeenCalledTimes(1)
+    decrementScanRun()
+    expect(listener).toHaveBeenCalledTimes(2)
+    clearScanRun()
+    expect(listener).toHaveBeenCalledTimes(3)
+    off()
+    incrementScanRun()
+    expect(listener).toHaveBeenCalledTimes(3)
   })
 
   it('kaputte oder negative Speicherwerte gelten als keine Runde', () => {
