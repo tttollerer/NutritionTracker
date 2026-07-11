@@ -79,3 +79,17 @@ export async function analyzeReceipt(imageBase64: string, hint?: string): Promis
     throw new ApiError('GENERIC')
   }
 }
+
+/**
+ * Nährwerte NUR aus dem Produktnamen schätzen (Vertrag v1.5, mode 'estimate') —
+ * der einzige Modus ohne Bild; es wird also auch kein Foto übertragen
+ * (photoConsent nicht nötig). Fürs Manuell-Anlegen im Produkt-Sheet.
+ */
+export async function estimateNutrients(name: string): Promise<AiResult> {
+  const json = await postAnalyze({ mode: 'estimate', hint: name.trim().slice(0, 280) })
+  try {
+    return AnalyzeResultSchema.parse(json)
+  } catch {
+    throw new ApiError('GENERIC')
+  }
+}

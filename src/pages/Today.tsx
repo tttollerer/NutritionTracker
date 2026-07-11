@@ -24,6 +24,7 @@ import { DueMeasurements } from '@/components/DueMeasurements'
 import { NudgeCard } from '@/components/NudgeCard'
 import { ExpiryHint } from '@/components/ExpiryHint'
 import { CaptureCta } from '@/components/CaptureCta'
+import { WeekBarsMini } from '@/components/WeekBarsCard'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
@@ -148,59 +149,6 @@ export function Today() {
 
       <CaptureCta />
 
-      <DueMeasurements />
-
-      {/* Bald ablaufende Vorrats-Artikel → heute verbrauchen (Link zum Einkauf). */}
-      <ExpiryHint today={date} />
-
-      <NudgeCard
-        logs={logs}
-        date={date}
-        proteinTarget={goals.protein?.target}
-        sex={profile?.sex}
-        vegan={profile?.dietForms.includes('vegan')}
-        allergies={allergies}
-        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
-        limitOverrides={limitOverrides}
-        benefitOverrides={benefitOverrides}
-      />
-
-      {/* Aktive Coach-Challenges kompakt anzeigen (Details & Aktionen: Erfolge). */}
-      {challenges && challenges.length > 0 && (
-        <Card className="space-y-2 p-4">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-            <Trophy size={16} className="text-warning" aria-hidden />
-            {t('today.challenges')}
-          </h2>
-          {challenges.map((c) => {
-            const p = evaluateChallenge(c, challengeSums, date)
-            const dayProgress = p?.kind === 'day' ? p : null
-            return (
-              <div key={c.id} className="space-y-1">
-                <div className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="min-w-0 truncate">{c.title}</span>
-                  {dayProgress && (
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {dayProgress.current} / {dayProgress.target} {dayProgress.unit ?? ''}
-                    </span>
-                  )}
-                </div>
-                {dayProgress && (
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <motion.div
-                      className={`h-full rounded-full ${dayProgress.met ? 'bg-success' : 'bg-brand-gradient'}`}
-                      initial={{ width: 0 }}
-                      animate={{ width: `${dayProgress.pct * 100}%` }}
-                      transition={{ duration: 0.4, ease: 'easeOut' }}
-                    />
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </Card>
-      )}
-
       <div className="flex flex-col items-center">
         <ProgressRing
           value={sum.kcal}
@@ -255,21 +203,8 @@ export function Today() {
         )}
       </Card>
 
-      <NutrientPanel
-        logs={logs}
-        date={date}
-        proteinTarget={goals.protein?.target}
-        sex={profile?.sex}
-        vegan={profile?.dietForms.includes('vegan')}
-        allergies={allergies}
-        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
-        limitOverrides={limitOverrides}
-        benefitOverrides={benefitOverrides}
-      />
-
-      {settings?.bloodSugar && <GlucoseCard unit={settings.glucoseUnit} date={date} />}
-
-      <WaterCard weightKg={profile?.weightKg} />
+      {/* Kompakte Wochen-Balken (planned zählt nicht) — Sprungbrett zur Woche. */}
+      <WeekBarsMini today={date} kcalGoal={kcalGoal} />
 
       {logs.length === 0 ? (
         <p className="rounded-lg bg-muted/50 p-6 text-center text-sm text-muted-foreground">
@@ -338,6 +273,77 @@ export function Today() {
           })}
         </div>
       )}
+
+      {/* Zweitrangiges unterhalb der Kern-Übersicht: Hinweis-Karten rendern sich
+          selbst nur bei Bedarf, daher keine eigene (sonst oft leere) Überschrift. */}
+      <DueMeasurements />
+
+      {/* Bald ablaufende Vorrats-Artikel → heute verbrauchen (Link zum Einkauf). */}
+      <ExpiryHint today={date} />
+
+      <NudgeCard
+        logs={logs}
+        date={date}
+        proteinTarget={goals.protein?.target}
+        sex={profile?.sex}
+        vegan={profile?.dietForms.includes('vegan')}
+        allergies={allergies}
+        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
+        limitOverrides={limitOverrides}
+        benefitOverrides={benefitOverrides}
+      />
+
+      {/* Aktive Coach-Challenges kompakt anzeigen (Details & Aktionen: Erfolge). */}
+      {challenges && challenges.length > 0 && (
+        <Card className="space-y-2 p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <Trophy size={16} className="text-warning" aria-hidden />
+            {t('today.challenges')}
+          </h2>
+          {challenges.map((c) => {
+            const p = evaluateChallenge(c, challengeSums, date)
+            const dayProgress = p?.kind === 'day' ? p : null
+            return (
+              <div key={c.id} className="space-y-1">
+                <div className="flex items-baseline justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">{c.title}</span>
+                  {dayProgress && (
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {dayProgress.current} / {dayProgress.target} {dayProgress.unit ?? ''}
+                    </span>
+                  )}
+                </div>
+                {dayProgress && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <motion.div
+                      className={`h-full rounded-full ${dayProgress.met ? 'bg-success' : 'bg-brand-gradient'}`}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${dayProgress.pct * 100}%` }}
+                      transition={{ duration: 0.4, ease: 'easeOut' }}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </Card>
+      )}
+
+      <NutrientPanel
+        logs={logs}
+        date={date}
+        proteinTarget={goals.protein?.target}
+        sex={profile?.sex}
+        vegan={profile?.dietForms.includes('vegan')}
+        allergies={allergies}
+        sugarLimit={settings?.sugarWarner ? DIABETES_SUGAR_LIMIT_G : undefined}
+        limitOverrides={limitOverrides}
+        benefitOverrides={benefitOverrides}
+      />
+
+      {settings?.bloodSugar && <GlucoseCard unit={settings.glucoseUnit} date={date} />}
+
+      <WaterCard weightKg={profile?.weightKg} />
 
       <EditLogSheet
         entry={editing}

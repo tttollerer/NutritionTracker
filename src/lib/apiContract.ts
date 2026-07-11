@@ -66,16 +66,31 @@ export function apiError(code: ApiErrorCode, error: string): ApiError {
 }
 
 // ---------------------------------------------------------------------------
-// /api/analyze — Bildanalyse (Modi meal | label | portion | receipt, PLAN.md §6)
+// /api/analyze — Bildanalyse (Modi meal | label | portion | receipt | estimate)
 // ---------------------------------------------------------------------------
 
-export const AnalyzeRequestSchema = z.object({
-  /** v1.3: 'receipt' (Kassenbon) antwortet mit ReceiptResultSchema, der Rest mit AnalyzeResultSchema. */
-  mode: z.enum(['meal', 'label', 'portion', 'receipt']),
-  /** Data-URL oder rohes Base64 (JPEG angenommen, wenn ohne Präfix). */
-  imageBase64: z.string().min(1),
-  hint: z.string().max(280).optional(),
-})
+export const AnalyzeRequestSchema = z
+  .object({
+    /**
+     * v1.3: 'receipt' (Kassenbon) antwortet mit ReceiptResultSchema, der Rest
+     * mit AnalyzeResultSchema. v1.5: 'estimate' schätzt typische Nährwerte
+     * NUR aus dem Namen im `hint` — der einzige Modus ohne Bild.
+     */
+    mode: z.enum(['meal', 'label', 'portion', 'receipt', 'estimate']),
+    /** Data-URL oder rohes Base64 (JPEG angenommen, wenn ohne Präfix). */
+    imageBase64: z.string().min(1).optional(),
+    hint: z.string().max(280).optional(),
+  })
+  .superRefine((req, ctx) => {
+    // Bild-Modi verlangen weiterhin zwingend ein Bild (kein Aufweichen von v1.1).
+    if (req.mode !== 'estimate' && !req.imageBase64) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['imageBase64'], message: 'Bild erforderlich' })
+    }
+    // Text-Schätzung ohne Namen ist sinnlos — hint ist hier Pflicht.
+    if (req.mode === 'estimate' && !req.hint?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['hint'], message: 'Name erforderlich' })
+    }
+  })
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>
 
 export const AnalyzeItemSchema = z.object({

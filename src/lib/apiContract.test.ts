@@ -100,6 +100,21 @@ describe('AnalyzeResultSchema v1.4 — optionales barcode-Feld (Foto-Scan)', () 
   })
 })
 
+describe('AnalyzeRequestSchema v1.5 — mode estimate (Text-Schätzung ohne Bild)', () => {
+  it('estimate braucht KEIN Bild, aber einen Namen im hint', () => {
+    expect(AnalyzeRequestSchema.safeParse({ mode: 'estimate', hint: 'Leberkäse Brötchen' }).success).toBe(true)
+    expect(AnalyzeRequestSchema.safeParse({ mode: 'estimate' }).success).toBe(false)
+    expect(AnalyzeRequestSchema.safeParse({ mode: 'estimate', hint: '   ' }).success).toBe(false)
+  })
+
+  it('Bild-Modi verlangen weiterhin zwingend imageBase64', () => {
+    for (const mode of ['meal', 'label', 'portion', 'receipt']) {
+      expect(AnalyzeRequestSchema.safeParse({ mode, hint: 'x' }).success).toBe(false)
+      expect(AnalyzeRequestSchema.safeParse({ mode, imageBase64: 'QUJD' }).success).toBe(true)
+    }
+  })
+})
+
 describe('Kassenbon-Scan v1.3 — mode receipt + ReceiptResultSchema', () => {
   it('AnalyzeRequestSchema akzeptiert den neuen Modus "receipt" (additiv)', () => {
     expect(AnalyzeRequestSchema.safeParse({ mode: 'receipt', imageBase64: 'QUJD' }).success).toBe(true)

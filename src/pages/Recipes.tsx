@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CookingPot, Pencil, Plus, Search, Trash2, Utensils, X } from 'lucide-react'
@@ -38,7 +37,6 @@ import { Skeleton } from '@/components/ui/Skeleton'
  */
 export function Recipes() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const { showUndo } = useOverlays()
   const recipes = useLiveQuery(() => listRecipes(), [])
   // Katalog-Map für Kosten-/kcal-Anzeige je Portion (eine Abfrage für alle Zeilen).
@@ -104,12 +102,12 @@ export function Recipes() {
         foodsMap={foodsMap ?? new Map()}
         onClose={() => setLogging(null)}
         onLogged={({ entries, pantryTook }) => {
+          // Kein navigate('/'): im Kontext bleiben, der Undo-Toast bestätigt.
           showUndo(t('recipes.logged', { count: entries.length }), async () => {
             await Promise.all(entries.map((e) => deleteLog(e.id)))
             // Nur zurücklegen, was beim Loggen wirklich abging (Muster Add/Pantry).
             await Promise.all(pantryTook.map((id) => incrementPantry(id)))
           })
-          navigate('/')
         }}
       />
     </div>

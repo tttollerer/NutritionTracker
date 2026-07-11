@@ -34,6 +34,9 @@ const SYSTEM: Record<string, string> = {
     'Du bist ein Produkt-Scanner. Auf dem Foto ist eine Verpackung, eine Nährwerttabelle und/oder ein Strichcode. Lies eine sichtbare Nährwerttabelle exakt aus und gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100). Ist KEINE Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes.',
   receipt:
     'Du bist ein Kassenbon-Parser für eine Ernährungs-App. Lies die Positionen des abfotografierten Kassenbons aus. Übernimm NUR Lebensmittel und Getränke — Pfand, Leergut, Rabatte, Tüten und Non-Food-Artikel lässt du weg. Normalisiere jeden Artikelnamen zu einem generischen deutschen Lebensmittelnamen ohne Marke und Händler-Kürzel (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"). Extrahiere je Position die ganze Stückzahl (Standard 1) und den Gesamtpreis der Position in EUR. Wenn du typische Nährwerte des Produkts sicher einschätzen kannst, gib sie je 100 g/ml als per100 an — sonst lasse per100 weg.',
+  // v1.5: reine Text-Schätzung (kein Bild) — der Produktname steht im Hint.
+  estimate:
+    'Du bist eine Nährwert-Referenz für eine deutsche Ernährungs-App. Schätze für das GENANNTE Lebensmittel (siehe Hinweis) typische Nährwerte je 100 g bzw. 100 ml (Getränke/Flüssiges → ml). Gib genau EIN Item zurück: name = bereinigter deutscher Name, amount = übliche Portionsgröße in der Basis-Einheit (sonst 100), unit = g oder ml. Kurze Unsicherheiten (z. B. "je nach Rezept sehr unterschiedlich") gehören in notes.',
 }
 
 // Mikronährstoff-Schlüssel + Einheiten (deckungsgleich mit src/lib/nutrients.ts).
@@ -60,8 +63,15 @@ const RECEIPT_JSON_INSTRUCTION =
 const QUESTIONS_INSTRUCTION =
   ' Wenn eine Zusatzangabe die Schätzung deutlich verbessern würde (z. B. Saucen-Art wie "Joghurtsauce oder Mayo?", Zubereitungsart, verstecktes Fett), stelle bis zu 2 kurze Rückfragen im Feld "questions". Sonst lasse "questions" weg.'
 
-async function callOpenRouter(model: string, key: string, system: string, imageBase64: string, hint?: string) {
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+async function callOpenRouter(model: string, key: string, system: string, imageBase64: string | undefined, hint?: string) {
+  // v1.5 (estimate): ohne Bild geht nur der Text-Hinweis raus.
+  const userContent: unknown[] = [
+    { type: 'text', text: hint ? `Hinweis: ${hint}` : 'Analysiere das Bild.' },
+  ]
+  if (imageBase64) {
+    const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`
+    userContent.push({ type: 'image_url', image_url: { url: dataUrl } })
+  }
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -74,13 +84,7 @@ async function callOpenRouter(model: string, key: string, system: string, imageB
       messages: [
         // `system` enthält bereits die modus-spezifische JSON-Instruktion.
         { role: 'system', content: system },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: hint ? `Hinweis: ${hint}` : 'Analysiere das Bild.' },
-            { type: 'image_url', image_url: { url: dataUrl } },
-          ],
-        },
+        { role: 'user', content: userContent },
       ],
     }),
     // Paket 3: hängender Upstream wird abgebrochen → UPSTREAM_TIMEOUT (504).

@@ -768,6 +768,23 @@ export async function yesterdayLogCount(targetDate = todayKey(), meal?: Meal): P
 }
 
 /**
+ * Anzahl + kcal-Summe der gestrigen Einträge EINER Mahlzeit — füttert den
+ * 1-Tap-Chip „{Mahlzeit} wie gestern" im Quick-Sheet. Gleiche Filter wie
+ * yesterdayLogCount (planned-Einträge zählen nie als Vortags-Verzehr).
+ */
+export async function yesterdayMealSummary(
+  meal: Meal,
+  targetDate = todayKey(),
+): Promise<{ count: number; kcal: number }> {
+  const logs = await db.logs
+    .where('date')
+    .equals(previousDayKey(targetDate))
+    .filter((l) => !l.deletedAt && !l.planned && l.meal === meal)
+    .toArray()
+  return { count: logs.length, kcal: logs.reduce((sum, l) => sum + l.computed.kcal, 0) }
+}
+
+/**
  * Alle gestrigen Logs (optional nur eine Mahlzeit) auf heute kopieren:
  * neue UUIDs, loggedAt jetzt, computed-Snapshot wird ÜBERNOMMEN (nicht neu
  * berechnet — auch wenn sich das Lebensmittel inzwischen geändert hat, bleibt

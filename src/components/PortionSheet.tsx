@@ -17,7 +17,7 @@ interface Props {
   /** Vorauswahl der Mahlzeit (aus der Erfassen-Seite). */
   initialMeal: Meal
   onClose: () => void
-  /** Nach erfolgreichem Log (Undo-Toast + Navigation übernimmt der Aufrufer). */
+  /** Nach erfolgreichem Log (Undo-Toast übernimmt der Aufrufer). */
   onLogged: (entry: LogEntry, food: FoodItem) => void
 }
 

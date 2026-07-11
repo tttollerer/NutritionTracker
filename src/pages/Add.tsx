@@ -58,12 +58,13 @@ export function Add() {
     { icon: ScanBarcode, key: 'label', to: `/capture?mode=label&meal=${meal}` },
   ] as const
 
+  // Nach dem Loggen bewusst KEIN navigate('/'): der Undo-Toast bestätigt,
+  // weitere Einträge gehen ohne Umweg — zurück geht's über die Tab-Leiste.
   async function logCatalog(id: string) {
     const c = FOOD_CATALOG.find((f) => f.id === id)
     if (!c) return
     const entry = await quickLogCatalog(c, meal)
     showUndo(t('capture.added', { name: c.name }), () => deleteLog(entry.id))
-    navigate('/')
   }
 
   async function quickLog(food: FoodItem) {
@@ -81,7 +82,6 @@ export function Add() {
       await deleteLog(entry.id)
       if (took) await incrementPantry(food.id)
     })
-    navigate('/')
   }
 
   /** Menge eines bekannten Lebensmittels per Foto schätzen (mode 'portion'). */
@@ -92,14 +92,23 @@ export function Add() {
   /**
    * „Gestern kopieren" respektiert die Mahlzeit-Wahl (Befund 11): standardmäßig
    * wird nur die oben gewählte Mahlzeit kopiert, die Zweitaktion holt den ganzen Tag.
+   * Doppel-Tap-Schutz (Muster Review.confirm): die Seite bleibt nach dem Kopieren
+   * stehen — ohne Guard würde ein zweiter Tap den ganzen Vortag erneut kopieren
+   * und das Undo der ersten Charge im Toast ersetzen.
    */
+  const [copying, setCopying] = useState(false)
   async function copyFromYesterday(wholeDay = false) {
-    const copied = await copyYesterday(wholeDay ? undefined : meal)
-    if (copied.length === 0) return
-    showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
-      await Promise.all(copied.map((c) => deleteLog(c.id)))
-    })
-    navigate('/')
+    if (copying) return
+    setCopying(true)
+    try {
+      const copied = await copyYesterday(wholeDay ? undefined : meal)
+      if (copied.length === 0) return
+      showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
+        await Promise.all(copied.map((c) => deleteLog(c.id)))
+      })
+    } finally {
+      setCopying(false)
+    }
   }
 
   // Favoriten stehen in der eigenen Sektion — aus „zuletzt benutzt" ausblenden.
@@ -200,11 +209,11 @@ export function Add() {
       {!searching && yesterdayCount > 0 && (
         <div className="space-y-1">
           {yesterdayMealCount > 0 ? (
-            <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday(false)}>
+            <Button variant="secondary" className="w-full" disabled={copying} onClick={() => void copyFromYesterday(false)}>
               <History size={18} /> {t('add.copyYesterdayMeal', { meal: t(`today.meals.${meal}`) })}
             </Button>
           ) : (
-            <Button variant="secondary" className="w-full" onClick={() => void copyFromYesterday(true)}>
+            <Button variant="secondary" className="w-full" disabled={copying} onClick={() => void copyFromYesterday(true)}>
               <History size={18} /> {t('add.copyYesterdayAll')}
             </Button>
           )}
@@ -212,8 +221,9 @@ export function Add() {
           {yesterdayMealCount > 0 && yesterdayCount > yesterdayMealCount && (
             <button
               type="button"
+              disabled={copying}
               onClick={() => void copyFromYesterday(true)}
-              className="focus-ring mx-auto flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground"
+              className="focus-ring mx-auto flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground disabled:opacity-50"
             >
               {t('add.copyYesterdayAll')}
             </button>
@@ -270,7 +280,6 @@ export function Add() {
               if (took) await incrementPantry(food.id)
             })
           })()
-          navigate('/')
         }}
       />
 

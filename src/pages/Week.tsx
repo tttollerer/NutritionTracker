@@ -25,6 +25,7 @@ import { useTodayKey } from '@/hooks/useTodayKey'
 import { useOverlays } from '@/lib/overlays-context'
 import { EditLogSheet } from '@/components/EditLogSheet'
 import { PageHeader } from '@/components/PageHeader'
+import { WeekBarsCard } from '@/components/WeekBarsCard'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -184,7 +185,6 @@ export function Week() {
 
   const kcalGoal = goals.kcal?.target ?? 2200
   const fmtDay = new Intl.DateTimeFormat(i18n.language, { day: 'numeric', month: 'long' })
-  const fmtWeekdayShort = new Intl.DateTimeFormat(i18n.language, { weekday: 'short' })
   const fmtWeekdayLong = new Intl.DateTimeFormat(i18n.language, { weekday: 'long' })
   // „7.–13. Juli" — Monat nur am Ende (bei Monatswechsel automatisch beide voll).
   const sameMonth = days[0].date.getMonth() === days[6].date.getMonth()
@@ -266,44 +266,15 @@ export function Week() {
         </button>
       </PageHeader>
 
-      {/* Tag-Strip: Mini-kcal-Fortschritt je Tag, Tap springt zum Panel. */}
-      <div className="scrollbar-none -mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
-        {days.map((d, i) => {
-          const active = i === activeIdx
-          const pct = Math.min(1, kcalByDay[i] / kcalGoal)
-          return (
-            <button
-              key={d.key}
-              type="button"
-              onClick={() => jumpTo(i)}
-              aria-label={t('week.dayLabel', { day: fmtDay.format(d.date) })}
-              aria-current={active ? 'date' : undefined}
-              className={cn(
-                'focus-ring flex w-12 shrink-0 flex-col items-center gap-1 rounded-md border py-2',
-                active ? 'border-primary bg-primary-soft' : 'border-border bg-card',
-              )}
-            >
-              <span
-                className={cn(
-                  'text-[11px] font-semibold',
-                  active ? 'text-primary' : 'text-muted-foreground',
-                )}
-              >
-                {fmtWeekdayShort.format(d.date).replace(/\.$/, '')}
-              </span>
-              <span className={cn('text-sm font-bold', active && 'text-primary')}>
-                {d.date.getDate()}
-              </span>
-              <span className="block h-1 w-5 overflow-hidden rounded-full bg-muted">
-                <span
-                  className="block h-full rounded-full bg-primary"
-                  style={{ width: `${pct * 100}%` }}
-                />
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      {/* Wochen-Karte statt Tag-Strip: kcal-Balken je Tag, Tap springt zum Panel. */}
+      <WeekBarsCard
+        days={days}
+        logs={logs}
+        kcalGoal={kcalGoal}
+        today={today}
+        activeIdx={activeIdx}
+        onSelectDay={jumpTo}
+      />
 
       {/* Wischbare Tages-Panels (Scroll-Snap, ein Panel = volle Breite). */}
       <div
