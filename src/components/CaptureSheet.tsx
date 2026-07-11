@@ -8,11 +8,12 @@ import type { FoodItem, Meal } from '@/db/types'
 import { db } from '@/db'
 import { copyYesterday, pantryFoods, recentFoods, deleteLog, yesterdayMealSummary } from '@/db/repo'
 import { decrementPantryOnLog, effectivePantryQty, incrementPantry } from '@/lib/pantryStock'
+import { logMany, undoLogMany, usualPortionKcal } from '@/lib/logMany'
 import { affinityStartKey, mealAffinityCounts, sortByMealAffinity } from '@/lib/mealAffinity'
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
-import { todayKey } from '@/lib/utils'
+import { cn, todayKey } from '@/lib/utils'
 import { Chip } from '@/components/ui/Chip'
 import { PortionSheet } from '@/components/PortionSheet'
 
@@ -55,8 +56,13 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
 
   // Mahlzeit bei JEDEM Öffnen neu anhand der Uhrzeit vorschlagen — der
   // useState-Initialwert läuft nur einmal beim App-Start (Audit-Befund 5).
+  // Die Mehrfach-Auswahl startet dabei immer frisch im Einzel-Tap-Modus.
   useEffect(() => {
-    if (open) setMeal(defaultMeal())
+    if (open) {
+      setMeal(defaultMeal())
+      setMultiSelect(false)
+      setSelectedIds(new Set())
+    }
   }, [open])
 
   const mealCamRef = useRef<HTMLInputElement>(null)
@@ -122,6 +128,30 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
     setPortionFood(food)
   }
 
+  // Mehrfach-Auswahl im Vorrat: ein Abendessen aus mehreren Komponenten ist
+  // EIN Vorgang — Taps togglen die Produkte, der Footer-Button loggt alle
+  // zusammen mit üblicher Portion und EIN Undo nimmt alles zurück (logMany).
+  const [multiSelect, setMultiSelect] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  function toggleMultiSelect() {
+    setMultiSelect((on) => !on)
+    setSelectedIds(new Set())
+  }
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  async function logSelected(foods: FoodItem[]) {
+    if (foods.length === 0) return
+    const logged = await logMany(foods, meal)
+    showUndo(t('capture.multiAdded', { count: logged.length }), () => undoLogMany(logged))
+    onClose()
+  }
+
   // „Wie gestern": die gestrige Mahlzeit 1:1 auf heute kopieren (Muster
   // Add.tsx copyFromYesterday) — das Undo löscht alle Kopien wieder.
   async function logLikeYesterday() {
@@ -137,6 +167,9 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   // Mahlzeit oft gegessen wird, steht vorn (morgens die Frühstücks-Produkte).
   const affinity = mealAffinityCounts(affinityLogs ?? [], meal)
   const pantryChips = sortByMealAffinity(pantry ?? [], affinity).slice(0, 8)
+  // Für den Footer-Button: gewählte Produkte + kcal-Schätzung der üblichen Portionen.
+  const selectedFoods = pantryChips.filter((f) => selectedIds.has(f.id))
+  const selectedKcal = selectedFoods.reduce((sum, f) => sum + usualPortionKcal(f), 0)
   const recentChips = sortByMealAffinity(
     (recents ?? []).filter((f) => !pantry?.some((p) => p.id === f.id)),
     affinity,
@@ -229,35 +262,69 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             </button>
 
             {/* Mein Vorrat: gegessen wird meist, was da ist — Tap öffnet das
-                Mengen-Sheet (wieviel? in Stück/Gramm/Dose …), Bestand zählt runter. */}
+                Mengen-Sheet (wieviel? in Stück/Gramm/Dose …), Bestand zählt runter.
+                „Mehrere wählen" schaltet auf Auswahl-Modus um: Taps togglen die
+                Produkte, der Button darunter loggt alle in EINEM Vorgang. */}
             {pantry && pantry.length > 0 && (
               <div className="mt-4">
-                <div className="mb-2 flex items-baseline justify-between">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
                   <p className="text-xs font-medium text-muted-foreground">{t('add.pantry')}</p>
-                  {pantry.length > 8 && (
+                  <div className="flex items-baseline gap-3">
                     <button
-                      onClick={() => go('/pantry')}
-                      className="focus-ring rounded-md text-xs font-medium text-primary"
+                      onClick={toggleMultiSelect}
+                      aria-pressed={multiSelect}
+                      className={cn(
+                        'focus-ring rounded-md text-xs font-medium',
+                        multiSelect ? 'text-primary' : 'text-muted-foreground',
+                      )}
                     >
-                      {t('capture.pantryAll', { count: pantry.length })}
+                      {t('capture.multiToggle')}
                     </button>
-                  )}
+                    {pantry.length > 8 && (
+                      <button
+                        onClick={() => go('/pantry')}
+                        className="focus-ring rounded-md text-xs font-medium text-primary"
+                      >
+                        {t('capture.pantryAll', { count: pantry.length })}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {pantryChips.map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => pickRecent(f)}
-                      aria-label={t('pantryPage.consume', { name: f.name })}
-                      className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
-                    >
-                      <ShoppingBasket size={14} className="text-primary" aria-hidden="true" /> {f.name}
-                      {effectivePantryQty(f) > 1 && (
-                        <span className="text-xs tabular-nums text-muted-foreground">×{effectivePantryQty(f)}</span>
-                      )}
-                    </button>
-                  ))}
+                  {pantryChips.map((f) => {
+                    const isSelected = multiSelect && selectedIds.has(f.id)
+                    return (
+                      <button
+                        key={f.id}
+                        onClick={() => (multiSelect ? toggleSelected(f.id) : pickRecent(f))}
+                        aria-label={multiSelect ? t('capture.multiPick', { name: f.name }) : t('pantryPage.consume', { name: f.name })}
+                        aria-pressed={multiSelect ? isSelected : undefined}
+                        className={cn(
+                          'focus-ring flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm',
+                          isSelected ? 'border-primary bg-primary-soft text-primary' : 'border-border bg-background',
+                        )}
+                      >
+                        {isSelected ? (
+                          <Check size={14} aria-hidden="true" />
+                        ) : (
+                          <ShoppingBasket size={14} className="text-primary" aria-hidden="true" />
+                        )}{' '}
+                        {f.name}
+                        {effectivePantryQty(f) > 1 && (
+                          <span className="text-xs tabular-nums text-muted-foreground">×{effectivePantryQty(f)}</span>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
+                {multiSelect && selectedFoods.length > 0 && (
+                  <button
+                    onClick={() => void logSelected(selectedFoods)}
+                    className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground"
+                  >
+                    {t('capture.multiLog', { count: selectedFoods.length, kcal: selectedKcal })}
+                  </button>
+                )}
               </div>
             )}
 
