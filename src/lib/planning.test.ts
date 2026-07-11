@@ -2,11 +2,13 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { createFood, setFoodPrice, setPantry } from '@/db/repo'
+import type { Goal } from '@/db/types'
 import { effectivePantryQty, lowPantryFoods, setPantryQty } from './pantryStock'
-import { sumsByDate } from './gamification'
+import { computeStats, sumsByDate } from './gamification'
 import { sumCost } from './money'
 import { addShoppingItem, openShoppingItems } from './shopping'
 import {
+  backfillFood,
   confirmPlanned,
   missingForPlan,
   missingToShoppingList,
@@ -148,6 +150,63 @@ describe('Wochenplaner (planned-Logs)', () => {
 
     // Zweiter Aufruf ist idempotent — alles schon gelistet.
     expect(await missingToShoppingList(DATE)).toEqual([])
+  })
+
+  it('backfillFood erzeugt einen echten Log (kein planned) für den Vortag', async () => {
+    const food = await createFood({ name: 'Reis', ...base })
+    const yesterday = '2026-07-10'
+
+    const { entry, pantryTook } = await backfillFood({
+      food,
+      date: yesterday,
+      meal: 'dinner',
+      amount: 100,
+      unit: 'g',
+    })
+    expect(pantryTook).toBe(false) // Reis liegt nicht im Vorrat
+
+    const stored = (await db.logs.get(entry.id))!
+    expect(stored.date).toBe(yesterday)
+    expect('planned' in stored).toBe(false) // Nachtrag ist gegessen, kein Plan
+    expect(sumsByDate([stored])[yesterday]!.kcal).toBe(200) // zählt sofort als Verzehr
+  })
+
+  it('nachgetragener Vortag zählt in der Streak wie normal Geloggtes', async () => {
+    const minGoal = (nutrient: string, target: number): Goal => ({
+      id: `g-${nutrient}`,
+      nutrient,
+      type: 'min',
+      target,
+      unit: 'g',
+      active: true,
+      createdBy: 'user',
+      updatedAt: 0,
+    })
+    const goals = { kcal: minGoal('kcal', 100), protein: minGoal('protein', 5) }
+
+    const food = await createFood({ name: 'Reis', ...base })
+    // Heute normal geloggt, der vergessene Vortag nachgetragen.
+    await backfillFood({ food, date: DATE, meal: 'lunch', amount: 100, unit: 'g' })
+    await backfillFood({ food, date: '2026-07-10', meal: 'dinner', amount: 100, unit: 'g' })
+
+    const stats = computeStats(await db.logs.toArray(), goals, DATE)
+    expect(stats.overallStreak).toBe(2) // Nachtrag schließt die Lücke
+    expect(stats.distinctDays).toBe(2)
+  })
+
+  it('backfillFood zieht wie confirmPlanned eine Vorrats-Packung ab', async () => {
+    const food = await createFood({ name: 'Nudeln', ...base })
+    await setPantryQty(food.id, 2)
+
+    const { pantryTook } = await backfillFood({
+      food,
+      date: '2026-07-10',
+      meal: 'dinner',
+      amount: 100,
+      unit: 'g',
+    })
+    expect(pantryTook).toBe(true) // Undo legt die Packung zurück
+    expect(effectivePantryQty((await db.foods.get(food.id))!)).toBe(1)
   })
 
   it('sumPlannedCost summiert nur geplante, nicht gelöschte Kosten-Snapshots', () => {
