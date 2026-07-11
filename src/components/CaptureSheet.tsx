@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, CookingPot, ScanBarcode, PencilLine, Check, History, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
+import { Camera, CookingPot, ScanBarcode, PencilLine, Check, History, ShoppingBasket, Utensils, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
 import { db } from '@/db'
 import { copyYesterday, pantryFoods, recentFoods, deleteLog, yesterdayMealSummary } from '@/db/repo'
@@ -12,6 +12,7 @@ import { logMany, undoLogMany, usualPortionKcal } from '@/lib/logMany'
 import { affinityStartKey, mealAffinityCounts, sortByMealAffinity } from '@/lib/mealAffinity'
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
+import type { ScanIntent } from '@/lib/scanRoute'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { useTodayKey } from '@/hooks/useTodayKey'
 import { cn } from '@/lib/utils'
@@ -28,11 +29,19 @@ interface Props {
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-/** Erfass-Quick-Sheet: „Essen fotografieren" öffnet direkt die Kamera → dann Vorschau. */
+/**
+ * Erfass-Quick-Sheet: EIN Hero-Button „Scannen" öffnet direkt die Kamera —
+ * die KI erkennt selbst, ob Gericht, Verpackung, Barcode oder Kassenbon
+ * (Unified Scan, mode=auto). Die einzige Nutzer-Unterscheidung ist der
+ * Intent-Toggle „Gegessen | Eingekauft".
+ */
 export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
+  // Die EINE Unterscheidung: nur gekauft oder auch konsumiert? Wandert als
+  // intent=eat|buy in die Capture-URL und steuert dort das Routing.
+  const [intent, setIntent] = useState<ScanIntent>('eat')
   // Das Sheet ist app-weit permanent gemountet (overlays.tsx) — der Tages-
   // Schlüssel muss deshalb reaktiv über Mitternacht sein (Muster Today.tsx),
   // sonst zeigen „wie gestern" und die Affinität morgens den Vortagsstand.
@@ -65,6 +74,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   useEffect(() => {
     if (open) {
       setMeal(defaultMeal())
+      setIntent('eat')
       setMultiSelect(false)
       setSelectedIds(new Set())
       setBusy(false)
@@ -73,7 +83,6 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
 
   const mealCamRef = useRef<HTMLInputElement>(null)
   const mealGalRef = useRef<HTMLInputElement>(null)
-  const labelCamRef = useRef<HTMLInputElement>(null)
 
   // Fokus-Management: beim Öffnen Fokus ins Sheet, beim Schließen zurück zum Auslöser.
   useEffect(() => {
@@ -114,15 +123,16 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
     navigate(path)
   }
 
-  // Aufgenommenes/gewähltes Bild verkleinern, übergeben und direkt zur Vorschau.
-  async function onFile(mode: 'meal' | 'label', e: React.ChangeEvent<HTMLInputElement>) {
+  // Aufgenommenes/gewähltes Bild verkleinern, übergeben und direkt zur
+  // Vorschau — immer Unified Scan (mode=auto), die KI ordnet selbst zu.
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     const img = await downscaleImage(file)
     setPendingImage(img)
     onClose()
-    navigate(`/capture?mode=${mode}&meal=${meal}`)
+    navigate(`/capture?mode=auto&intent=${intent}&meal=${meal}`)
   }
 
   // „Zuletzt benutzt" öffnet das Mengen-Sheet (Menge + Einheit wählbar: Stück,
@@ -224,8 +234,14 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
 
-            {/* Mahlzeit-Auswahl */}
-            <div className="mb-4 flex flex-wrap justify-center gap-2">
+            {/* Mahlzeit-Auswahl — bei „Eingekauft" irrelevant, deshalb nur
+                gedimmt (nicht entfernt: Layout bleibt stabil). */}
+            <div
+              className={cn(
+                'mb-4 flex flex-wrap justify-center gap-2 transition-opacity',
+                intent === 'buy' && 'opacity-40',
+              )}
+            >
               {MEALS.map((m) => (
                 <Chip key={m} label={t(`today.meals.${m}`)} selected={meal === m} onClick={() => setMeal(m)} />
               ))}
@@ -248,17 +264,40 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               </button>
             )}
 
-            {/* Hero: Foto (öffnet direkt die Kamera) */}
+            {/* Hero: EIN Scan für alles (öffnet direkt die Kamera) */}
             <button
               onClick={() => mealCamRef.current?.click()}
               className="focus-ring flex w-full items-center gap-4 rounded-lg bg-primary p-5 text-left text-primary-foreground"
             >
-              <Camera size={32} strokeWidth={2.2} />
+              <Camera size={32} strokeWidth={2.2} aria-hidden="true" />
               <span>
-                <span className="block text-lg font-semibold">{t('capture.take')}</span>
-                <span className="block text-sm opacity-90">{t('capture.sheetPhotoHint')}</span>
+                <span className="block text-lg font-semibold">{t('capture.scanHero')}</span>
+                <span className="block text-sm opacity-90">{t('capture.scanHeroHint')}</span>
               </span>
             </button>
+
+            {/* Die EINE Unterscheidung: Gegessen oder (nur) Eingekauft? */}
+            <div role="group" aria-label={t('capture.intentToggle')} className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-muted p-1">
+              {(
+                [
+                  { key: 'eat', icon: Utensils, label: t('capture.intentEat') },
+                  { key: 'buy', icon: ShoppingBasket, label: t('capture.intentBuy') },
+                ] as const
+              ).map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={intent === key}
+                  onClick={() => setIntent(key)}
+                  className={cn(
+                    'focus-ring flex min-h-[48px] items-center justify-center gap-2 rounded-sm text-sm font-medium',
+                    intent === key ? 'bg-card shadow-sm' : 'text-muted-foreground',
+                  )}
+                >
+                  <Icon size={18} aria-hidden="true" /> {label}
+                </button>
+              ))}
+            </div>
 
             {/* Aus Galerie (falls kein Live-Foto) */}
             <button
@@ -266,22 +305,6 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
               className="focus-ring mt-2 flex w-full items-center justify-center gap-2 rounded-md py-1.5 text-sm text-muted-foreground"
             >
               <ImageIcon size={16} /> {t('capture.choose')}
-            </button>
-
-            {/* Sekundär: EIN Produkt-Scan (Nährwerttabelle ODER Barcode — die KI
-                liest beides vom Foto) + eigene Rezepte. */}
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <SheetTile icon={ScanBarcode} label={t('add.label')} onClick={() => labelCamRef.current?.click()} />
-              <SheetTile icon={CookingPot} label={t('recipes.tile')} onClick={() => go('/recipes')} />
-            </div>
-
-            {/* Dezenter Einstieg: ganzer Einkauf per Kassenbon-Foto → Vorrat
-                (funktioniert überall — kein nativer Barcode-Scanner nötig). */}
-            <button
-              onClick={() => go('/capture?mode=receipt')}
-              className="focus-ring mt-3 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md text-sm text-muted-foreground"
-            >
-              <ShoppingBasket size={16} aria-hidden="true" /> {t('capture.pantryEntry')}
             </button>
 
             {/* Mein Vorrat: gegessen wird meist, was da ist — Tap öffnet das
@@ -379,12 +402,28 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             >
               <PencilLine size={16} /> {t('add.manual')}
             </button>
+
+            {/* Kein Scan: eigene Rezepte. Und für Barcode-Profis der schnellere
+                Live-Scanner (bleibt auch über die Einkauf-Seite erreichbar). */}
+            <div className="mt-1 flex items-center justify-center gap-2">
+              <button
+                onClick={() => go('/recipes')}
+                className="focus-ring flex min-h-[48px] items-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground"
+              >
+                <CookingPot size={16} aria-hidden="true" /> {t('recipes.tile')}
+              </button>
+              <button
+                onClick={() => go(intent === 'buy' ? '/barcode?pantry=1' : '/barcode')}
+                className="focus-ring flex min-h-[48px] items-center gap-1.5 rounded-md px-3 text-sm text-muted-foreground"
+              >
+                <ScanBarcode size={16} aria-hidden="true" /> {t('capture.barcodeTitle')}
+              </button>
+            </div>
           </motion.div>
 
           {/* Versteckte Datei-Eingaben: Kamera (capture) + Galerie */}
-          <input ref={mealCamRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onFile('meal', e)} />
-          <input ref={mealGalRef} type="file" accept="image/*" hidden onChange={(e) => void onFile('meal', e)} />
-          <input ref={labelCamRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onFile('label', e)} />
+          <input ref={mealCamRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => void onFile(e)} />
+          <input ref={mealGalRef} type="file" accept="image/*" hidden onChange={(e) => void onFile(e)} />
         </>
       )}
     </AnimatePresence>
@@ -407,14 +446,5 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
       }}
     />
     </>
-  )
-}
-
-function SheetTile({ icon: Icon, label, onClick }: { icon: typeof Camera; label: string; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="focus-ring flex flex-col items-center justify-center gap-2 rounded-lg border border-border bg-background p-4">
-      <Icon size={24} className="text-primary" />
-      <span className="text-sm font-medium">{label}</span>
-    </button>
   )
 }

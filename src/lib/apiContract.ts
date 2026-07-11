@@ -19,9 +19,16 @@ import { z } from 'zod'
  * v1.3 (Kassenbon-Scan, nur additiv):
  * - /api/analyze bekommt den vierten Modus 'receipt' — er antwortet mit
  *   ReceiptResultSchema (normalisierte Bon-Positionen) statt AnalyzeResultSchema.
+ *
+ * v1.6 (Unified Scan, nur additiv):
+ * - /api/analyze bekommt den Modus 'auto': das Modell klassifiziert das Bild
+ *   ZUERST (Gericht | Verpackung/Nährwerttabelle | reiner Strichcode |
+ *   Kassenbon) und antwortet mit AutoAnalyzeResultSchema — dem jeweils
+ *   BESTEHENDEN Modus-Ergebnis plus Pflichtfeld `kind`. Kein neues
+ *   Payload-Format; alle bisherigen Modi bleiben unverändert.
  */
 
-export const API_CONTRACT_VERSION = '1.3'
+export const API_CONTRACT_VERSION = '1.6'
 
 // ---------------------------------------------------------------------------
 // Fehler-Envelope (gilt für ALLE Nicht-200-Antworten beider Endpunkte)
@@ -75,8 +82,10 @@ export const AnalyzeRequestSchema = z
      * v1.3: 'receipt' (Kassenbon) antwortet mit ReceiptResultSchema, der Rest
      * mit AnalyzeResultSchema. v1.5: 'estimate' schätzt typische Nährwerte
      * NUR aus dem Namen im `hint` — der einzige Modus ohne Bild.
+     * v1.6: 'auto' (Unified Scan) klassifiziert das Bild selbst und antwortet
+     * mit AutoAnalyzeResultSchema (Pflichtfeld `kind`).
      */
-    mode: z.enum(['meal', 'label', 'portion', 'receipt', 'estimate']),
+    mode: z.enum(['meal', 'label', 'portion', 'receipt', 'estimate', 'auto']),
     /** Data-URL oder rohes Base64 (JPEG angenommen, wenn ohne Präfix). */
     imageBase64: z.string().min(1).optional(),
     hint: z.string().max(280).optional(),
@@ -164,6 +173,33 @@ export const ReceiptResultSchema = z.object({
 })
 export type ReceiptItem = z.infer<typeof ReceiptItemSchema>
 export type ReceiptResult = z.infer<typeof ReceiptResultSchema>
+
+// ---------------------------------------------------------------------------
+// /api/analyze mode 'auto' — Unified Scan (v1.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bild-Klassen des Unified Scan. Bei mode 'auto' MUSS der Server `kind`
+ * liefern; die restliche Payload ist exakt die bestehende Result-Form:
+ * - 'meal'    → AnalyzeResultSchema (Gericht/Mahlzeit, wie mode 'meal')
+ * - 'label'   → AnalyzeResultSchema (Verpackung/Nährwerttabelle, wie mode
+ *               'label'; sichtbarer Strichcode zusätzlich im barcode-Feld, v1.4)
+ * - 'barcode' → AnalyzeResultSchema (Bild zeigt im Wesentlichen nur einen
+ *               Strichcode — Barcode-vom-Foto-Flow aus v1.4)
+ * - 'receipt' → ReceiptResultSchema (Kassenbon/Einkaufszettel, wie mode 'receipt')
+ */
+export const AUTO_SCAN_KINDS = ['meal', 'label', 'barcode', 'receipt'] as const
+export const AutoScanKindSchema = z.enum(AUTO_SCAN_KINDS)
+export type AutoScanKind = z.infer<typeof AutoScanKindSchema>
+
+/** Antwort des auto-Modus: bestehende Result-Formen, diskriminiert über `kind`. */
+export const AutoAnalyzeResultSchema = z.discriminatedUnion('kind', [
+  AnalyzeResultSchema.extend({ kind: z.literal('meal') }),
+  AnalyzeResultSchema.extend({ kind: z.literal('label') }),
+  AnalyzeResultSchema.extend({ kind: z.literal('barcode') }),
+  ReceiptResultSchema.extend({ kind: z.literal('receipt') }),
+])
+export type AutoAnalyzeResult = z.infer<typeof AutoAnalyzeResultSchema>
 
 // ---------------------------------------------------------------------------
 // /api/coach — Coach-Chat mit Token-Streaming (PLAN.md §9.3)

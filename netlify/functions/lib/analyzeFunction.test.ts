@@ -79,6 +79,37 @@ describe('analyze.mts (Function-Verhalten, Vertrag v1.1 + Paket 3)', () => {
     })
   })
 
+  it('auto-Modus (Unified Scan v1.6): jedes kind kommt validiert beim Client an', async () => {
+    const perKind: Record<string, string> = {
+      meal: JSON.stringify({ kind: 'meal', items: [{ name: 'Linsensuppe', amount: 350, unit: 'ml', confidence: 0.7, per100: { kcal: 60, protein: 4, carbs: 8, fat: 1 } }], questions: ['Mit Sahne?'] }),
+      label: JSON.stringify({ kind: 'label', items: [{ name: 'Skyr', amount: 150, unit: 'g', per100: { kcal: 60, protein: 10, carbs: 4, fat: 0.2 } }], barcode: '4066 600 203704' }),
+      barcode: JSON.stringify({ kind: 'barcode', items: [{ name: 'Unbekanntes Produkt', amount: 100, unit: 'g', per100: { kcal: 0, protein: 0, carbs: 0, fat: 0 } }], barcode: '40123455' }),
+      receipt: JSON.stringify({ kind: 'receipt', items: [{ name: ' H-Milch 3,5 % ', quantity: 2.0, price: 2.379999 }] }),
+    }
+    for (const [kind, content] of Object.entries(perKind)) {
+      vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(orResponse(content))))
+      const handler = await freshHandler()
+      const res = await handler(analyzeRequest({ mode: 'auto', imageBase64: 'QUJD' }))
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { kind: string; items: unknown[]; barcode?: string }
+      expect(body.kind).toBe(kind)
+      expect(body.items).toHaveLength(1)
+      // Sanitizing greift auch im auto-Modus (Barcode-Normalisierung, Bon-Clamps).
+      if (kind === 'label') expect(body.barcode).toBe('4066600203704')
+      if (kind === 'receipt') expect(body.items[0]).toEqual({ name: 'H-Milch 3,5 %', quantity: 2, price: 2.38 })
+    }
+  })
+
+  it('auto-Modus ohne kind in der Modellantwort → Retry, dann 502 UPSTREAM_ERROR', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(orResponse(VALID_RESULT))) // gültig, aber ohne kind
+    vi.stubGlobal('fetch', fetchMock)
+    const handler = await freshHandler()
+    const res = await handler(analyzeRequest({ mode: 'auto', imageBase64: 'QUJD' }))
+    expect(res.status).toBe(502)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(ApiErrorSchema.parse(await res.json()).code).toBe('UPSTREAM_ERROR')
+  })
+
   it('405 bei falscher Methode — Envelope mit INVALID_REQUEST', async () => {
     const handler = await freshHandler()
     const res = await handler(new Request('http://localhost/api/analyze', { method: 'GET' }))

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { AnalyzeResultSchema, ApiErrorSchema, ReceiptResultSchema } from '../../../src/lib/apiContract'
+import { AnalyzeResultSchema, ApiErrorSchema, AutoAnalyzeResultSchema, ReceiptResultSchema } from '../../../src/lib/apiContract'
 import {
   ANALYZE_ERROR_TEXT,
   analyzeErrorResponse,
+  clampAuto,
   clampBarcode,
   clampQuestions,
   clampReceipt,
@@ -183,6 +184,51 @@ describe('analyzeShared (Helfer der Analyze-Function, Vertrag §1/§2)', () => {
       const raw = { items: [], notes: 'x' }
       expect(clampBarcode(raw)).toBe(raw)
       expect(clampBarcode('kein Objekt')).toBe('kein Objekt')
+    })
+  })
+
+  describe('clampAuto (Unified Scan v1.6)', () => {
+    const item = {
+      name: 'Skyr',
+      amount: 150,
+      unit: 'g',
+      per100: { kcal: 60, protein: 10, carbs: 4, fat: 0.2 },
+    }
+
+    it('kind receipt → clampReceipt läuft, kind bleibt erhalten', () => {
+      const clamped = clampAuto({
+        kind: 'receipt',
+        items: [
+          { name: ' H-Milch 3,5 % ', quantity: 2.0, price: 2.379999 },
+          { name: '   ' }, // ohne Namen → fliegt raus
+        ],
+      })
+      expect(clamped).toEqual({
+        kind: 'receipt',
+        items: [{ name: 'H-Milch 3,5 %', quantity: 2, price: 2.38 }],
+      })
+      expect(AutoAnalyzeResultSchema.safeParse(clamped).success).toBe(true)
+    })
+
+    it('kind meal/label/barcode → Barcode- und Questions-Sanitizing wie bisher', () => {
+      const clamped = clampAuto({
+        kind: 'label',
+        items: [item],
+        barcode: '4066 600-203704',
+        questions: ['A?', 'B?', 'C?'], // eine zu viel → gekappt
+      }) as { barcode?: string; questions?: string[] }
+      expect(clamped.barcode).toBe('4066600203704')
+      expect(clamped.questions).toEqual(['A?', 'B?'])
+      expect(AutoAnalyzeResultSchema.safeParse({ ...clamped, kind: 'label' }).success).toBe(true)
+    })
+
+    it('fehlendes/fremdes kind bleibt unverändert → zod lehnt ab (Retry/Envelope)', () => {
+      const noKind = clampAuto({ items: [item] })
+      expect(AutoAnalyzeResultSchema.safeParse(noKind).success).toBe(false)
+      const wrongKind = clampAuto({ kind: 'portion', items: [item] })
+      expect(AutoAnalyzeResultSchema.safeParse(wrongKind).success).toBe(false)
+      expect(clampAuto(null)).toBe(null)
+      expect(clampAuto('kein Objekt')).toBe('kein Objekt')
     })
   })
 })
