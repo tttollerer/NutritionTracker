@@ -12,6 +12,7 @@ import { useOverlays } from '@/lib/overlays-context'
 import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
 import { addFoodPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
+import { clearScanRun, incrementScanRun } from '@/lib/scanRun'
 import type { Unit } from '@/db/types'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -179,6 +180,7 @@ export function Review() {
         if (items.length === 1 && productPhoto) await addFoodPhoto(food.id, productPhoto)
       }
       clearReview()
+      clearScanRun() // Loggen als Mahlzeit beendet einen laufenden Einräum-Scan-Loop
       navigate('/')
     } finally {
       setBusy(false)
@@ -207,7 +209,10 @@ export function Review() {
       showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
         await Promise.all(foods.map((f) => undoPantryAdd(f.id)))
       })
-      navigate('/add')
+      // Scan-Loop beim Einräumen: Zähler hochsetzen und direkt zurück zur
+      // Kamera — das nächste Produkt ist nur einen Foto-Tap entfernt.
+      incrementScanRun(foods.length)
+      navigate('/capture?mode=label&batch=1')
     } finally {
       setBusy(false)
     }

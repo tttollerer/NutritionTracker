@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -11,6 +11,7 @@ import { downscaleImage } from '@/lib/image'
 import { setReview } from '@/lib/reviewStore'
 import { setReceiptDraft } from '@/lib/receipt'
 import { peekPendingImage, clearPendingImage } from '@/lib/captureHandoff'
+import { clearScanRun, readScanRun, startScanRun } from '@/lib/scanRun'
 import { getSettings, updateSettings } from '@/db/repo'
 import { useSpeechRecognition } from '@/lib/speech'
 import type { Meal } from '@/db/types'
@@ -27,6 +28,9 @@ export function Capture() {
   const [params] = useSearchParams()
   const mode = (params.get('mode') as AnalyzeMode) || 'meal'
   const meal = (params.get('meal') as Meal) || defaultMeal()
+  // Scan-Loop beim Einräumen (Review „Nur in den Vorrat" → zurück hierher):
+  // nur mit batch=1 aktiv — der normale Einzel-Scan bleibt unverändert.
+  const batch = params.get('batch') === '1'
 
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
@@ -37,7 +41,21 @@ export function Capture() {
   // (peek statt take — die Seiten-Transition mountet diese Seite kurz doppelt).
   const [preview, setPreview] = useState<string | null>(() => peekPendingImage())
   const [hint, setHint] = useState(() => params.get('hint') ?? '')
+  const [runCount, setRunCount] = useState<number | null>(() => (batch ? readScanRun() : null))
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
+
+  // Batch-Runde beim Betreten sicherstellen und beim echten Verlassen beenden.
+  // Der Transition-Doppelmount (siehe captureHandoff) und der Weg zur Analyse
+  // (/review) zählen NICHT als Verlassen — dort läuft die Runde weiter.
+  useEffect(() => {
+    if (!batch) return
+    startScanRun()
+    setRunCount(readScanRun())
+    return () => {
+      const path = window.location.pathname
+      if (path !== '/capture' && path !== '/review') clearScanRun()
+    }
+  }, [batch])
 
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
   const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
@@ -128,11 +146,26 @@ export function Capture() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-2">
-        <button onClick={() => { clearPendingImage(); navigate(-1) }} aria-label={t('common.back')} className="text-muted-foreground">
+        {/* Zurück beendet die Batch-Runde explizit — auch wenn der History-Eintrag /review wäre. */}
+        <button onClick={() => { clearPendingImage(); if (batch) clearScanRun(); navigate(-1) }} aria-label={t('common.back')} className="text-muted-foreground">
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold">{title}</h1>
       </header>
+
+      {/* Batch-Zähler des Einräum-Loops: Tap auf „Fertig" beendet die Runde. */}
+      {batch && runCount != null && (
+        <button
+          type="button"
+          onClick={() => { clearScanRun(); navigate('/pantry') }}
+          aria-label={t('capture.batchDoneAria', { count: runCount })}
+          className="focus-ring inline-flex min-h-[44px] items-center gap-1.5 rounded-full bg-primary-soft px-4 text-sm font-semibold text-primary"
+        >
+          {t('capture.batchCount', { count: runCount })}
+          <span aria-hidden="true">·</span>
+          {t('capture.batchDone')}
+        </button>
+      )}
 
       {busy ? (
         <div className="flex flex-col items-center gap-4 pt-16 text-center">

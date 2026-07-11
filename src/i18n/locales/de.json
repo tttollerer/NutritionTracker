@@ -524,6 +524,10 @@
     "pantryHint": "Scanne deinen Einkauf — alles landet im Vorrat, ohne geloggt zu werden.",
     "pantryEntry": "Einkauf scannen → Vorrat",
     "pantrySaved": "Im Vorrat: {{name}}",
+    "batchCount_one": "1 eingeräumt",
+    "batchCount_other": "{{count}} eingeräumt",
+    "batchDone": "Fertig",
+    "batchDoneAria": "Einräumen beenden ({{count}} eingeräumt) und zum Vorrat wechseln",
     "priceSave": "Preis speichern",
     "priceSkip": "Ohne Preis"
   },
