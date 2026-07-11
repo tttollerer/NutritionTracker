@@ -1,7 +1,7 @@
 interface PageHeaderProps {
   title: string
-  /** Optionale Unterzeile (z. B. Datum „Do, 10. Juli" oder Wochenbereich). */
-  subtitle?: string
+  /** Optionale Unterzeile (z. B. Datum „Do, 10. Juli" oder ein antippbarer Wochenbereich). */
+  subtitle?: React.ReactNode
   children?: React.ReactNode
 }
 

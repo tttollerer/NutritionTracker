@@ -164,7 +164,21 @@
     "plannedCost": "geplant: ~{{cost}}",
     "avgKcal": "Ø kcal",
     "mealsCount": "Mahlzeiten",
-    "cost": "Kosten"
+    "cost": "Kosten",
+    "backfill": "Nachtragen",
+    "backfillMeal": "Mahlzeit nachtragen",
+    "backfillPick": "{{name}} nachtragen",
+    "backfilled": "{{name}} nachgetragen"
+  },
+  "calendar": {
+    "title": "Kalender",
+    "open": "Kalender öffnen",
+    "prevMonth": "Vorheriger Monat",
+    "nextMonth": "Nächster Monat",
+    "dayLabel_one": "{{date}}, 1 Eintrag",
+    "dayLabel_other": "{{date}}, {{count}} Einträge",
+    "dayPlannedSuffix_one": ", 1 geplant",
+    "dayPlannedSuffix_other": ", {{count}} geplant"
   },
   "pantryPage": {
     "title": "Einkauf",

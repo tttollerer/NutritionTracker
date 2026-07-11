@@ -1,7 +1,7 @@
 import { v4 as uuid } from 'uuid'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Meal, ShoppingItem, Unit } from '@/db/types'
-import { computeCost, computeLogValues } from '@/db/repo'
+import { computeCost, computeLogValues, logFood } from '@/db/repo'
 import { decrementPantryOnLog } from './pantryStock'
 import { addShoppingItem, openShoppingItems } from './shopping'
 
@@ -74,6 +74,30 @@ export async function confirmPlanned(logId: string): Promise<ConfirmPlannedResul
     const pantryTook = await decrementPantryOnLog(entry.foodId)
     return { entry: confirmed, pantryTook }
   })
+}
+
+export interface BackfillResult {
+  entry: LogEntry
+  /** true, wenn dabei eine Packung vom Vorrat abging (Undo legt sie zurück). */
+  pantryTook: boolean
+}
+
+/**
+ * Vergessene Mahlzeit für einen VERGANGENEN Tag nachtragen: erzeugt sofort
+ * einen echten Log (kein planned — Vergangenes ist gegessen, kein Plan) und
+ * zieht wie confirmPlanned/der direkte Verzehr (Add/Pantry) eine Packung vom
+ * Vorrat ab. Gleiche Undo-Semantik wie dort: Log löschen + ggf. Packung zurück.
+ */
+export async function backfillFood(args: {
+  food: FoodItem
+  date: string
+  meal: Meal
+  amount: number
+  unit: Unit
+}): Promise<BackfillResult> {
+  const entry = await logFood(args)
+  const pantryTook = await decrementPantryOnLog(args.food.id)
+  return { entry, pantryTook }
 }
 
 /** Geplante (nicht gelöschte) Einträge eines Tages, in Mahlzeiten-Reihenfolge stabil. */

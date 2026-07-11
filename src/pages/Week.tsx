@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Meal, Photo } from '@/db/types'
 import { computeLogValues, deleteLog, getActiveGoalsMap, getSettings, pantryFoods, restoreLog } from '@/db/repo'
@@ -11,18 +11,21 @@ import { budgetProgress } from '@/lib/budget'
 import { formatEuro, sumCost } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
 import {
+  backfillFood,
   confirmPlanned,
   missingForPlan,
   missingToShoppingList,
   planFood,
   sumPlannedCost,
 } from '@/lib/planning'
+import { weekOffsetOf } from '@/lib/calendar'
 import { incrementPantry } from '@/lib/pantryStock'
 import { removeShoppingItem } from '@/lib/shopping'
 import { describePortion } from '@/lib/portion'
 import { cn, todayKey } from '@/lib/utils'
 import { useTodayKey } from '@/hooks/useTodayKey'
 import { useOverlays } from '@/lib/overlays-context'
+import { CalendarSheet } from '@/components/CalendarSheet'
 import { EditLogSheet } from '@/components/EditLogSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { WeekBarsCard } from '@/components/WeekBarsCard'
@@ -58,8 +61,15 @@ export function Week() {
   const today = useTodayKey()
   // 0 = aktuelle Woche, -1 = vorherige, … (Chevrons im Header).
   const [weekOffset, setWeekOffset] = useState(0)
-  // Zukunfts-Tag, für den gerade der Vorrats-Picker (PlanSheet) offen ist.
+  // Tag, für den gerade der Vorrats-Picker (PlanSheet) offen ist — Zukunft
+  // plant (planFood), Vergangenheit trägt nach (backfillFood, echter Log).
   const [planFor, setPlanFor] = useState<string | null>(null)
+  // Monatskalender (Bottom-Sheet) — geöffnet über den Zeitraum im Kopf.
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  // Aus dem Kalender gewählter Tag: kurz hervorheben (dezenter Ring) …
+  const [highlightDay, setHighlightDay] = useState<string | null>(null)
+  // … und nach dem Wochenwechsel dorthin fokussieren (statt heute/Montag).
+  const pendingFocusRef = useRef<string | null>(null)
   // Echter Log-Eintrag im Editor (Menge/Einheit/Mahlzeit) — wie auf „Heute".
   const [editing, setEditing] = useState<LogEntry | null>(null)
 
@@ -134,11 +144,26 @@ export function Week() {
     goals !== undefined &&
     settings !== undefined
   // Beim Wochenwechsel/Laden Fokus setzen (ohne Animation ans Ziel springen).
+  // Ein aus dem Kalender gewählter Tag (pendingFocusRef) gewinnt gegen den
+  // Standard (heute/Montag) — der Ref löst sich nach einmaligem Verbrauch.
   useEffect(() => {
-    setActiveIdx(initialIdx)
+    const pendingIdx = pendingFocusRef.current
+      ? days.findIndex((d) => d.key === pendingFocusRef.current)
+      : -1
+    if (pendingIdx >= 0) pendingFocusRef.current = null
+    const target = pendingIdx >= 0 ? pendingIdx : initialIdx
+    setActiveIdx(target)
     const el = scrollRef.current
-    if (el) el.scrollLeft = initialIdx * el.clientWidth
+    if (el) el.scrollLeft = target * el.clientWidth
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- days ist durch firstKey abgedeckt
   }, [initialIdx, firstKey, ready])
+
+  // Kalender-Highlight nach kurzer Zeit wieder lösen (dezenter, kein Dauerzustand).
+  useEffect(() => {
+    if (!highlightDay) return
+    const timer = setTimeout(() => setHighlightDay(null), 2500)
+    return () => clearTimeout(timer)
+  }, [highlightDay])
 
   // Scroll-Position → aktiver Chip (rAF-gedrosselt wie im Prototyp).
   const rafRef = useRef<number | null>(null)
@@ -163,6 +188,22 @@ export function Week() {
     const el = scrollRef.current
     if (el) el.scrollTo({ left: idx * el.clientWidth, behavior: 'smooth' })
     setActiveIdx(idx)
+  }
+
+  // Tap im Monatskalender: Sheet zu, zur passenden Woche springen und den
+  // Tag fokussieren + kurz hervorheben. Innerhalb der sichtbaren Woche wird
+  // direkt gescrollt; sonst übernimmt der Fokus-Effekt nach dem Wochenwechsel.
+  function handleCalendarSelect(key: string) {
+    setCalendarOpen(false)
+    setHighlightDay(key)
+    const offset = weekOffsetOf(key, today)
+    if (offset === weekOffset) {
+      const idx = days.findIndex((d) => d.key === key)
+      if (idx >= 0) jumpTo(idx)
+    } else {
+      pendingFocusRef.current = key
+      setWeekOffset(offset)
+    }
   }
 
   if (
@@ -226,6 +267,15 @@ export function Week() {
     showUndo(t('plan.plannedFor', { name: food.name }), () => deleteLog(entry.id))
   }
 
+  // Nachgetragener (echter) Log für einen vergangenen Tag — Undo entfernt ihn
+  // und legt die ggf. abgegangene Vorrats-Packung zurück (Muster Add.quickLog).
+  function handleBackfilled(entry: LogEntry, food: FoodItem, pantryTook: boolean) {
+    showUndo(t('week.backfilled', { name: food.name }), async () => {
+      await deleteLog(entry.id)
+      if (pantryTook) await incrementPantry(food.id)
+    })
+  }
+
   // Fehlende Zutaten auf die Einkaufsliste; Undo nimmt genau diese wieder runter.
   async function addMissingToList(date: string) {
     const created = await missingToShoppingList(date)
@@ -246,7 +296,21 @@ export function Week() {
 
   return (
     <div className="flex flex-col">
-      <PageHeader title={t('week.title')} subtitle={range}>
+      <PageHeader
+        title={t('week.title')}
+        subtitle={
+          // Antippbarer Zeitraum: öffnet den Monatskalender (Rückblick + Nachtragen).
+          <button
+            type="button"
+            onClick={() => setCalendarOpen(true)}
+            aria-label={t('calendar.open')}
+            className="focus-ring -ml-1 -my-2 inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-1"
+          >
+            <CalendarDays size={14} aria-hidden="true" />
+            {range}
+          </button>
+        }
+      >
         <ProfileAvatar />
         <button
           type="button"
@@ -301,7 +365,13 @@ export function Week() {
               aria-label={fmtDay.format(d.date)}
               className="w-full shrink-0 snap-start space-y-3 px-4 pb-4"
             >
-              <div className="flex items-baseline justify-between">
+              <div
+                className={cn(
+                  'flex items-baseline justify-between rounded-md transition-shadow duration-300',
+                  // Dezenter Ring: der aus dem Kalender angesprungene Tag.
+                  highlightDay === d.key && 'ring-2 ring-primary ring-offset-4 ring-offset-background',
+                )}
+              >
                 <h2 className="font-bold">
                   {fmtWeekdayLong.format(d.date)}, {fmtDay.format(d.date)}
                   {isToday && (
@@ -347,6 +417,10 @@ export function Week() {
                     <Button onClick={() => setPlanFor(d.key)}>{t('week.planFromPantry')}</Button>
                   )}
                   {isToday && <Button onClick={openCapture}>{t('week.logNow')}</Button>}
+                  {!isFuture && !isToday && (
+                    // Vergangenheit: Vergessenes direkt nachtragen (echter Log, kein Plan).
+                    <Button onClick={() => setPlanFor(d.key)}>{t('week.backfill')}</Button>
+                  )}
                 </Card>
               ) : (
                 <>
@@ -393,14 +467,14 @@ export function Week() {
                       </div>
                     )
                   })}
-                  {isFuture && (
-                    // Weitere Mahlzeit für diesen Tag vorplanen.
+                  {(isFuture || d.key < today) && (
+                    // Zukunft: weitere Mahlzeit vorplanen — Vergangenheit: nachtragen.
                     <button
                       type="button"
                       onClick={() => setPlanFor(d.key)}
                       className="focus-ring flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-input text-sm font-medium text-muted-foreground"
                     >
-                      <Plus size={16} /> {t('week.planFromPantry')}
+                      <Plus size={16} /> {t(isFuture ? 'week.planFromPantry' : 'week.backfill')}
                     </button>
                   )}
                   {dayPlanned.length > 0 && (
@@ -474,8 +548,23 @@ export function Week() {
         )}
       </Card>
 
-      {/* Vorrats-Picker fürs Vorplanen (Bottom-Sheet, Muster PortionSheet). */}
-      <PlanSheet date={planFor} onClose={() => setPlanFor(null)} onPlanned={handlePlanned} />
+      {/* Vorrats-Picker: Zukunft plant vor, Vergangenheit trägt nach (echter Log). */}
+      <PlanSheet
+        date={planFor}
+        backfill={planFor !== null && planFor < today}
+        onClose={() => setPlanFor(null)}
+        onPlanned={handlePlanned}
+        onBackfilled={handleBackfilled}
+      />
+
+      {/* Monatskalender — Rückblick über die Woche hinaus + Sprung zum Tag. */}
+      <CalendarSheet
+        open={calendarOpen}
+        focusDate={days[activeIdx]?.key ?? days[0].key}
+        today={today}
+        onSelect={handleCalendarSelect}
+        onClose={() => setCalendarOpen(false)}
+      />
 
       {/* Log-Editor für echte Einträge — gleiches Sheet wie auf „Heute". */}
       <EditLogSheet
@@ -544,18 +633,24 @@ function PlannedRow({
 }
 
 /**
- * Bottom-Sheet „Aus Vorrat planen" (Muster PortionSheet): Mahlzeit wählen,
- * dann ein Vorrats-Lebensmittel antippen → planFood für den Tag mit der
- * üblichen Portion (Undo-Toast übernimmt der Aufrufer via onPlanned).
+ * Bottom-Sheet „Aus Vorrat planen"/„Mahlzeit nachtragen" (Muster PortionSheet):
+ * Mahlzeit wählen, dann ein Vorrats-Lebensmittel antippen. Zukunft/heute →
+ * planFood (planned-Log), Vergangenheit (`backfill`) → backfillFood (echter
+ * Log, Vorrats-Abzug wie beim normalen Loggen). Undo-Toast beim Aufrufer.
  */
 function PlanSheet({
   date,
+  backfill,
   onClose,
   onPlanned,
+  onBackfilled,
 }: {
   date: string | null
+  /** true, wenn `date` in der Vergangenheit liegt — Nachtragen statt Planen. */
+  backfill: boolean
   onClose: () => void
   onPlanned: (entry: LogEntry, food: FoodItem) => void
+  onBackfilled: (entry: LogEntry, food: FoodItem, pantryTook: boolean) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -576,10 +671,17 @@ function PlanSheet({
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-md rounded-t-3xl bg-card p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-lg"
             role="dialog"
-            aria-label={t('plan.planMeal')}
+            aria-label={t(backfill ? 'week.backfillMeal' : 'plan.planMeal')}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
-            <PlanForm key={date} date={date} onClose={onClose} onPlanned={onPlanned} />
+            <PlanForm
+              key={date}
+              date={date}
+              backfill={backfill}
+              onClose={onClose}
+              onPlanned={onPlanned}
+              onBackfilled={onBackfilled}
+            />
           </motion.div>
         </>
       )}
@@ -589,12 +691,16 @@ function PlanSheet({
 
 function PlanForm({
   date,
+  backfill,
   onClose,
   onPlanned,
+  onBackfilled,
 }: {
   date: string
+  backfill: boolean
   onClose: () => void
   onPlanned: (entry: LogEntry, food: FoodItem) => void
+  onBackfilled: (entry: LogEntry, food: FoodItem, pantryTook: boolean) => void
 }) {
   const { t, i18n } = useTranslation()
   const navigate = useNavigate()
@@ -607,20 +713,21 @@ function PlanForm({
     month: 'long',
   })
 
-  // Ein Tipp plant die übliche Portion (defaultPortion, sonst 100 g/ml).
+  // Ein Tipp übernimmt die übliche Portion (defaultPortion, sonst 100 g/ml):
+  // Zukunft/heute wird geplant, Vergangenheit direkt als gegessen nachgetragen.
   async function pick(food: FoodItem) {
     if (saving) return
     setSaving(true)
     try {
       const dp = food.defaultPortion
-      const entry = await planFood({
-        food,
-        date,
-        meal,
-        amount: dp?.amount ?? 100,
-        unit: dp?.unit ?? food.per,
-      })
-      onPlanned(entry, food)
+      const args = { food, date, meal, amount: dp?.amount ?? 100, unit: dp?.unit ?? food.per }
+      if (backfill) {
+        const { entry, pantryTook } = await backfillFood(args)
+        onBackfilled(entry, food, pantryTook)
+      } else {
+        const entry = await planFood(args)
+        onPlanned(entry, food)
+      }
       onClose()
     } finally {
       setSaving(false)
@@ -630,7 +737,9 @@ function PlanForm({
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">{t('plan.planMeal')}</h2>
+        <h2 className="text-lg font-semibold">
+          {t(backfill ? 'week.backfillMeal' : 'plan.planMeal')}
+        </h2>
         <p className="text-sm text-muted-foreground">
           {fmtDate.format(new Date(`${date}T12:00:00`))}
         </p>
@@ -668,7 +777,7 @@ function PlanForm({
                   type="button"
                   onClick={() => void pick(f)}
                   disabled={saving}
-                  aria-label={t('plan.pickFood', { name: f.name })}
+                  aria-label={t(backfill ? 'week.backfillPick' : 'plan.pickFood', { name: f.name })}
                   className="focus-ring flex min-h-[48px] w-full items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left disabled:opacity-50"
                 >
                   <span className="min-w-0 flex-1">
