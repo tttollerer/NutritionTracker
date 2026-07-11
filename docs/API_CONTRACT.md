@@ -1,4 +1,4 @@
-# NutriScan API-Vertrag v1.3
+# NutriScan API-Vertrag v1.6
 
 Vertrag zwischen Client (`src/`) und Netlify Functions (`netlify/functions/analyze.mts`,
 `netlify/functions/coach.mts`). Bezug: [PLAN.md](../PLAN.md) §6/§9.3,
@@ -14,7 +14,10 @@ Dokument + apiContract.ts der Soll-Zustand**, der Code der Ist-Zustand.
 | v1.0 | Ist-Stand im Code (Stand Audit 2026-07-05) |
 | v1.1 | Error-Envelope, `memory` nullish, Stream-Fehler-Event, serverseitig validierte Suggestions, optionales Coach-Foto |
 | v1.2 | Nutrient-Enum für Coach-Ziele, optionale Challenge-`rule` für die Auto-Auswertung (Erwartungs-Audit Befund 4 + 8), nur additiv zu v1.1 |
-| v1.3 | Dieser Vertrag — vierter analyze-Modus `receipt` (Kassenbon-Scan) mit eigenem Antwortschema `ReceiptResultSchema`, nur additiv zu v1.2 |
+| v1.3 | Vierter analyze-Modus `receipt` (Kassenbon-Scan) mit eigenem Antwortschema `ReceiptResultSchema`, nur additiv zu v1.2 |
+| v1.4 | Optionales `barcode`-Feld in `AnalyzeResultSchema` — KI liest EAN/UPC-Ziffern vom Foto ab, Client macht den OpenFoodFacts-Lookup (Ersatz für den fehlenden `BarcodeDetector` in iOS Safari), nur additiv zu v1.3 |
+| v1.5 | Fünfter analyze-Modus `estimate` — Nährwert-Schätzung NUR aus dem Namen im `hint`, der einzige Modus ohne Bild, nur additiv zu v1.4 |
+| v1.6 | Dieser Vertrag — sechster analyze-Modus `auto` (Unified Scan): das Modell klassifiziert das Bild selbst und antwortet mit `AutoAnalyzeResultSchema` (bestehende Result-Formen + Pflichtfeld `kind`), nur additiv zu v1.5 |
 
 ---
 
@@ -66,7 +69,9 @@ Bildanalyse in vier Modi (PLAN.md §6). Serverseitige zod-Validierung der Modell
 
 ```jsonc
 {
-  "mode": "meal" | "label" | "portion" | "receipt",   // "receipt" neu in v1.3
+  "mode": "meal" | "label" | "portion" | "receipt" | "estimate" | "auto",
+  // "receipt" neu in v1.3, "estimate" neu in v1.5 (einziger Modus OHNE imageBase64,
+  // dafür ist hint Pflicht), "auto" neu in v1.6 (Unified Scan, Bild Pflicht)
   "imageBase64": "<Data-URL oder rohes Base64, JPEG angenommen>",
   "hint": "optional, max. 280 Zeichen"
 }
@@ -110,6 +115,30 @@ Kassenbon-Positionen als Lebensmittel normalisiert (Marke → generischer Name);
   ]
 }
 ```
+
+### Response 200 bei `mode: "auto"` (`AutoAnalyzeResultSchema`, v1.6)
+
+Unified Scan: der Client sendet EIN Foto ohne Modus-Vorwissen; das Modell klassifiziert
+zuerst und liefert dann das zum Bild passende Ergebnis im **bestehenden** Format — plus
+Pflichtfeld `kind` (zod: discriminated union über `kind`). Es gibt kein neues
+Payload-Format:
+
+| `kind` | Bild zeigt | Payload |
+|---|---|---|
+| `"meal"` | Gericht/Mahlzeit | wie `mode: "meal"` (`AnalyzeResultSchema`) |
+| `"label"` | Verpackung/Nährwerttabelle | wie `mode: "label"`; sichtbarer Strichcode zusätzlich im `barcode`-Feld (v1.4) |
+| `"barcode"` | im Wesentlichen nur ein Strichcode | `AnalyzeResultSchema` mit `barcode` (Barcode-vom-Foto-Flow v1.4, Item als beste Schätzung) |
+| `"receipt"` | Kassenbon/Einkaufszettel | wie `mode: "receipt"` (`ReceiptResultSchema`) |
+
+```jsonc
+{ "kind": "label", "items": [ /* wie AnalyzeResultSchema */ ], "barcode": "4066600203704" }
+{ "kind": "receipt", "items": [ /* wie ReceiptResultSchema */ ] }
+```
+
+Serverseitiges Sanitizing (`clampAuto`): `kind: "receipt"` → `clampReceipt`, alle anderen
+kinds → `clampBarcode` + `clampQuestions`. Fehlendes/fremdes `kind` scheitert an der
+Validierung (Retry, dann `UPSTREAM_ERROR`). Die bestehenden Modi bleiben unverändert —
+Clients, die `auto` nicht senden, merken von v1.6 nichts.
 
 ### Fehler
 

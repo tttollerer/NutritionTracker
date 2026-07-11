@@ -1,5 +1,5 @@
-import { AnalyzeResultSchema, ReceiptResultSchema } from '../../src/lib/apiContract'
-import { analyzeErrorResponse, clampBarcode, clampQuestions, clampReceipt, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
+import { AnalyzeResultSchema, AutoAnalyzeResultSchema, ReceiptResultSchema } from '../../src/lib/apiContract'
+import { analyzeErrorResponse, clampAuto, clampBarcode, clampQuestions, clampReceipt, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
 import { isAbortError } from './lib/coachShared'
 import { createGuard } from './lib/guard'
 
@@ -37,6 +37,18 @@ const SYSTEM: Record<string, string> = {
   // v1.5: reine Text-Schätzung (kein Bild) — der Produktname steht im Hint.
   estimate:
     'Du bist eine Nährwert-Referenz für eine deutsche Ernährungs-App. Schätze für das GENANNTE Lebensmittel (siehe Hinweis) typische Nährwerte je 100 g bzw. 100 ml (Getränke/Flüssiges → ml). Gib genau EIN Item zurück: name = bereinigter deutscher Name, amount = übliche Portionsgröße in der Basis-Einheit (sonst 100), unit = g oder ml. Kurze Unsicherheiten (z. B. "je nach Rezept sehr unterschiedlich") gehören in notes.',
+  // v1.6 (Unified Scan): EIN Modell-Aufruf klassifiziert und analysiert.
+  auto:
+    'Du bist der Scan-Assistent einer Ernährungs-App. Klassifiziere das Bild ZUERST: ' +
+    'Ein zubereitetes Gericht bzw. eine Mahlzeit → kind "meal". ' +
+    'Eine Produktverpackung und/oder Nährwerttabelle → kind "label". ' +
+    'Ein Bild, das im Wesentlichen nur einen EAN/UPC-Strichcode zeigt → kind "barcode". ' +
+    'Ein Kassenbon oder Einkaufszettel → kind "receipt". ' +
+    'Liefere dann das zum kind passende Ergebnis im bekannten Format: ' +
+    'Bei "meal" erkenne die Lebensmittel und schätze die gegessene Menge (realistische Nährwerte je 100 g/ml, confidence entsprechend der Unsicherheit). ' +
+    'Bei "label" lies eine sichtbare Nährwerttabelle exakt aus (per100; Portionsgröße als amount, sonst 100) — ist keine Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes; ein sichtbarer Strichcode gehört zusätzlich ins barcode-Feld. ' +
+    'Bei "barcode" gib die abgelesenen Ziffern als barcode zurück und schätze das Produkt als ein Item, so gut es geht. ' +
+    'Bei "receipt" lies die Bon-Positionen aus: NUR Lebensmittel und Getränke (kein Pfand, keine Rabatte, keine Tüten, kein Non-Food), Artikelnamen zu generischen deutschen Lebensmittelnamen ohne Marke normalisieren (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"), je Position ganze Stückzahl (Standard 1) und Gesamtpreis in EUR; per100 nur, wenn du typische Nährwerte sicher einschätzen kannst.',
 }
 
 // Mikronährstoff-Schlüssel + Einheiten (deckungsgleich mit src/lib/nutrients.ts).
@@ -57,6 +69,13 @@ const JSON_INSTRUCTION =
 // Kassenbon (Vertrag v1.3): eigenes Antwortschema — Positionen statt Mengen-Schätzung.
 const RECEIPT_JSON_INSTRUCTION =
   'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"quantity":number,"price":number?,"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}?}]}. quantity ist die ganze Stückzahl der Position, price der Gesamtpreis der Position in EUR (Felder mit ? weglassen, wenn unbekannt). Keine Erklärungen, kein Markdown.'
+
+// Unified Scan (Vertrag v1.6): bestehende Schemata, diskriminiert über "kind".
+const AUTO_JSON_INSTRUCTION =
+  'Antworte AUSSCHLIESSLICH mit JSON. Bei kind "meal", "label" oder "barcode" in genau diesem Schema: {"kind":"meal"|"label"|"barcode","items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?,"questions":string[]?,"barcode":string?}. Bei kind "receipt" in genau diesem Schema: {"kind":"receipt","items":[{"name":string,"quantity":number,"price":number?,"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}?}]}. ' +
+  MICRO_INSTRUCTION +
+  BARCODE_INSTRUCTION +
+  ' Rückfragen im Feld "questions" (max. 2) nur bei kind "meal", wenn eine Zusatzangabe die Schätzung deutlich verbessern würde. Keine Erklärungen, kein Markdown.'
 
 // Verfeinerungsschleife (Vertrag v1.2, Paket B): nur meal/portion — bei einer
 // abfotografierten Nährwerttabelle oder einem Kassenbon gibt es nichts nachzufragen.
@@ -131,12 +150,14 @@ export default async (req: Request): Promise<Response> => {
 
   const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
   const mode = parsed.data.mode
-  // Rückfragen nur bei den Schätz-Modi; receipt bekommt sein eigenes JSON-Schema.
+  // Rückfragen nur bei den Schätz-Modi; receipt/auto bekommen ihr eigenes JSON-Schema.
   const system =
-    SYSTEM[mode] +
-    (mode === 'meal' || mode === 'portion' ? QUESTIONS_INSTRUCTION : '') +
-    '\n\n' +
-    (mode === 'receipt' ? RECEIPT_JSON_INSTRUCTION : JSON_INSTRUCTION)
+    mode === 'auto'
+      ? SYSTEM.auto + '\n\n' + AUTO_JSON_INSTRUCTION
+      : SYSTEM[mode] +
+        (mode === 'meal' || mode === 'portion' ? QUESTIONS_INSTRUCTION : '') +
+        '\n\n' +
+        (mode === 'receipt' ? RECEIPT_JSON_INSTRUCTION : JSON_INSTRUCTION)
 
   // Ein Retry, falls das Modell mal kein sauberes JSON liefert; nach einem
   // Timeout wird NICHT erneut versucht (sonst wartet der Client bis zu 40 s).
@@ -147,9 +168,11 @@ export default async (req: Request): Promise<Response> => {
       // clampQuestions/clampReceipt: Modell-Schmutz kappen, statt eine sonst
       // gültige Antwort an der Vertrags-Validierung scheitern zu lassen.
       const result =
-        mode === 'receipt'
-          ? ReceiptResultSchema.parse(clampReceipt(extractJson(content)))
-          : AnalyzeResultSchema.parse(clampQuestions(clampBarcode(extractJson(content))))
+        mode === 'auto'
+          ? AutoAnalyzeResultSchema.parse(clampAuto(extractJson(content)))
+          : mode === 'receipt'
+            ? ReceiptResultSchema.parse(clampReceipt(extractJson(content)))
+            : AnalyzeResultSchema.parse(clampQuestions(clampBarcode(extractJson(content))))
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

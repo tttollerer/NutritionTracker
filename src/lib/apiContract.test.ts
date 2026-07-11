@@ -3,8 +3,10 @@ import { z } from 'zod'
 import {
   API_ERROR_CODES,
   API_ERROR_STATUS,
+  AUTO_SCAN_KINDS,
   AnalyzeRequestSchema,
   AnalyzeResultSchema,
+  AutoAnalyzeResultSchema,
   ApiErrorSchema,
   apiError,
   COACH_NUTRIENTS,
@@ -146,6 +148,48 @@ describe('Kassenbon-Scan v1.3 — mode receipt + ReceiptResultSchema', () => {
 
   it('lehnt halb gefülltes per100 ab — entweder alle vier Makros oder gar keins', () => {
     expect(ReceiptItemSchema.safeParse({ name: 'Milch', quantity: 1, per100: { kcal: 64 } }).success).toBe(false)
+  })
+})
+
+describe('Unified Scan v1.6 — mode auto + AutoAnalyzeResultSchema', () => {
+  const item = {
+    name: 'Linsensuppe',
+    amount: 350,
+    unit: 'ml',
+    per100: { kcal: 60, protein: 4, carbs: 8, fat: 1 },
+  }
+
+  it('AnalyzeRequestSchema akzeptiert mode "auto" NUR mit Bild (additiv)', () => {
+    expect(AnalyzeRequestSchema.safeParse({ mode: 'auto', imageBase64: 'QUJD' }).success).toBe(true)
+    expect(AnalyzeRequestSchema.safeParse({ mode: 'auto', hint: 'x' }).success).toBe(false)
+    // Bestehende Modi bleiben unverändert gültig (Abwärtskompatibilität).
+    for (const mode of ['meal', 'label', 'portion', 'receipt']) {
+      expect(AnalyzeRequestSchema.safeParse({ mode, imageBase64: 'QUJD' }).success).toBe(true)
+    }
+  })
+
+  it('parst alle vier kinds — Payload = exakt die bestehende Result-Form', () => {
+    expect(AutoAnalyzeResultSchema.parse({ kind: 'meal', items: [item], questions: ['Mit Sahne?'] }).kind).toBe('meal')
+    expect(AutoAnalyzeResultSchema.parse({ kind: 'label', items: [item], barcode: '4066600203704' }).kind).toBe('label')
+    expect(AutoAnalyzeResultSchema.parse({ kind: 'barcode', items: [item], barcode: '40123455' }).kind).toBe('barcode')
+    const receipt = AutoAnalyzeResultSchema.parse({
+      kind: 'receipt',
+      items: [{ name: 'H-Milch 3,5 %', quantity: 2, price: 2.38 }],
+    })
+    expect(receipt.kind).toBe('receipt')
+  })
+
+  it('lehnt fehlendes/fremdes kind ab — bei mode auto ist kind Pflicht', () => {
+    expect(AutoAnalyzeResultSchema.safeParse({ items: [item] }).success).toBe(false)
+    expect(AutoAnalyzeResultSchema.safeParse({ kind: 'portion', items: [item] }).success).toBe(false)
+  })
+
+  it('kind und Payload müssen zusammenpassen (Bon-Positionen sind keine Items)', () => {
+    // Kassenbon-Positionen unter kind "meal" → Items ohne unit/per100 → ungültig.
+    expect(
+      AutoAnalyzeResultSchema.safeParse({ kind: 'meal', items: [{ name: 'Milch', quantity: 2 }] }).success,
+    ).toBe(false)
+    expect(AUTO_SCAN_KINDS).toEqual(['meal', 'label', 'barcode', 'receipt'])
   })
 })
 

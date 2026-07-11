@@ -182,3 +182,26 @@ export function clampReceipt(raw: unknown): unknown {
   })
   return { items: cleaned }
 }
+
+// ---------------------------------------------------------------------------
+// Unified Scan (Vertrag v1.6, mode 'auto') — Sanitizing VOR der zod-Validierung
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalisiert eine rohe auto-Modellantwort anhand ihres `kind`-Felds mit den
+ * BESTEHENDEN Clamps: kind 'receipt' → clampReceipt (kind bleibt erhalten,
+ * clampReceipt gibt nur { items } zurück), alle anderen kinds → clampBarcode +
+ * clampQuestions. Fehlendes/fremdes kind bleibt unverändert — dann scheitert
+ * die AutoAnalyzeResultSchema-Validierung wie vorgesehen (Retry/Envelope).
+ */
+export function clampAuto(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const kind = (raw as Record<string, unknown>).kind
+  if (kind === 'receipt') {
+    const cleaned = clampReceipt(raw)
+    return cleaned && typeof cleaned === 'object' && !Array.isArray(cleaned)
+      ? { ...(cleaned as Record<string, unknown>), kind: 'receipt' }
+      : cleaned
+  }
+  return clampQuestions(clampBarcode(raw))
+}

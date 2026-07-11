@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
-import { Camera, ChevronLeft, Minus, Plus, ShoppingBasket, Trash2 } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Camera, ChevronLeft, Info, Minus, Plus, ShoppingBasket, Trash2 } from 'lucide-react'
 import type { ReceiptItem } from '@/lib/apiContract'
 import { clearReceiptDraft, getReceiptDraft, saveReceiptToPantry, undoReceiptSave } from '@/lib/receipt'
 import { parsePositiveNumber } from '@/lib/money'
@@ -28,6 +28,10 @@ interface Row {
 export function ReceiptReview() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // Unified Scan: Nutzer hatte „Gegessen" gewählt, die KI aber einen
+  // Kassenbon erkannt (?from=eat) — Bons sind immer Einkauf, kurzer Hinweis.
+  const fromEat = searchParams.get('from') === 'eat'
   const { showUndo } = useOverlays()
   const [draft] = useState(() => getReceiptDraft())
   const [rows, setRows] = useState<Row[]>(() =>
@@ -94,6 +98,13 @@ export function ReceiptReview() {
         <h1 className="text-2xl font-bold">{t('receipt.title')}</h1>
       </header>
       <p className="text-xs text-muted-foreground">{t('receipt.estimate')}</p>
+
+      {fromEat && (
+        <p className="flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          <Info size={14} aria-hidden="true" className="mt-0.5 shrink-0" />
+          <span>{t('receipt.eatNotice')}</span>
+        </p>
+      )}
 
       {rows.length === 0 ? (
         /* Empty-State mit genau EINER offensichtlichen Aktion: neu fotografieren. */

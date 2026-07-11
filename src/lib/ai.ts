@@ -1,10 +1,12 @@
 import {
   AnalyzeItemSchema,
   AnalyzeResultSchema,
+  AutoAnalyzeResultSchema,
   ReceiptResultSchema,
   type AnalyzeItem,
   type AnalyzeRequest,
   type AnalyzeResult,
+  type AutoAnalyzeResult,
   type ReceiptItem,
   type ReceiptResult,
 } from './apiContract'
@@ -19,7 +21,7 @@ export const AiResult = AnalyzeResultSchema
 export type AiItem = AnalyzeItem
 export type AiResult = AnalyzeResult
 export type AnalyzeMode = AnalyzeRequest['mode']
-export type { ReceiptItem, ReceiptResult }
+export type { AutoAnalyzeResult, ReceiptItem, ReceiptResult }
 
 const ENDPOINT = import.meta.env.VITE_ANALYZE_URL ?? '/api/analyze'
 const TIMEOUT_MS = 30_000
@@ -75,6 +77,21 @@ export async function analyzeReceipt(imageBase64: string, hint?: string): Promis
   const json = await postAnalyze({ mode: 'receipt', imageBase64, hint })
   try {
     return ReceiptResultSchema.parse(json)
+  } catch {
+    throw new ApiError('GENERIC')
+  }
+}
+
+/**
+ * Unified Scan (Vertrag v1.6, mode 'auto'): das Modell klassifiziert das Bild
+ * selbst (Gericht | Verpackung | Strichcode | Kassenbon) und liefert das
+ * bekannte Modus-Ergebnis plus Pflichtfeld `kind` — der Client routet damit
+ * (src/lib/scanRoute.ts).
+ */
+export async function analyzeAuto(imageBase64: string, hint?: string): Promise<AutoAnalyzeResult> {
+  const json = await postAnalyze({ mode: 'auto', imageBase64, hint })
+  try {
+    return AutoAnalyzeResultSchema.parse(json)
   } catch {
     throw new ApiError('GENERIC')
   }

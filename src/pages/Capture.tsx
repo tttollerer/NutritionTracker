@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, Sparkles, RotateCcw } from 'lucide-react'
-import { analyzeImage, analyzeReceipt, type AnalyzeMode } from '@/lib/ai'
+import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, ShoppingBasket, Sparkles, RotateCcw } from 'lucide-react'
+import { analyzeAuto, analyzeImage, analyzeReceipt, type AnalyzeMode } from '@/lib/ai'
 import { enrichAnalyzeWithBarcode } from '@/lib/barcodeEnrich'
 import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
@@ -12,12 +12,15 @@ import { setReview } from '@/lib/reviewStore'
 import { setReceiptDraft } from '@/lib/receipt'
 import { peekPendingImage, clearPendingImage } from '@/lib/captureHandoff'
 import { clearScanRun, onScanRunChange, readScanRun, startScanRun } from '@/lib/scanRun'
-import { getSettings, updateSettings } from '@/db/repo'
+import { autoScanPath, parseScanIntent, routeAutoScan } from '@/lib/scanRoute'
+import { db } from '@/db'
+import { getSettings, setFoodPrice, updateSettings } from '@/db/repo'
+import { parsePositiveNumber } from '@/lib/money'
 import { useSpeechRecognition } from '@/lib/speech'
 import type { Meal } from '@/db/types'
 import { defaultMeal } from '@/lib/meal'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
+import { Field, Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
@@ -28,6 +31,9 @@ export function Capture() {
   const [params] = useSearchParams()
   const mode = (params.get('mode') as AnalyzeMode) || 'meal'
   const meal = (params.get('meal') as Meal) || defaultMeal()
+  // Unified Scan (mode=auto): die EINE Nutzer-Unterscheidung — nur gekauft
+  // oder auch konsumiert? Steuert das Routing nach der Klassifikation.
+  const intent = parseScanIntent(params.get('intent'))
   // Scan-Loop beim Einräumen (Review „Nur in den Vorrat" → zurück hierher):
   // nur mit batch=1 aktiv — der normale Einzel-Scan bleibt unverändert.
   const batch = params.get('batch') === '1'
@@ -67,10 +73,44 @@ export function Capture() {
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
   const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
 
+  // Preis-Nachfrage im Einräum-Loop (wie beim Barcode-Einräumen): Review
+  // („Nur in den Vorrat" als Primäraktion) hängt ?priceFor=<foodId> an die
+  // Loop-URL — hier optional Preis + Packungsgröße nachtragen, ohne den
+  // nächsten Scan zu blockieren.
+  const priceForId = batch ? params.get('priceFor') : null
+  const priceFood = useLiveQuery(async () => (priceForId ? await db.foods.get(priceForId) : undefined), [priceForId])
+  const [priceDone, setPriceDone] = useState(false)
+  const [priceText, setPriceText] = useState('')
+  const [packText, setPackText] = useState('')
+  useEffect(() => {
+    setPriceDone(false)
+    setPriceText('')
+    setPackText('')
+  }, [priceForId])
+  const priceVal = parsePositiveNumber(priceText)
+  const packVal = parsePositiveNumber(packText)
+  async function savePrice() {
+    if (!priceForId || priceVal == null || packVal == null) return
+    await setFoodPrice(priceForId, { amount: priceVal, per: packVal })
+    setPriceDone(true)
+  }
+
   const title =
-    mode === 'label' ? t('capture.labelTitle') : mode === 'receipt' ? t('capture.receiptTitle') : t('capture.mealTitle')
+    mode === 'auto'
+      ? t('capture.autoTitle')
+      : mode === 'label'
+        ? t('capture.labelTitle')
+        : mode === 'receipt'
+          ? t('capture.receiptTitle')
+          : t('capture.mealTitle')
   const uiHint =
-    mode === 'label' ? t('capture.hintLabel') : mode === 'receipt' ? t('capture.hintReceipt') : t('capture.hintMeal')
+    mode === 'auto'
+      ? t('capture.hintAuto')
+      : mode === 'label'
+        ? t('capture.hintLabel')
+        : mode === 'receipt'
+          ? t('capture.hintReceipt')
+          : t('capture.hintMeal')
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -91,6 +131,40 @@ export function Capture() {
     setBusy(true)
     try {
       const trimmedHint = hint.trim() || undefined
+      // Unified Scan: die KI klassifiziert selbst (kind), der pure Helfer
+      // scanRoute.ts entscheidet über Ziel-Screen und Primäraktion.
+      if (mode === 'auto') {
+        const auto = await analyzeAuto(preview, trimmedHint)
+        const target = autoScanPath(auto.kind, intent)
+        if (auto.kind === 'receipt') {
+          // Kassenbon ist immer Einkauf — auch bei Intent „Gegessen"
+          // (ReceiptReview zeigt dann einen dezenten Hinweis, ?from=eat).
+          setReceiptDraft(auto.items)
+          clearPendingImage()
+          navigate(target)
+          return
+        }
+        const route = routeAutoScan(auto.kind, intent)
+        // label/barcode: abgelesener Strichcode → OFF-Lookup wie im v1.4-Flow.
+        const enriched = await enrichAnalyzeWithBarcode(auto)
+        setReview({
+          items: enriched.items,
+          meal,
+          source: enriched.source,
+          barcode: enriched.barcode,
+          allergens: enriched.allergens,
+          traces: enriched.traces,
+          photo: route.keepPhoto ? preview : undefined,
+          notes: enriched.notes,
+          mode: 'auto',
+          hint: trimmedHint,
+          imageBase64: preview,
+          questions: enriched.questions,
+        })
+        clearPendingImage()
+        navigate(target)
+        return
+      }
       // Kassenbon: eigenes Antwortschema + eigener Prüf-Screen (/receipt).
       if (mode === 'receipt') {
         const receipt = await analyzeReceipt(preview, trimmedHint)
@@ -175,10 +249,51 @@ export function Capture() {
         </button>
       )}
 
+      {/* Optionale Preis-Eingabe zum gerade eingeräumten Produkt (Muster
+          Barcode.tsx) — verschwindet, sobald das nächste Foto ansteht. */}
+      {batch && priceFood && !priceDone && !busy && !preview && (
+        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            <ShoppingBasket size={16} aria-hidden="true" className="text-primary" />
+            <span className="min-w-0 truncate">{t('capture.pantrySaved', { name: priceFood.name })}</span>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label={t('add.pantryPrice')}>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={priceText}
+                onChange={(e) => setPriceText(e.target.value)}
+                placeholder="2,49"
+              />
+            </Field>
+            <Field label={t('add.pantryPackSize', { unit: priceFood.per })}>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={packText}
+                onChange={(e) => setPackText(e.target.value)}
+                placeholder="500"
+              />
+            </Field>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" className="flex-1 border border-input" onClick={() => setPriceDone(true)}>
+              {t('capture.priceSkip')}
+            </Button>
+            <Button className="flex-1" disabled={priceVal == null || packVal == null} onClick={() => void savePrice()}>
+              {t('capture.priceSave')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {busy ? (
         <div className="flex flex-col items-center gap-4 pt-16 text-center">
           <Spinner size={40} className="text-primary" />
-          <p className="text-sm text-muted-foreground">{t('capture.analyzing')}</p>
+          <p className="text-sm text-muted-foreground">
+            {mode === 'auto' ? t('capture.analyzingAuto') : t('capture.analyzing')}
+          </p>
         </div>
       ) : preview ? (
         /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */
@@ -254,8 +369,15 @@ export function Capture() {
             <div className="grid gap-3">
               <Button onClick={() => cameraRef.current?.click()}>
                 <Camera size={20} />{' '}
-                {/* Modus-genaue Beschriftung: beim Produkt-/Bon-Scan wird kein „Essen" fotografiert. */}
-                {mode === 'receipt' ? t('capture.takeReceipt') : mode === 'label' ? t('capture.takeLabel') : t('capture.take')}
+                {/* Modus-genaue Beschriftung: beim Produkt-/Bon-Scan wird kein „Essen" fotografiert;
+                    beim Unified Scan bleibt sie bewusst neutral. */}
+                {mode === 'auto'
+                  ? t('capture.takeAuto')
+                  : mode === 'receipt'
+                    ? t('capture.takeReceipt')
+                    : mode === 'label'
+                      ? t('capture.takeLabel')
+                      : t('capture.take')}
               </Button>
               <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
                 <ImageIcon size={20} /> {t('capture.choose')}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Trash2, Check, ChevronDown, ChevronLeft, Camera, Image as ImageIcon, Info, ShoppingBasket, Sparkles, X } from 'lucide-react'
 import { analyzeImage, type AiItem } from '@/lib/ai'
@@ -25,6 +25,11 @@ import { Spinner } from '@/components/ui/Spinner'
 export function Review() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // Unified Scan mit Intent „Eingekauft" (?primary=pantry): „Nur in den
+  // Vorrat" wird zur Primäraktion, „Übernehmen" rückt an die zweite Stelle —
+  // reine Voreinstellung, beide Aktionen bleiben unverändert verfügbar.
+  const pantryPrimary = searchParams.get('primary') === 'pantry'
   const { showUndo } = useOverlays()
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
@@ -254,9 +259,13 @@ export function Review() {
         decrementScanRun(foods.length)
       })
       // Scan-Loop beim Einräumen: Zähler hochsetzen und direkt zurück zur
-      // Kamera — das nächste Produkt ist nur einen Foto-Tap entfernt.
+      // Kamera — das nächste Produkt ist nur einen Foto-Tap entfernt. Der
+      // Unified Scan bleibt dabei im auto-Modus mit Einkaufs-Intent; bei
+      // genau EINEM Produkt fragt der Loop den Preis nach (?priceFor,
+      // Muster Barcode-Einräumen).
       incrementScanRun(foods.length)
-      navigate('/capture?mode=label&batch=1')
+      const loop = payload!.mode === 'auto' ? '/capture?mode=auto&intent=buy&batch=1' : '/capture?mode=label&batch=1'
+      navigate(pantryPrimary && foods.length === 1 ? `${loop}&priceFor=${foods[0].id}` : loop)
     } finally {
       setBusy(false)
     }
@@ -508,13 +517,28 @@ export function Review() {
               <span>{t('review.allergyAck')}</span>
             </label>
           )}
-          <Button className="w-full" onClick={confirm} disabled={busy || refining || (hasContains && !ack)}>
-            {busy ? <Spinner size={20} /> : <Check size={20} />} {busy ? t('review.saving') : t('review.confirm')}
-          </Button>
-          {/* Sekundär: als Einkauf in den Vorrat — speichert ohne zu loggen. */}
-          <Button variant="secondary" className="w-full" onClick={() => void toPantry()} disabled={busy || refining || (hasContains && !ack)}>
-            <ShoppingBasket size={20} /> {t('review.toPantry')}
-          </Button>
+          {/* Reihenfolge/Betonung folgt dem Scan-Intent: „Eingekauft" macht
+              den Vorrat zur Primäraktion, sonst das Loggen (Layout identisch). */}
+          {pantryPrimary ? (
+            <>
+              <Button className="w-full" onClick={() => void toPantry()} disabled={busy || refining || (hasContains && !ack)}>
+                {busy ? <Spinner size={20} /> : <ShoppingBasket size={20} />} {busy ? t('review.saving') : t('review.toPantry')}
+              </Button>
+              <Button variant="secondary" className="w-full" onClick={confirm} disabled={busy || refining || (hasContains && !ack)}>
+                <Check size={20} /> {t('review.confirm')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button className="w-full" onClick={confirm} disabled={busy || refining || (hasContains && !ack)}>
+                {busy ? <Spinner size={20} /> : <Check size={20} />} {busy ? t('review.saving') : t('review.confirm')}
+              </Button>
+              {/* Sekundär: als Einkauf in den Vorrat — speichert ohne zu loggen. */}
+              <Button variant="secondary" className="w-full" onClick={() => void toPantry()} disabled={busy || refining || (hasContains && !ack)}>
+                <ShoppingBasket size={20} /> {t('review.toPantry')}
+              </Button>
+            </>
+          )}
         </div>
       )}
     </div>

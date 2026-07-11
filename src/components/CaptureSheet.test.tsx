@@ -50,6 +50,45 @@ async function seedLog(foodId: string, date: string, meal: Meal, kcal = 100) {
   })
 }
 
+describe('CaptureSheet — Unified Scan (EIN Hero + Intent-Toggle)', () => {
+  beforeEach(async () => {
+    showUndo.mockClear()
+    onClose.mockClear()
+    await Promise.all(db.tables.map((t) => t.clear()))
+  })
+
+  it('zeigt EINEN Scan-Hero, den Intent-Toggle (Default „Gegessen") und keine Alt-Kacheln', async () => {
+    renderSheet()
+    expect(await screen.findByRole('button', { name: /die KI erkennt's/ })).toBeTruthy()
+
+    const eat = screen.getByRole('button', { name: 'Gegessen' })
+    const buy = screen.getByRole('button', { name: 'Eingekauft' })
+    expect(eat.getAttribute('aria-pressed')).toBe('true')
+    expect(buy.getAttribute('aria-pressed')).toBe('false')
+    expect(eat.className).toContain('min-h-[48px]')
+
+    // Die alten Einstiege sind durch den Unified Scan abgedeckt.
+    expect(screen.queryByRole('button', { name: 'Produkt scannen' })).toBeNull()
+    expect(screen.queryByText('Einkauf scannen → Vorrat')).toBeNull()
+    // Erhalten: Manuell, Rezepte-Link und der Live-Barcode-Sekundärlink.
+    expect(screen.getByRole('button', { name: /Manuell/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Rezept' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Barcode scannen' })).toBeTruthy()
+  })
+
+  it('„Eingekauft" dimmt die Mahlzeit-Chips, entfernt sie aber nicht (Layout stabil)', async () => {
+    renderSheet()
+    const breakfast = await screen.findByRole('button', { name: 'Frühstück' })
+    const chipsWrap = breakfast.parentElement!
+    expect(chipsWrap.className).not.toContain('opacity-40')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Eingekauft' }))
+    expect(screen.getByRole('button', { name: 'Eingekauft' }).getAttribute('aria-pressed')).toBe('true')
+    expect(chipsWrap.className).toContain('opacity-40')
+    expect(screen.getByRole('button', { name: 'Frühstück' })).toBeTruthy() // noch da
+  })
+})
+
 describe('CaptureSheet — Doppel-Tap-Schutz & Mehrfach-Auswahl', () => {
   beforeEach(async () => {
     showUndo.mockClear()
