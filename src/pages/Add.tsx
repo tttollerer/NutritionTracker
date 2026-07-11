@@ -58,12 +58,13 @@ export function Add() {
     { icon: ScanBarcode, key: 'label', to: `/capture?mode=label&meal=${meal}` },
   ] as const
 
+  // Nach dem Loggen bewusst KEIN navigate('/'): der Undo-Toast bestätigt,
+  // weitere Einträge gehen ohne Umweg — zurück geht's über die Tab-Leiste.
   async function logCatalog(id: string) {
     const c = FOOD_CATALOG.find((f) => f.id === id)
     if (!c) return
     const entry = await quickLogCatalog(c, meal)
     showUndo(t('capture.added', { name: c.name }), () => deleteLog(entry.id))
-    navigate('/')
   }
 
   async function quickLog(food: FoodItem) {
@@ -81,7 +82,6 @@ export function Add() {
       await deleteLog(entry.id)
       if (took) await incrementPantry(food.id)
     })
-    navigate('/')
   }
 
   /** Menge eines bekannten Lebensmittels per Foto schätzen (mode 'portion'). */
@@ -99,7 +99,6 @@ export function Add() {
     showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
       await Promise.all(copied.map((c) => deleteLog(c.id)))
     })
-    navigate('/')
   }
 
   // Favoriten stehen in der eigenen Sektion — aus „zuletzt benutzt" ausblenden.
@@ -270,7 +269,6 @@ export function Add() {
               if (took) await incrementPantry(food.id)
             })
           })()
-          navigate('/')
         }}
       />
 
