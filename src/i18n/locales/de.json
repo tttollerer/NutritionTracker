@@ -493,6 +493,7 @@
     "barcodeTitle": "Barcode scannen",
     "receiptTitle": "Kassenbon scannen",
     "take": "Essen fotografieren",
+    "takeLabel": "Produkt fotografieren",
     "takeReceipt": "Kassenbon fotografieren",
     "choose": "Aus Galerie wählen",
     "sheetTitle": "Erfassen",

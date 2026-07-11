@@ -153,8 +153,9 @@ export function Capture() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-2">
-        {/* Zurück beendet die Batch-Runde explizit — auch wenn der History-Eintrag /review wäre. */}
-        <button onClick={() => { clearPendingImage(); if (batch) clearScanRun(); navigate(-1) }} aria-label={t('common.back')} className="text-muted-foreground">
+        {/* Zurück beendet die Batch-Runde explizit — auch wenn der History-Eintrag /review wäre.
+            focus-ring + 48-px-Target wie der Zurück-Pfeil im Review. */}
+        <button onClick={() => { clearPendingImage(); if (batch) clearScanRun(); navigate(-1) }} aria-label={t('common.back')} className="focus-ring -ml-2 flex h-12 w-10 items-center justify-center rounded-md text-muted-foreground">
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold">{title}</h1>
@@ -252,7 +253,9 @@ export function Capture() {
           ) : (
             <div className="grid gap-3">
               <Button onClick={() => cameraRef.current?.click()}>
-                <Camera size={20} /> {mode === 'receipt' ? t('capture.takeReceipt') : t('capture.take')}
+                <Camera size={20} />{' '}
+                {/* Modus-genaue Beschriftung: beim Produkt-/Bon-Scan wird kein „Essen" fotografiert. */}
+                {mode === 'receipt' ? t('capture.takeReceipt') : mode === 'label' ? t('capture.takeLabel') : t('capture.take')}
               </Button>
               <Button variant="secondary" onClick={() => galleryRef.current?.click()}>
                 <ImageIcon size={20} /> {t('capture.choose')}
