@@ -498,6 +498,8 @@
     "ctaTitle": "Mahlzeit erfassen",
     "ctaHint": "Foto — die KI erkennt Nährwerte",
     "added": "{{name}} hinzugefügt",
+    "likeYesterday_one": "{{meal}} wie gestern (1 Eintrag · {{kcal}} kcal)",
+    "likeYesterday_other": "{{meal}} wie gestern ({{count}} Einträge · {{kcal}} kcal)",
     "analyzing": "Analysiere …",
     "error": "Analyse fehlgeschlagen",
     "describe": "Beschreibung (optional)",

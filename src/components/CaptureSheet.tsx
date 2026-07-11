@@ -3,13 +3,16 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Camera, CookingPot, ScanBarcode, PencilLine, Check, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
+import { Camera, CookingPot, ScanBarcode, PencilLine, Check, History, ShoppingBasket, Image as ImageIcon } from 'lucide-react'
 import type { FoodItem, Meal } from '@/db/types'
-import { pantryFoods, recentFoods, deleteLog } from '@/db/repo'
+import { db } from '@/db'
+import { copyYesterday, pantryFoods, recentFoods, deleteLog, yesterdayMealSummary } from '@/db/repo'
 import { decrementPantryOnLog, effectivePantryQty, incrementPantry } from '@/lib/pantryStock'
+import { affinityStartKey, mealAffinityCounts, sortByMealAffinity } from '@/lib/mealAffinity'
 import { downscaleImage } from '@/lib/image'
 import { setPendingImage } from '@/lib/captureHandoff'
 import { defaultMeal, MEALS } from '@/lib/meal'
+import { todayKey } from '@/lib/utils'
 import { Chip } from '@/components/ui/Chip'
 import { PortionSheet } from '@/components/PortionSheet'
 
@@ -28,10 +31,25 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
-  const recents = useLiveQuery(() => recentFoods(6), [])
+  // Größerer Kandidaten-Pool als angezeigt wird (6): die Affinitäts-Sortierung
+  // kann so z. B. morgens Frühstücks-Produkte von weiter hinten nach vorn holen.
+  const recents = useLiveQuery(() => recentFoods(12), [])
   // „Gegessen aus dem Vorrat": die naheliegendste Quelle beim Tracken —
   // nur Produkte mit Bestand (> 0 Packungen), frisch benutzte zuerst.
   const pantry = useLiveQuery(async () => (await pantryFoods()).filter((f) => effectivePantryQty(f) > 0), [])
+  // Routine-Chip „{Mahlzeit} wie gestern": reagiert auf die Mahlzeit-Auswahl.
+  const yesterday = useLiveQuery(() => yesterdayMealSummary(meal), [meal])
+  // Tageszeit-Affinität: Verzehr-Logs der letzten 14 Tage (ohne planned —
+  // Wochenplan-Einträge zählen nie als Verzehr) einmal laden, pure sortieren.
+  const affinityLogs = useLiveQuery(
+    () =>
+      db.logs
+        .where('date')
+        .between(affinityStartKey(), todayKey(), true, true)
+        .filter((l) => !l.deletedAt && !l.planned)
+        .toArray(),
+    [],
+  )
   const sheetRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
 
@@ -104,6 +122,26 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
     setPortionFood(food)
   }
 
+  // „Wie gestern": die gestrige Mahlzeit 1:1 auf heute kopieren (Muster
+  // Add.tsx copyFromYesterday) — das Undo löscht alle Kopien wieder.
+  async function logLikeYesterday() {
+    const copied = await copyYesterday(meal)
+    if (copied.length === 0) return
+    showUndo(t('add.copiedYesterday', { count: copied.length }), async () => {
+      await Promise.all(copied.map((c) => deleteLog(c.id)))
+    })
+    onClose()
+  }
+
+  // Vorrat & „Zuletzt benutzt" nach Tageszeit-Affinität: was zur gewählten
+  // Mahlzeit oft gegessen wird, steht vorn (morgens die Frühstücks-Produkte).
+  const affinity = mealAffinityCounts(affinityLogs ?? [], meal)
+  const pantryChips = sortByMealAffinity(pantry ?? [], affinity).slice(0, 8)
+  const recentChips = sortByMealAffinity(
+    (recents ?? []).filter((f) => !pantry?.some((p) => p.id === f.id)),
+    affinity,
+  ).slice(0, 6)
+
   return (
     <>
     <AnimatePresence>
@@ -137,6 +175,22 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                 <Chip key={m} label={t(`today.meals.${m}`)} selected={meal === m} onClick={() => setMeal(m)} />
               ))}
             </div>
+
+            {/* Routine in 1 Tap: dieselbe Mahlzeit wie gestern — nur wenn es
+                gestern zur gewählten Mahlzeit Einträge gab. */}
+            {yesterday && yesterday.count > 0 && (
+              <button
+                onClick={() => void logLikeYesterday()}
+                className="focus-ring mb-4 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-primary-soft px-4 text-sm font-semibold text-primary"
+              >
+                <History size={16} aria-hidden="true" />
+                {t('capture.likeYesterday', {
+                  count: yesterday.count,
+                  meal: t(`today.meals.${meal}`),
+                  kcal: yesterday.kcal,
+                })}
+              </button>
+            )}
 
             {/* Hero: Foto (öffnet direkt die Kamera) */}
             <button
@@ -190,7 +244,7 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {pantry.slice(0, 8).map((f) => (
+                  {pantryChips.map((f) => (
                     <button
                       key={f.id}
                       onClick={() => pickRecent(f)}
@@ -208,21 +262,19 @@ export function CaptureSheet({ open, onClose, showUndo }: Props) {
             )}
 
             {/* Zuletzt benutzt: 1 Tipp — ohne Dubletten zur Vorrats-Sektion. */}
-            {recents && recents.filter((f) => !pantry?.some((p) => p.id === f.id)).length > 0 && (
+            {recentChips.length > 0 && (
               <div className="mt-4">
                 <p className="mb-2 text-xs font-medium text-muted-foreground">{t('entry.recent')}</p>
                 <div className="flex flex-wrap gap-2">
-                  {recents
-                    .filter((f) => !pantry?.some((p) => p.id === f.id))
-                    .map((f) => (
-                      <button
-                        key={f.id}
-                        onClick={() => pickRecent(f)}
-                        className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
-                      >
-                        <Check size={14} className="text-primary" /> {f.name}
-                      </button>
-                    ))}
+                  {recentChips.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => pickRecent(f)}
+                      className="focus-ring flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-sm"
+                    >
+                      <Check size={14} className="text-primary" /> {f.name}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

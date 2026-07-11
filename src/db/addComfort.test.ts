@@ -10,6 +10,7 @@ import {
   logFood,
   searchFoods,
   toggleFavorite,
+  yesterdayMealSummary,
 } from './repo'
 import { todayKey } from '@/lib/utils'
 
@@ -80,6 +81,23 @@ describe('copyYesterday', () => {
 
   it('gibt bei leerem Gestern ein leeres Array zurück', async () => {
     expect(await copyYesterday()).toEqual([])
+  })
+})
+
+describe('yesterdayMealSummary', () => {
+  it('zählt Anzahl + kcal nur der gewählten Mahlzeit; deleted/planned zählen nicht', async () => {
+    const food = await seedFood() // 370 kcal / 100 g
+    await logFood({ food, date: daysAgo(1), meal: 'breakfast', amount: 100, unit: 'g' }) // 370
+    await logFood({ food, date: daysAgo(1), meal: 'breakfast', amount: 50, unit: 'g' }) // 185
+    await logFood({ food, date: daysAgo(1), meal: 'lunch', amount: 100, unit: 'g' }) // andere Mahlzeit
+    await logFood({ food, date: daysAgo(2), meal: 'breakfast', amount: 100, unit: 'g' }) // vorgestern
+    const del = await logFood({ food, date: daysAgo(1), meal: 'breakfast', amount: 100, unit: 'g' })
+    await deleteLog(del.id)
+    const planned = await logFood({ food, date: daysAgo(1), meal: 'breakfast', amount: 100, unit: 'g' })
+    await db.logs.update(planned.id, { planned: true })
+
+    expect(await yesterdayMealSummary('breakfast')).toEqual({ count: 2, kcal: 555 })
+    expect(await yesterdayMealSummary('dinner')).toEqual({ count: 0, kcal: 0 })
   })
 })
 
