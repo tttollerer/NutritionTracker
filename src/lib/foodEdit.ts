@@ -136,6 +136,46 @@ export async function addFoodServing(
   return updateFoodValues(id, { servings: [...rest, serving] })
 }
 
+/**
+ * Merge-Regel für vom Etikett gelesene Einheiten (Vertrag v1.7): Welche der
+ * gescannten servings dürfen ans Produkt? NUR Labels, die es dort noch nicht
+ * gibt — eine vorhandene (womöglich manuell gepflegte) Einheit gewinnt IMMER
+ * gegen den Scan; addFoodServing würde sie sonst ersetzen. Zusätzlich:
+ * trimmen, amount > 0, case-insensitives Dedupe innerhalb des Scans. Pur und
+ * damit ohne DB testbar; angewendet in Review.tsx nach dem createFood-Upsert.
+ */
+export function newScanServings(
+  existing: { label: string }[] | undefined,
+  scanned: { label: string; amount: number }[] | undefined,
+): { label: string; amount: number }[] {
+  if (!scanned?.length) return []
+  const taken = new Set((existing ?? []).map((s) => s.label.trim().toLowerCase()))
+  return scanned.flatMap((s) => {
+    const label = s.label.trim()
+    const key = label.toLowerCase()
+    if (!label || !(s.amount > 0) || taken.has(key)) return []
+    taken.add(key)
+    return [{ label, amount: s.amount }]
+  })
+}
+
+/**
+ * Vom Etikett gelesene Einheiten ans Produkt hängen (Review „Übernehmen"/
+ * „Nur in den Vorrat"). Wendet newScanServings auf den AKTUELLEN Bestand an —
+ * bestehende gleichnamige Einheiten bleiben unangetastet. Gibt die tatsächlich
+ * ergänzten Einheiten zurück (für den dezenten Hinweis im UI).
+ */
+export async function applyScanServings(
+  foodId: string,
+  scanned: { label: string; amount: number }[] | undefined,
+): Promise<{ label: string; amount: number }[]> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return []
+  const toAdd = newScanServings(food.servings, scanned)
+  for (const s of toAdd) await addFoodServing(foodId, s)
+  return toAdd
+}
+
 /** Obergrenze für automatisch angehängte Scan-Fotos (attachScanPhoto). */
 export const FOOD_PHOTO_LIMIT = 5
 

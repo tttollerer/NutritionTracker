@@ -100,6 +100,36 @@ describe('analyze.mts (Function-Verhalten, Vertrag v1.1 + Paket 3)', () => {
     }
   })
 
+  it('label-Modus liest Etikett-Einheiten mit → sanitisierte servings kommen an (Vertrag v1.7)', async () => {
+    // Modell liefert typischen Schmutz: ungetrimmtes Label, case-insensitives
+    // Duplikat, amount 0 — clampServings kappt VOR der Vertrags-Validierung.
+    const labelContent = JSON.stringify({
+      items: [
+        {
+          name: 'Huel Pulver',
+          amount: 100,
+          unit: 'g',
+          per100: { kcal: 400, protein: 30, carbs: 37, fat: 13 },
+          servings: [
+            { label: ' Messlöffel ', amount: 50 },
+            { label: 'messlöffel', amount: 60 },
+            { label: 'Scoop', amount: 0 },
+            { label: 'Portion', amount: 100 },
+          ],
+        },
+      ],
+    })
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(orResponse(labelContent))))
+    const handler = await freshHandler()
+    const res = await handler(analyzeRequest({ mode: 'label', imageBase64: 'QUJD' }))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { items: { servings?: { label: string; amount: number }[] }[] }
+    expect(body.items[0].servings).toEqual([
+      { label: 'Messlöffel', amount: 50 },
+      { label: 'Portion', amount: 100 },
+    ])
+  })
+
   it('auto-Modus ohne kind in der Modellantwort → Retry, dann 502 UPSTREAM_ERROR', async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(orResponse(VALID_RESULT))) // gültig, aber ohne kind
     vi.stubGlobal('fetch', fetchMock)

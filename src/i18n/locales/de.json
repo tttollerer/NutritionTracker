@@ -586,6 +586,7 @@
     "estimate": "KI-Schätzung — bitte prüfen.",
     "aiNotes": "Hinweis der KI",
     "knownFood": "Bekannt — übliche Menge vorausgefüllt.",
+    "servingFromLabel": "Einheit vom Etikett wird übernommen: {{list}}",
     "confirm": "Übernehmen",
     "saving": "Wird übernommen …",
     "perInfo": "Werte je 100 {{unit}}",

@@ -6,8 +6,10 @@ import {
   FOOD_PHOTO_LIMIT,
   addFoodPhoto,
   addFoodServing,
+  applyScanServings,
   attachScanPhoto,
   getFoodPhotos,
+  newScanServings,
   removeFoodPhoto,
   updateFoodValues,
 } from './foodEdit'
@@ -164,6 +166,59 @@ describe('foodEdit (Produkt-Editor, Paket B)', () => {
 
     it('wirft für unbekannte Produkte', async () => {
       await expect(addFoodServing('nope', { label: 'Kappe', amount: 30 })).rejects.toThrow()
+    })
+  })
+
+  describe('newScanServings (Merge-Regel Etikett-Einheiten, Vertrag v1.7)', () => {
+    it('vorhandenes Label gewinnt IMMER gegen den Scan (case-insensitiv, getrimmt)', () => {
+      expect(
+        newScanServings([{ label: 'Messlöffel' }], [
+          { label: ' messlöffel ', amount: 50 }, // existiert bereits → skip
+          { label: 'Portion', amount: 100 },
+        ]),
+      ).toEqual([{ label: 'Portion', amount: 100 }])
+    })
+
+    it('dedupliziert innerhalb des Scans und wirft leere Labels/amount ≤ 0 raus', () => {
+      expect(
+        newScanServings(undefined, [
+          { label: 'Messlöffel', amount: 50 },
+          { label: 'MESSLÖFFEL ', amount: 60 }, // Scan-Duplikat → skip
+          { label: '', amount: 30 },
+          { label: 'Scoop', amount: 0 },
+        ]),
+      ).toEqual([{ label: 'Messlöffel', amount: 50 }])
+    })
+
+    it('leerer/fehlender Scan → nichts zu ergänzen', () => {
+      expect(newScanServings([{ label: 'EL' }], undefined)).toEqual([])
+      expect(newScanServings(undefined, [])).toEqual([])
+    })
+  })
+
+  describe('applyScanServings (Etikett-Einheiten ans Produkt, Review-Flow)', () => {
+    it('ergänzt neue Einheiten, lässt bestehende gleichnamige unangetastet', async () => {
+      const food = await createFood({ name: 'Huel', ...base })
+      // Nutzer hat „Messlöffel" bereits manuell mit 45 g gepflegt.
+      await addFoodServing(food.id, { label: 'Messlöffel', amount: 45 })
+
+      const added = await applyScanServings(food.id, [
+        { label: 'Messlöffel', amount: 50 }, // Scan-Wert verliert
+        { label: 'Portion', amount: 100 },
+      ])
+
+      expect(added).toEqual([{ label: 'Portion', amount: 100 }])
+      expect((await db.foods.get(food.id))!.servings).toEqual([
+        { label: 'Messlöffel', amount: 45 },
+        { label: 'Portion', amount: 100 },
+      ])
+    })
+
+    it('ohne Scan-Einheiten oder für unbekannte/gelöschte Produkte: No-Op statt Fehler', async () => {
+      const food = await createFood({ name: 'Riegel', ...base })
+      expect(await applyScanServings(food.id, undefined)).toEqual([])
+      expect((await db.foods.get(food.id))!.servings).toBeUndefined()
+      expect(await applyScanServings('nope', [{ label: 'Stück', amount: 25 }])).toEqual([])
     })
   })
 

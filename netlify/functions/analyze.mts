@@ -1,5 +1,5 @@
 import { AnalyzeResultSchema, AutoAnalyzeResultSchema, ReceiptResultSchema } from '../../src/lib/apiContract'
-import { analyzeErrorResponse, clampAuto, clampBarcode, clampQuestions, clampReceipt, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
+import { analyzeErrorResponse, clampAuto, clampBarcode, clampQuestions, clampReceipt, clampServings, extractJson, parseAnalyzeRequest } from './lib/analyzeShared'
 import { isAbortError } from './lib/coachShared'
 import { createGuard } from './lib/guard'
 
@@ -34,6 +34,13 @@ const AMOUNT_ANCHORS =
   'Beachte das Schüttgewicht: Pulver und Flocken sind deutlich leichter als Wasser. ' +
   'Setze NIEMALS pauschal 100 als Mengenschätzung. Bist du unsicher, wähle den unteren Rand des plausiblen Bereichs, senke confidence und stelle eine kurze Rückfrage in questions.'
 
+// Vertrag v1.7: explizit aufgedruckte Messlöffel-/Scoop-/Portionsangaben als
+// benannte Einheiten mitlesen (Praxisfälle: Huel „2 gestrichene Messlöffel
+// (100 g)", Mass Gainer „Eine Portion 100 g Pulver (2 Messlöffel)"). Nur für
+// die label-/auto-Pfade — bei Gericht/Bon gibt es keine Verpackungsangabe.
+const SERVINGS_INSTRUCTION =
+  ' Steht auf der Verpackung eine Messlöffel-/Scoop-/Portionsangabe (z. B. "2 gestrichene Messlöffel = 100 g", "1 Scoop = 30 g", "Eine Portion 100 g Pulver (2 Messlöffel)"), gib sie am Item als "servings" zurück: Array aus {"label":string,"amount":number}, maximal 3 Einträge. label = deutscher Einheitenname (z. B. "Messlöffel"), amount = Gramm bzw. Milliliter PRO EINZELNER Einheit — bei "2 Messlöffel = 100 g" also 50. Erfinde keine Angaben — nur was lesbar dasteht; sonst lasse "servings" weg.'
+
 const SYSTEM: Record<string, string> = {
   meal:
     'Du bist ein Ernährungs-Erkennungssystem. Erkenne die Lebensmittel auf dem Foto und schätze die gegessene Menge. Gib für jedes Lebensmittel realistische Nährwerte je 100 g/ml an. Mengen sind Schätzungen — setze confidence entsprechend.' +
@@ -42,7 +49,8 @@ const SYSTEM: Record<string, string> = {
     'Auf dem Foto ist eine abgemessene Menge eines BEKANNTEN Lebensmittels (Name/Kontext im Hinweis) — z. B. auf einem Löffel, in einer Kappe, Tasse oder auf einem Teller. Erkenne zuerst das Gefäß bzw. Besteck und schätze daraus die Menge so genau wie möglich. Gib ein Item mit geschätzter Menge und Nährwerten je 100 g/ml zurück.' +
     AMOUNT_ANCHORS,
   label:
-    'Du bist ein Produkt-Scanner. Auf dem Foto ist eine Verpackung, eine Nährwerttabelle und/oder ein Strichcode. Lies eine sichtbare Nährwerttabelle exakt aus und gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100). Ist KEINE Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes.',
+    'Du bist ein Produkt-Scanner. Auf dem Foto ist eine Verpackung, eine Nährwerttabelle und/oder ein Strichcode. Lies eine sichtbare Nährwerttabelle exakt aus und gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100). Ist KEINE Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes.' +
+    SERVINGS_INSTRUCTION,
   receipt:
     'Du bist ein Kassenbon-Parser für eine Ernährungs-App. Lies die Positionen des abfotografierten Kassenbons aus. Übernimm NUR Lebensmittel und Getränke — Pfand, Leergut, Rabatte, Tüten und Non-Food-Artikel lässt du weg. Normalisiere jeden Artikelnamen zu einem generischen deutschen Lebensmittelnamen ohne Marke und Händler-Kürzel (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"). Extrahiere je Position die ganze Stückzahl (Standard 1) und den Gesamtpreis der Position in EUR. Wenn du typische Nährwerte des Produkts sicher einschätzen kannst, gib sie je 100 g/ml als per100 an — sonst lasse per100 weg.',
   // v1.5: reine Text-Schätzung (kein Bild) — der Produktname steht im Hint.
@@ -59,7 +67,9 @@ const SYSTEM: Record<string, string> = {
     'Bei "meal" erkenne die Lebensmittel und schätze die gegessene Menge (realistische Nährwerte je 100 g/ml, confidence entsprechend der Unsicherheit).' +
     AMOUNT_ANCHORS +
     ' ' +
-    'Bei "label" lies eine sichtbare Nährwerttabelle exakt aus (per100; Portionsgröße als amount, sonst 100) — ist keine Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes; ein sichtbarer Strichcode gehört zusätzlich ins barcode-Feld. ' +
+    'Bei "label" lies eine sichtbare Nährwerttabelle exakt aus (per100; Portionsgröße als amount, sonst 100) — ist keine Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes; ein sichtbarer Strichcode gehört zusätzlich ins barcode-Feld. Nur bei kind "label":' +
+    SERVINGS_INSTRUCTION +
+    ' ' +
     'Bei "barcode" gib die abgelesenen Ziffern als barcode zurück und schätze das Produkt als ein Item, so gut es geht. ' +
     'Bei "receipt" lies die Bon-Positionen aus: NUR Lebensmittel und Getränke (kein Pfand, keine Rabatte, keine Tüten, kein Non-Food), Artikelnamen zu generischen deutschen Lebensmittelnamen ohne Marke normalisieren (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"), je Position ganze Stückzahl (Standard 1) und Gesamtpreis in EUR; per100 nur, wenn du typische Nährwerte sicher einschätzen kannst.',
 }
@@ -73,8 +83,22 @@ const MICRO_INSTRUCTION =
 const BARCODE_INSTRUCTION =
   ' Wenn auf dem Bild ein EAN/UPC-Strichcode mit lesbaren Ziffern zu sehen ist, gib die Ziffern (ohne Leerzeichen) als "barcode" zurück — sonst lasse das Feld weg. Rate NIEMALS Ziffern.'
 
+// Gemeinsames Item-Schema; label/auto ergänzen das "servings"-Feld (v1.7) —
+// die anderen Modi bekommen es bewusst NICHT genannt, damit das Modell bei
+// Gericht/Portion keine Einheiten erfindet.
+const ITEM_SCHEMA =
+  '"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}'
+const SERVINGS_SCHEMA = '"servings":[{"label":string,"amount":number}]?'
+
 const JSON_INSTRUCTION =
-  'Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?,"questions":string[]?,"barcode":string?}. ' +
+  `Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{${ITEM_SCHEMA}}],"notes":string?,"questions":string[]?,"barcode":string?}. ` +
+  MICRO_INSTRUCTION +
+  BARCODE_INSTRUCTION +
+  ' Keine Erklärungen, kein Markdown.'
+
+// Vertrag v1.7: nur der label-Modus nennt das servings-Feld im Schema.
+const LABEL_JSON_INSTRUCTION =
+  `Antworte AUSSCHLIESSLICH mit JSON in genau diesem Schema: {"items":[{${ITEM_SCHEMA},${SERVINGS_SCHEMA}}],"notes":string?,"questions":string[]?,"barcode":string?}. ` +
   MICRO_INSTRUCTION +
   BARCODE_INSTRUCTION +
   ' Keine Erklärungen, kein Markdown.'
@@ -85,10 +109,10 @@ const RECEIPT_JSON_INSTRUCTION =
 
 // Unified Scan (Vertrag v1.6): bestehende Schemata, diskriminiert über "kind".
 const AUTO_JSON_INSTRUCTION =
-  'Antworte AUSSCHLIESSLICH mit JSON. Bei kind "meal", "label" oder "barcode" in genau diesem Schema: {"kind":"meal"|"label"|"barcode","items":[{"name":string,"amount":number,"unit":"g"|"ml"|"portion","confidence":number(0..1),"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number,"micros":{[key]:number}?}}],"notes":string?,"questions":string[]?,"barcode":string?}. Bei kind "receipt" in genau diesem Schema: {"kind":"receipt","items":[{"name":string,"quantity":number,"price":number?,"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}?}]}. ' +
+  `Antworte AUSSCHLIESSLICH mit JSON. Bei kind "meal", "label" oder "barcode" in genau diesem Schema: {"kind":"meal"|"label"|"barcode","items":[{${ITEM_SCHEMA},${SERVINGS_SCHEMA}}],"notes":string?,"questions":string[]?,"barcode":string?}. Bei kind "receipt" in genau diesem Schema: {"kind":"receipt","items":[{"name":string,"quantity":number,"price":number?,"per100":{"kcal":number,"protein":number,"carbs":number,"fat":number}?}]}. ` +
   MICRO_INSTRUCTION +
   BARCODE_INSTRUCTION +
-  ' Rückfragen im Feld "questions" (max. 2) nur bei kind "meal", wenn eine Zusatzangabe die Schätzung deutlich verbessern würde. Keine Erklärungen, kein Markdown.'
+  ' Rückfragen im Feld "questions" (max. 2) nur bei kind "meal", wenn eine Zusatzangabe die Schätzung deutlich verbessern würde. Das Feld "servings" nur bei kind "label" und nur mit ablesbaren Verpackungsangaben. Keine Erklärungen, kein Markdown.'
 
 // Verfeinerungsschleife (Vertrag v1.2, Paket B): nur meal/portion — bei einer
 // abfotografierten Nährwerttabelle oder einem Kassenbon gibt es nichts nachzufragen.
@@ -170,7 +194,7 @@ export default async (req: Request): Promise<Response> => {
       : SYSTEM[mode] +
         (mode === 'meal' || mode === 'portion' ? QUESTIONS_INSTRUCTION : '') +
         '\n\n' +
-        (mode === 'receipt' ? RECEIPT_JSON_INSTRUCTION : JSON_INSTRUCTION)
+        (mode === 'receipt' ? RECEIPT_JSON_INSTRUCTION : mode === 'label' ? LABEL_JSON_INSTRUCTION : JSON_INSTRUCTION)
 
   // Ein Retry, falls das Modell mal kein sauberes JSON liefert; nach einem
   // Timeout wird NICHT erneut versucht (sonst wartet der Client bis zu 40 s).
@@ -185,7 +209,7 @@ export default async (req: Request): Promise<Response> => {
           ? AutoAnalyzeResultSchema.parse(clampAuto(extractJson(content)))
           : mode === 'receipt'
             ? ReceiptResultSchema.parse(clampReceipt(extractJson(content)))
-            : AnalyzeResultSchema.parse(clampQuestions(clampBarcode(extractJson(content))))
+            : AnalyzeResultSchema.parse(clampServings(clampQuestions(clampBarcode(extractJson(content)))))
       return new Response(JSON.stringify(result), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },

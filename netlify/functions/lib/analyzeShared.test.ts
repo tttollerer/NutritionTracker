@@ -7,6 +7,7 @@ import {
   clampBarcode,
   clampQuestions,
   clampReceipt,
+  clampServings,
   extractJson,
   MAX_QUESTIONS,
   MAX_RECEIPT_QUANTITY,
@@ -187,6 +188,71 @@ describe('analyzeShared (Helfer der Analyze-Function, Vertrag §1/§2)', () => {
     })
   })
 
+  describe('clampServings (Etikett-Einheiten-Sanitizing v1.7)', () => {
+    const item = {
+      name: 'Huel Pulver',
+      amount: 100,
+      unit: 'g',
+      per100: { kcal: 400, protein: 30, carbs: 37, fat: 13 },
+    }
+
+    it('trimmt Labels, wirft amount ≤ 0/NaN raus und dedupliziert case-insensitiv', () => {
+      const clamped = clampServings({
+        items: [
+          {
+            ...item,
+            servings: [
+              { label: '  Messlöffel ', amount: 50 },
+              { label: 'messlöffel', amount: 60 }, // Duplikat (case-insensitiv) → weg
+              { label: 'Scoop', amount: 0 }, // amount ≤ 0 → weg
+              { label: 'Kappe', amount: Number.NaN }, // NaN → weg
+              { label: '', amount: 30 }, // leeres Label → weg
+            ],
+          },
+        ],
+      }) as { items: { servings?: unknown }[] }
+      expect(clamped.items[0].servings).toEqual([{ label: 'Messlöffel', amount: 50 }])
+    })
+
+    it('kappt auf maximal 3 Einheiten und kürzt überlange Labels auf 30 Zeichen', () => {
+      const clamped = clampServings({
+        items: [
+          {
+            ...item,
+            servings: [
+              { label: 'x'.repeat(40), amount: 10 },
+              { label: 'b', amount: 20 },
+              { label: 'c', amount: 30 },
+              { label: 'd', amount: 40 }, // Nummer 4 → gekappt
+            ],
+          },
+        ],
+      }) as { items: { servings: { label: string }[] }[] }
+      expect(clamped.items[0].servings).toHaveLength(3)
+      expect(clamped.items[0].servings[0].label).toBe('x'.repeat(30))
+      // Ergebnis besteht die Vertrags-Validierung.
+      expect(AnalyzeResultSchema.safeParse(clamped).success).toBe(true)
+    })
+
+    it('entfernt leere/kaputte servings-Felder, statt die Antwort zu kippen', () => {
+      expect(clampServings({ items: [{ ...item, servings: [] }] })).toEqual({ items: [item] })
+      expect(clampServings({ items: [{ ...item, servings: 'Messlöffel' }] })).toEqual({ items: [item] })
+      expect(clampServings({ items: [{ ...item, servings: [{ label: 'Scoop', amount: -5 }] }] })).toEqual({
+        items: [item],
+      })
+    })
+
+    it('lässt Items ohne servings und Antworten ohne items-Array unangetastet', () => {
+      const clamped = clampServings({ items: [item], notes: 'x' }) as { items: unknown[]; notes: string }
+      expect(clamped.items[0]).toBe(item)
+      expect(clamped.notes).toBe('x')
+      const noItems = { notes: 'nur Text' }
+      expect(clampServings(noItems)).toBe(noItems)
+      expect(clampServings(null)).toBe(null)
+      expect(clampServings('kein Objekt')).toBe('kein Objekt')
+    })
+  })
+
   describe('clampAuto (Unified Scan v1.6)', () => {
     const item = {
       name: 'Skyr',
@@ -210,15 +276,16 @@ describe('analyzeShared (Helfer der Analyze-Function, Vertrag §1/§2)', () => {
       expect(AutoAnalyzeResultSchema.safeParse(clamped).success).toBe(true)
     })
 
-    it('kind meal/label/barcode → Barcode- und Questions-Sanitizing wie bisher', () => {
+    it('kind meal/label/barcode → Barcode-, Questions- UND Servings-Sanitizing (v1.7)', () => {
       const clamped = clampAuto({
         kind: 'label',
-        items: [item],
+        items: [{ ...item, servings: [{ label: ' Messlöffel ', amount: 50 }, { label: 'Scoop', amount: 0 }] }],
         barcode: '4066 600-203704',
         questions: ['A?', 'B?', 'C?'], // eine zu viel → gekappt
-      }) as { barcode?: string; questions?: string[] }
+      }) as { barcode?: string; questions?: string[]; items: { servings?: unknown }[] }
       expect(clamped.barcode).toBe('4066600203704')
       expect(clamped.questions).toEqual(['A?', 'B?'])
+      expect(clamped.items[0].servings).toEqual([{ label: 'Messlöffel', amount: 50 }])
       expect(AutoAnalyzeResultSchema.safeParse({ ...clamped, kind: 'label' }).success).toBe(true)
     })
 
