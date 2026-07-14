@@ -376,6 +376,11 @@ export function Capture() {
           <p className="text-sm text-muted-foreground">
             {mode === 'auto' ? t('capture.analyzingAuto') : t('capture.analyzing')}
           </p>
+          {/* Ausweg aus der (auto-gestarteten) Analyse: zurück zur Vorschau,
+              z. B. um der KI noch eine Beschreibung mitzugeben. */}
+          <Button variant="ghost" className="border border-input" onClick={cancelAnalyze}>
+            <X size={18} /> {t('common.cancel')}
+          </Button>
         </div>
       ) : preview ? (
         /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */
