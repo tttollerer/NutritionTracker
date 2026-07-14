@@ -42,6 +42,24 @@ describe('Wochenplaner (planned-Logs)', () => {
     expect((await db.logs.get(entry.id))!.planned).toBe(true)
   })
 
+  it('planFood persistiert den serving-Snapshot („2 Stück") wie logFood', async () => {
+    const food = await createFood({ name: 'Cookies', ...base })
+    const entry = await planFood({
+      food,
+      date: DATE,
+      meal: 'snack',
+      amount: 44,
+      unit: 'g',
+      serving: { label: 'Stück', count: 2 },
+    })
+    expect(entry.serving).toEqual({ label: 'Stück', count: 2 })
+    expect((await db.logs.get(entry.id))!.serving).toEqual({ label: 'Stück', count: 2 })
+
+    // Ohne Snapshot bleibt das Feld ganz weg (sync-sauber, kein Leer-Feld).
+    const plain = await planFood({ food, date: DATE, meal: 'lunch', amount: 100, unit: 'g' })
+    expect('serving' in (await db.logs.get(plain.id))!).toBe(false)
+  })
+
   it('planned-Logs zählen NICHT in Verzehr-Summen (sumsByDate) und Kosten (sumCost)', async () => {
     const food = await createFood({ name: 'Reis', ...base })
     await setFoodPrice(food.id, { amount: 2, per: 500 })

@@ -156,6 +156,65 @@ describe('Week — Vorausplanung', () => {
     expect((await db.foods.get(food.id))!.pantryQty).toBe(0)
   })
 
+  it('trägt über die Katalog-Suche ein Nicht-Vorrats-Lebensmittel mit Menge nach (Restaurant-Fall)', async () => {
+    // Bewusst KEIN Vorrats-Artikel — bisher war so ein Nachtrag unmöglich.
+    await createFood({ name: 'Restaurant-Pizza', ...base })
+    const { key, date, inCurrentWeek } = yesterday()
+
+    renderWeek()
+    if (!inCurrentWeek) fireEvent.click(await screen.findByLabelText('Vorherige Woche'))
+
+    const dayLabel = new Intl.DateTimeFormat('de', { day: 'numeric', month: 'long' }).format(date)
+    const panel = await screen.findByRole('region', { name: dayLabel })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Nachtragen' }))
+
+    // Ohne Suchbegriff: „Zuletzt benutzt" bietet das Lebensmittel ebenfalls an.
+    expect(await screen.findByText('Zuletzt benutzt')).toBeTruthy()
+
+    // Suche über den ganzen Katalog → Tap öffnet das Mengen-Sheet.
+    fireEvent.change(screen.getByLabelText('Lebensmittel suchen …'), { target: { value: 'pizza' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Menge von Restaurant-Pizza wählen' }))
+
+    // Menge anpassen und als echten Log für den vergangenen Tag buchen.
+    const amount = await screen.findByLabelText('Menge')
+    fireEvent.change(amount, { target: { value: '250' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Eintragen' }))
+
+    await waitFor(() =>
+      expect(showUndo).toHaveBeenCalledWith('Restaurant-Pizza nachgetragen', expect.any(Function)),
+    )
+    const logs = await db.logs.toArray()
+    expect(logs).toHaveLength(1)
+    expect(logs[0].date).toBe(key)
+    expect(logs[0].amount).toBe(250)
+    expect(logs[0].planned).toBeUndefined() // echter Verzehr, kein Plan
+  })
+
+  it('plant über die Katalog-Suche mit dem Mengen-Sheet einen planned-Eintrag', async () => {
+    await createFood({ name: 'Sushi Box', ...base })
+    const { inCurrentWeek } = tomorrow()
+
+    renderWeek()
+    await gotoWeekOf(inCurrentWeek)
+
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Aus Vorrat planen' }))[0])
+    fireEvent.change(await screen.findByLabelText('Lebensmittel suchen …'), { target: { value: 'sushi' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Menge von Sushi Box wählen' }))
+
+    // Plan-Modus des Mengen-Sheets: Menge anpassbar, Button „Einplanen".
+    fireEvent.change(await screen.findByLabelText('Menge'), { target: { value: '300' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Einplanen' }))
+
+    await waitFor(() =>
+      expect(showUndo).toHaveBeenCalledWith('Sushi Box geplant', expect.any(Function)),
+    )
+    const logs = await db.logs.toArray()
+    expect(logs).toHaveLength(1)
+    expect(logs[0].planned).toBe(true)
+    expect(logs[0].amount).toBe(300)
+    expect(logs[0].date > todayKey()).toBe(true)
+  })
+
   it('öffnet über den Zeitraum den Monatskalender und springt zum getippten Tag', async () => {
     renderWeek()
     fireEvent.click(await screen.findByRole('button', { name: 'Kalender öffnen' }))

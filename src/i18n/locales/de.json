@@ -49,6 +49,10 @@
       "unit": "Einheit",
       "unitPortion": "Portion",
       "meal": "Mahlzeit",
+      "date": "Tag",
+      "dateToday": "Heute",
+      "dateYesterday": "Gestern",
+      "datePick": "Anderer Tag …",
       "save": "Speichern"
     }
   },
@@ -184,7 +188,7 @@
     "backfill": "Nachtragen",
     "backfillMeal": "Mahlzeit nachtragen",
     "backfillPick": "{{name}} nachtragen",
-    "backfillPickerEmpty": "Dein Vorrat ist leer — lege im Vorrat Lebensmittel an, um nachzutragen.",
+    "backfillPickerEmpty": "Dein Vorrat ist noch leer — nutze die Suche oder lege zuerst Lebensmittel in deinen Vorrat.",
     "backfilled": "{{name}} nachgetragen"
   },
   "calendar": {
@@ -740,6 +744,7 @@
   },
   "plan": {
     "planMeal": "Mahlzeit planen",
+    "save": "Einplanen",
     "planned": "Geplant",
     "plannedBadge": "geplant",
     "confirm": "Gegessen",
@@ -749,7 +754,7 @@
     "removeAria": "Planung von {{name}} entfernen",
     "removed": "Planung entfernt",
     "plannedFor": "{{name}} geplant",
-    "pickerEmpty": "Dein Vorrat ist leer — lege im Vorrat Lebensmittel an, um zu planen.",
+    "pickerEmpty": "Dein Vorrat ist noch leer — nutze die Suche oder lege zuerst Lebensmittel in deinen Vorrat.",
     "pickFood": "{{name}} einplanen",
     "missing": "Fehlt für deinen Plan",
     "missingCount_one": "1 Zutat fehlt im Vorrat",

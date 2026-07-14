@@ -57,6 +57,23 @@ describe('updateLog', () => {
     expect(updated!.computed).toEqual(entry.computed)
   })
 
+  it('verschiebt den Eintrag per date-Patch auf einen anderen Tag (Werte unverändert)', async () => {
+    const { entry } = await seedLog()
+    expect(entry.date).toBe('2026-07-05')
+
+    const updated = await updateLog(entry.id, { date: '2026-07-04' })
+
+    expect(updated!.date).toBe('2026-07-04')
+    expect(updated!.amount).toBe(entry.amount)
+    expect(updated!.computed).toEqual(entry.computed)
+    expect(updated!.serving).toEqual(entry.serving)
+    // Persistiert, nicht nur zurückgegeben:
+    expect((await db.logs.get(entry.id))!.date).toBe('2026-07-04')
+    // Ohne date-Patch bleibt der Tag stehen (kein versehentliches Verschieben).
+    const same = await updateLog(entry.id, { meal: 'snack' })
+    expect(same!.date).toBe('2026-07-04')
+  })
+
   it('Portionseinheiten: serving-Snapshot wird gesetzt, umgerechnet und bereinigt', async () => {
     const food = await createFood({
       name: 'Double Choc Cookies',
