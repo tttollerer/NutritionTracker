@@ -156,6 +156,9 @@ export function Capture() {
     setPriceDone(true)
   }
 
+  // mode 'portion' wird in der App nicht mehr verlinkt (die Mengen-Schätzung
+  // läuft im PortionSheet über analyzeImage), bleibt aber für Deep-Links/alte
+  // PWA-Stände erreichbar — mit eigenem Titel statt „Essen fotografieren".
   const title =
     mode === 'auto'
       ? t('capture.autoTitle')
@@ -163,7 +166,9 @@ export function Capture() {
         ? t('capture.labelTitle')
         : mode === 'receipt'
           ? t('capture.receiptTitle')
-          : t('capture.mealTitle')
+          : mode === 'portion'
+            ? t('capture.portionTitle')
+            : t('capture.mealTitle')
   const uiHint =
     mode === 'auto'
       ? t('capture.hintAuto')

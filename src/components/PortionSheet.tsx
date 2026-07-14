@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -48,6 +48,14 @@ interface Props {
    * onLogged-Callback erhält den planned-Eintrag (Undo beim Aufrufer).
    */
   planned?: boolean
+  /**
+   * Direkteinstieg „Menge per Foto" (Erfassen-Zeile, Audit #9): beim Öffnen
+   * sofort den Kamera-Input des Foto-Schätz-Flows anstoßen. Ohne erteilte
+   * Foto-Einwilligung erscheint stattdessen der Consent-Block; blockiert das
+   * System den programmatischen Öffner (z. B. iOS ohne frische User-Geste),
+   * bleibt der sichtbare Kamera-Button neben dem Mengenfeld der Ausweg.
+   */
+  autoPhotoEstimate?: boolean
 }
 
 /**
@@ -59,7 +67,7 @@ interface Props {
  * Mit `editEntry` arbeitet dasselbe Sheet als Log-Editor („Eintrag
  * bearbeiten") — EIN Mengen-Sheet für Loggen und Korrigieren.
  */
-export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry, date, planned }: Props) {
+export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry, date, planned, autoPhotoEstimate }: Props) {
   const { t } = useTranslation()
 
   return (
@@ -93,6 +101,7 @@ export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry, 
               editEntry={editEntry}
               date={date}
               planned={planned}
+              autoPhotoEstimate={autoPhotoEstimate}
             />
           </motion.div>
         </>
@@ -129,7 +138,7 @@ function servingsOf(food: FoodItem): { label: string; amount: number }[] {
   return (food.servings ?? []).filter((s) => !dpLabel || s.label.toLowerCase() !== dpLabel)
 }
 
-function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEntry, date, planned }: Props & { food: FoodItem }) {
+function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEntry, date, planned, autoPhotoEstimate }: Props & { food: FoodItem }) {
   const { t, i18n } = useTranslation()
   // Lokale Produkt-Kopie: der Editor (FoodDetailSheet) kann Name/Portion/Preis
   // ändern — onSaved zieht diese Kopie nach, damit das Sheet nichts Veraltetes
@@ -220,6 +229,19 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
     setConsentOpen(false)
     ref.current?.click()
   }
+
+  // Direkteinstieg „Menge per Foto" (autoPhotoEstimate): sobald die
+  // Einwilligung aus Dexie geladen ist, genau EINMAL pro Öffnen den
+  // Foto-Schätz-Flow anstoßen — dieselbe Kette wie der Kamera-Button
+  // (requestPhoto: Consent-Block oder Kamera-/Galerie-Dialog).
+  const autoPhotoDoneRef = useRef(false)
+  useEffect(() => {
+    if (!autoPhotoEstimate || autoPhotoDoneRef.current) return
+    if (photoConsent === undefined) return // Einwilligung lädt noch (Dexie, async)
+    autoPhotoDoneRef.current = true
+    requestPhoto(amountCamRef)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- requestPhoto ist pro Render neu; der Ref hält den Start einmalig
+  }, [autoPhotoEstimate, photoConsent])
 
   /**
    * Gemeinsamer Foto-Schätz-Lauf (Muster FoodDetailSheet.onPortionPhotoFile):

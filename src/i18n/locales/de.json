@@ -522,6 +522,7 @@
   },
   "capture": {
     "mealTitle": "Essen fotografieren",
+    "portionTitle": "Menge schätzen",
     "labelTitle": "Produkt scannen",
     "barcodeTitle": "Barcode scannen",
     "receiptTitle": "Kassenbon scannen",

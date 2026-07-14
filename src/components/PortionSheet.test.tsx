@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import '@/i18n'
 import { db } from '@/db'
-import { createFood, logFood, setPantry } from '@/db/repo'
+import { createFood, logFood, setPantry, updateSettings } from '@/db/repo'
 import { updateFoodValues } from '@/lib/foodEdit'
 import { todayKey } from '@/lib/utils'
 import type { FoodItem, LogEntry } from '@/db/types'
@@ -257,5 +257,61 @@ describe('PortionSheet — Datum verschieben (Edit-Modus)', () => {
     // Kalender zu, gewählter Tag steht als aktiver Chip — Speichern verschiebt.
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     await waitFor(async () => expect((await db.logs.get(entry.id))!.date).toBe(todayKey(target)))
+  })
+})
+
+/**
+ * Direkteinstieg „Menge per Foto" (Usability-Audit #9): mit autoPhotoEstimate
+ * stößt das Sheet beim Öffnen selbst den Foto-Schätz-Flow an — mit erteilter
+ * Einwilligung öffnet sich der verdeckte Kamera-/Galerie-Input, ohne
+ * Einwilligung erscheint zuerst der Consent-Block (kein Upload ohne Zutun).
+ */
+describe('PortionSheet — autoPhotoEstimate (Direkteinstieg Foto-Schätzung)', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()))
+  })
+
+  /** Klicks auf verdeckte Datei-Inputs zählen (der Direkteinstieg „tippt" den Kamera-Input an). */
+  function fileInputClicks(spy: { mock: { contexts: unknown[] } }): number {
+    return spy.mock.contexts.filter((el) => el instanceof HTMLInputElement && el.type === 'file').length
+  }
+
+  it('öffnet mit erteilter Einwilligung genau EINMAL den verdeckten Kamera-Input', async () => {
+    await updateSettings({ photoConsent: true })
+    const food = await makeFood()
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click')
+    try {
+      render(<PortionSheet food={food} autoPhotoEstimate initialMeal="lunch" onClose={() => {}} />)
+      await waitFor(() => expect(fileInputClicks(clickSpy)).toBe(1))
+      // Kein Consent-Block — die Einwilligung war bereits erteilt.
+      expect(screen.queryByText('Foto an KI senden?')).toBeNull()
+    } finally {
+      clickSpy.mockRestore()
+    }
+  })
+
+  it('zeigt ohne Einwilligung zuerst den Consent-Block statt der Kamera', async () => {
+    const food = await makeFood()
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click')
+    try {
+      render(<PortionSheet food={food} autoPhotoEstimate initialMeal="lunch" onClose={() => {}} />)
+      expect(await screen.findByText('Foto an KI senden?')).toBeInTheDocument()
+      expect(fileInputClicks(clickSpy)).toBe(0)
+    } finally {
+      clickSpy.mockRestore()
+    }
+  })
+
+  it('ohne autoPhotoEstimate bleibt das Öffnen passiv (kein Kamera-Input, kein Consent-Block)', async () => {
+    const food = await makeFood()
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click')
+    try {
+      render(<PortionSheet food={food} initialMeal="lunch" onClose={() => {}} />)
+      await screen.findByRole('button', { name: 'Eintragen' })
+      expect(fileInputClicks(clickSpy)).toBe(0)
+      expect(screen.queryByText('Foto an KI senden?')).toBeNull()
+    } finally {
+      clickSpy.mockRestore()
+    }
   })
 })
