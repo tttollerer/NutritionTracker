@@ -267,28 +267,25 @@ data: {"error":"Der Coach ist gerade nicht erreichbar. Bitte versuch es später 
 
 ---
 
-## 4) Entscheidung: sessionStorage für Coach-Verlauf & Review-Payload
+## 4) Entscheidung: Speicherorte für Coach-Verlauf & Review-Payload
 
-**Beschluss (bleibt in v1.1):** Der Coach-Chatverlauf (`src/lib/chatStore.ts`) und die
-Analyse-Zwischenergebnisse für den Prüf-Screen (`src/lib/reviewStore.ts`) bleiben bewusst
-in `sessionStorage` — **nicht** in Dexie/IndexedDB und ohne Sync-Anspruch.
+**Beschluss (revidiert im App-Review, PR #24 — ursprünglich v1.1: beides sessionStorage):**
 
-Begründung:
-
-- **Datensparsamkeit:** Chatverläufe können sensible Angaben (Gesundheit, Essverhalten)
-  und die Review-Payload Base64-Fotos enthalten. Beides ist flüchtiger Arbeitszustand,
-  kein Langzeitdatenbestand; es soll einen Reload überleben, aber nicht dauerhaft auf dem
-  Gerät liegen oder je in einen späteren Cloud-Sync (PLAN.md §11 Phase 5) geraten.
-- **Kein Sync-Anspruch:** Persistente Ergebnisse entstehen erst durch bestätigte Aktionen
-  (Log-Eintrag, übernommenes Ziel) und landen dann regulär in Dexie.
-
-**Bekannte iOS-Einschränkung (akzeptiert):** In der als PWA installierten App
-(Standalone-Modus) sowie in Safari auf iOS wird `sessionStorage` beim Beenden/Verdrängen
-der App aus dem Speicher geleert — jeder Kaltstart ist eine neue Session. Praktisch:
-Chatverlauf und ein nicht abgeschlossener Prüf-Screen können nach App-Wechsel mit knappem
-Speicher oder Neustart weg sein. Das ist der bewusst in Kauf genommene Preis der
-Datensparsamkeit; die UX muss damit umgehen (leerer Chat ist ein gültiger Startzustand,
-Review-Flow bricht sauber zur Erfassung zurück — vgl. Paket 9/11).
+- **Coach-Chatverlauf (`src/lib/chatStore.ts`): `localStorage`.** Die ursprüngliche
+  sessionStorage-Entscheidung führte auf iOS (PWA-Standalone/Safari) dazu, dass jeder
+  Kaltstart den Chat kommentarlos leerte — aus Nutzersicht Datenverlust mitten im
+  Gespräch. Der Verlauf liegt jetzt in `localStorage`, gekappt auf die letzten
+  50 Nachrichten, mit einmaliger Migration vom alten sessionStorage-Key. Der
+  Datensparsamkeit dienen weiterhin: die Kappung, eine sichtbare Nutzer-Aktion
+  „Verlauf löschen" (mit Undo) im Coach, und dass der Verlauf **nicht** in Dexie liegt —
+  er bleibt damit außerhalb von Export/Backup und einem späteren Cloud-Sync
+  (PLAN.md §11 Phase 5).
+- **Review-Payload (`src/lib/reviewStore.ts`): unverändert `sessionStorage`.**
+  Analyse-Zwischenergebnisse (inkl. Base64-Fotos) sind flüchtiger Arbeitszustand: sie
+  sollen einen Reload überleben, aber nicht dauerhaft auf dem Gerät liegen. Bricht die
+  Session ab, kehrt der Review-Flow sauber zur Erfassung zurück.
+- **Kein Sync-Anspruch (unverändert):** Persistente Ergebnisse entstehen erst durch
+  bestätigte Aktionen (Log-Eintrag, übernommenes Ziel) und landen dann regulär in Dexie.
 
 ---
 
