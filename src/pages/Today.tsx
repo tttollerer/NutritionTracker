@@ -28,6 +28,7 @@ import { NudgeCard } from '@/components/NudgeCard'
 import { ExpiryHint } from '@/components/ExpiryHint'
 import { CaptureCta } from '@/components/CaptureCta'
 import { WeekBarsMini } from '@/components/WeekBarsCard'
+import { TrendsTeaser } from '@/components/TrendsTeaser'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
@@ -210,6 +211,9 @@ export function Today() {
 
       {/* Kompakte Wochen-Balken (planned zählt nicht) — Sprungbrett zur Woche. */}
       <WeekBarsMini today={date} kcalGoal={kcalGoal} />
+
+      {/* Dezenter Verlauf-Teaser (Gewicht bzw. Ø kcal) — Sprungbrett zu /trends. */}
+      <TrendsTeaser today={date} />
 
       {logs.length === 0 ? (
         <div className="space-y-3 rounded-lg bg-muted/50 p-6 text-center">

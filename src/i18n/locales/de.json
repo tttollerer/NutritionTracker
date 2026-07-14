@@ -222,6 +222,7 @@
     "title": "Coach",
     "subtitle": "dein Ernährungscoach",
     "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Eiweißziel zu treffen?\"",
+    "emptyMemory": "Ziele & Vorlieben merkt sich dein Coach dauerhaft — unabhängig vom Chat-Verlauf.",
     "inputPh": "Nachricht oder Mikrofon …",
     "send": "Senden",
     "listening": "Höre zu …",
@@ -231,6 +232,8 @@
     "mic": "Mikrofon",
     "disclaimer": "Orientierung, keine medizinische Beratung. Bei Beschwerden bitte Fachleute fragen.",
     "retry": "Erneut versuchen",
+    "clearHistory": "Verlauf löschen",
+    "historyCleared": "Chat-Verlauf gelöscht",
     "suggestTitle": "Vorschläge",
     "applyGoal": "Ziel übernehmen",
     "applyChallenge": "Challenge starten",
@@ -412,6 +415,11 @@
     "title": "Verlauf & Messwerte",
     "intro": "Trage deine Werte regelmäßig ein — daraus erkennen wir und der Coach deinen Fortschritt.",
     "measurementsTitle": "Messwerte",
+    "teaser": {
+      "title": "Dein Verlauf",
+      "weightLine": "{{value}} kg · {{rate}} kg/Woche",
+      "kcalLine": "Ø {{kcal}} kcal in 7 Tagen"
+    },
     "nutrition": {
       "title": "Ernährung",
       "kcalTitle": "Kalorien",
@@ -597,7 +605,12 @@
     "refineCta": "Neu schätzen",
     "refining": "Wird neu geschätzt …",
     "refineConfirm": "Ja, neu schätzen",
-    "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut."
+    "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut.",
+    "itemKcal": "= {{kcal}} kcal",
+    "total": "Gesamt: {{kcal}} kcal · {{protein}} g Eiweiß",
+    "meal": "Mahlzeit",
+    "logged_one": "1 Eintrag geloggt",
+    "logged_other": "{{count}} Einträge geloggt"
   },
   "receipt": {
     "title": "Kassenbon prüfen",
@@ -657,7 +670,10 @@
       "portionEstimated": "KI-Schätzung: {{amount}} {{unit}} — unten prüfen und mit + übernehmen.",
       "portionEstimateNone": "Keine Mengenschätzung erkennbar — bitte Menge von Hand eintragen.",
       "estimateCta": "Nährwerte per KI schätzen",
-      "estimateDone": "KI-Schätzung übernommen — bitte prüfen und bei Bedarf korrigieren."
+      "estimateDone": "KI-Schätzung übernommen — bitte prüfen und bei Bedarf korrigieren.",
+      "pantryRemove": "Aus dem Vorrat entfernen",
+      "pantryRemoveNamed": "{{name}} aus dem Vorrat entfernen",
+      "pantryRemoved": "{{name}} aus dem Vorrat entfernt"
     },
     "create": {
       "title": "Neues Produkt",

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, Image as ImageIcon, ImagePlus, Mic, RotateCcw, Send, ShieldCheck, Volume2, VolumeX, Target, Trophy, Plus, X } from 'lucide-react'
+import { Camera, Image as ImageIcon, ImagePlus, Mic, RotateCcw, Send, ShieldCheck, Trash2, Volume2, VolumeX, Target, Trophy, Plus, X } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Card } from '@/components/ui/Card'
@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 import { sendCoachStream, type ChatMessage, type CoachSuggestions } from '@/lib/coach'
 import type { CoachChallengeSuggestion } from '@/lib/apiContract'
 import { toApiError } from '@/lib/apiError'
-import { loadChat, saveChat } from '@/lib/chatStore'
+import { clearChat, loadChat, saveChat } from '@/lib/chatStore'
 import { downscaleImage } from '@/lib/image'
 import { useOverlays } from '@/lib/overlays-context'
 import { completeSentences, speakQueue, stopSpeaking, useSpeechRecognition } from '@/lib/speech'
@@ -47,6 +47,7 @@ async function compressForCoach(file: Blob): Promise<string> {
 export function Coach() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const { showUndo } = useOverlays()
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadChat())
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -144,7 +145,26 @@ export function Coach() {
     }
   }
 
-  /** Übernommenen Vorschlag an der Nachricht persistieren (sessionStorage, Vertrag §4). */
+  /**
+   * Verlauf löschen — Undo statt Bestätigungsdialog (App-Muster, UndoToast).
+   * Löscht NUR den Chat-Verlauf; das Coach-Gedächtnis (CoachMemory in Dexie)
+   * mit Zielen & Vorlieben bleibt unberührt.
+   */
+  function clearHistory() {
+    if (busyRef.current || messagesRef.current.length === 0) return
+    const backup = messagesRef.current
+    stopSpeaking()
+    setErrorKey(null)
+    messagesRef.current = []
+    setMessages([])
+    clearChat()
+    showUndo(t('coach.historyCleared'), () => {
+      messagesRef.current = backup
+      setMessages(backup) // Effekt speichert den Verlauf wieder (saveChat)
+    })
+  }
+
+  /** Übernommenen Vorschlag an der Nachricht persistieren (localStorage). */
   function markApplied(msgIndex: number, key: string, on: boolean) {
     setMessages((msgs) =>
       msgs.map((m, i) => {
@@ -183,10 +203,21 @@ export function Coach() {
   return (
     <div className="flex h-[calc(100vh-7rem)] flex-col">
       <PageHeader title={t('coach.title')} subtitle={t('coach.subtitle')}>
+        {/* Dezenter Verlauf-Löscher — nur sichtbar, wenn es Verlauf gibt (44-px-Target). */}
+        {messages.length > 0 && (
+          <button
+            onClick={clearHistory}
+            disabled={busy}
+            aria-label={t('coach.clearHistory')}
+            className="focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-border bg-card text-muted-foreground disabled:opacity-50"
+          >
+            <Trash2 size={20} />
+          </button>
+        )}
         <button
           onClick={() => setMuted((m) => !m)}
           aria-label={muted ? t('coach.speak') : t('coach.mute')}
-          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
+          className="focus-ring flex h-11 w-11 items-center justify-center rounded-md border border-border bg-card text-muted-foreground"
         >
           {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
         </button>
@@ -203,6 +234,8 @@ export function Coach() {
                 <Chip key={s} label={t(`coach.starters.${s}`)} selected={false} onClick={() => void send(t(`coach.starters.${s}`))} />
               ))}
             </div>
+            {/* Auch nach „Verlauf löschen" klar: Ziele & Vorlieben bleiben erhalten. */}
+            <p className="mx-auto max-w-xs text-xs text-muted-foreground/80">{t('coach.emptyMemory')}</p>
           </div>
         )}
 
