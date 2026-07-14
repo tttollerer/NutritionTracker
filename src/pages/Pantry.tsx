@@ -74,8 +74,8 @@ export function Pantry() {
     )
   }
 
-  // Vorrats-Wert: Summe der bekannten Packungspreise (nur zeigen, wenn > 0).
-  const pantryValue = pantry.reduce((a, f) => a + (f.price?.amount ?? 0), 0)
+  // Vorrats-Wert: Packungspreis × Packungsanzahl (nur zeigen, wenn > 0).
+  const pantryValue = pantry.reduce((a, f) => a + (f.price?.amount ?? 0) * effectivePantryQty(f), 0)
   const subtitle =
     t('pantryPage.subtitle', { count: pantry.length }) +
     (pantryValue > 0 ? ` · ${formatEuro(pantryValue)}` : '')

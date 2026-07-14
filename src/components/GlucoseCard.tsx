@@ -7,6 +7,7 @@ import { db } from '@/db'
 import { addGlucose, deleteGlucose } from '@/db/repo'
 import type { GlucoseContext } from '@/db/types'
 import { classifyGlucose, fromMgdl, glucoseWarning, toMgdl, type GlucoseLevel } from '@/lib/glucose'
+import { parsePositiveNumber } from '@/lib/money'
 import { useOverlays } from '@/lib/overlays-context'
 import { cn } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
@@ -36,8 +37,9 @@ export function GlucoseCard({ unit, date }: { unit: 'mg/dl' | 'mmol/l'; date: st
   const sorted = (readings ?? []).sort((a, b) => b.loggedAt - a.loggedAt)
 
   async function save() {
-    const v = Number(value)
-    if (!v || v <= 0) return
+    // Komma-tolerant wie alle anderen Zahleneingaben („5,6" mmol/l).
+    const v = parsePositiveNumber(value)
+    if (v == null) return
     await addGlucose(toMgdl(v, unit), context, undefined, date)
     setValue('')
   }

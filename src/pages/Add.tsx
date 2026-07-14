@@ -23,6 +23,7 @@ import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
 import { todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
 import { describePortion } from '@/lib/portion'
 import { PageHeader } from '@/components/PageHeader'
 import { PortionSheet } from '@/components/PortionSheet'
@@ -36,14 +37,17 @@ export function Add() {
   const navigate = useNavigate()
   const { showUndo } = useOverlays()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
+  // Reaktiv über Mitternacht (wie CaptureSheet) — sonst kopiert eine über
+  // Nacht offene Seite die falsche Tagesbasis.
+  const today = useTodayKey()
   const recents = useLiveQuery(() => recentFoods(), [])
   const favorites = useLiveQuery(() => favoriteFoods(), [])
   const pantry = useLiveQuery(() => pantryFoods(), [])
   // Vorrat-Verzehr über das Mengen-Sheet (Menge + Einheit + Mahlzeit).
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
-  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
+  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(today), [today]) ?? 0
   // Kontext für „Gestern kopieren" (Befund 11): Zähler der gewählten Mahlzeit.
-  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(todayKey(), meal), [meal]) ?? 0
+  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(today, meal), [today, meal]) ?? 0
   // Katalog-Suche (live über db.foods)
   const [query, setQuery] = useState('')
   const results = useLiveQuery(() => searchFoods(query), [query])

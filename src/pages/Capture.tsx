@@ -70,6 +70,18 @@ export function Capture() {
     }
   }, [batch])
 
+  // Stale-Foto-Schutz: Verlässt der Nutzer /capture über die Tab-Leiste (ohne
+  // Analyse/Neu aufnehmen/Zurück), darf das übergebene Bild nicht beim nächsten
+  // Besuch als alte Vorschau wieder auftauchen — ein unachtsamer Tap auf
+  // „Analysieren" würde die alte Mahlzeit erneut loggen. /capture und /review
+  // zählen nicht als Verlassen (Transition-Doppelmount bzw. Analyse-Weg, s. o.).
+  useEffect(() => {
+    return () => {
+      const { pathname } = window.location
+      if (pathname !== '/capture' && pathname !== '/review') clearPendingImage()
+    }
+  }, [])
+
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
   const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
 

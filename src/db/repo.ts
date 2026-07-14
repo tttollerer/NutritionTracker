@@ -76,9 +76,15 @@ export async function updateProfile(patch: Partial<Omit<Profile, 'id'>>) {
     )
     await db.goals.bulkPut(goals.filter((g) => !coachNutrients.has(g.nutrient)))
   })
-  // Gewichtsänderung als Messpunkt festhalten, damit der Verlauf konsistent bleibt.
+  // Gewichtsänderung als Messpunkt festhalten, damit der Verlauf konsistent
+  // bleibt. Aber kein Phantom-Messpunkt: das Profil-Formular ist mit dem
+  // jüngsten Messwert vorbelegt (der vom Profilgewicht abweichen kann) —
+  // nur ein wirklich neuer Wert wird als Messung festgehalten.
   if (patch.weightKg != null && patch.weightKg !== current.weightKg) {
-    await addMeasurement('weight', patch.weightKg, 'kg')
+    const history = await measurementsByType('weight')
+    if (history[history.length - 1]?.value !== patch.weightKg) {
+      await addMeasurement('weight', patch.weightKg, 'kg')
+    }
   }
   // CoachMemory.diet mit den geänderten Ernährungsformen synchron halten (Paket 11).
   if (patch.dietForms) {
@@ -807,6 +813,10 @@ export async function copyYesterday(meal?: Meal, targetDate = todayKey()): Promi
     amount: l.amount,
     unit: l.unit,
     computed: structuredClone(l.computed),
+    // Kosten- und Portions-Snapshot gehören zur Menge, nicht zur Aufnahme —
+    // ohne sie zählt die Haushaltskasse kopierte Tage als 0 €.
+    ...(l.cost != null ? { cost: l.cost } : {}),
+    ...(l.serving ? { serving: structuredClone(l.serving) } : {}),
     updatedAt: now(),
   }))
   if (copies.length) await db.logs.bulkPut(copies)

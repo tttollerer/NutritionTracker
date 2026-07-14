@@ -69,6 +69,16 @@ describe('copyYesterday', () => {
     expect(copy.foodId).toBe(food.id)
   })
 
+  it('übernimmt Kosten- und Portions-Snapshot (Haushaltskasse zählt kopierte Tage)', async () => {
+    const food = await seedFood()
+    const src = await logFood({ food, date: daysAgo(1), meal: 'lunch', amount: 60, unit: 'g' })
+    await db.logs.update(src.id, { cost: 1.23, serving: { label: 'Kappe (30 g)', count: 2 } })
+
+    const [copy] = await copyYesterday()
+    expect(copy.cost).toBe(1.23)
+    expect(copy.serving).toEqual({ label: 'Kappe (30 g)', count: 2 })
+  })
+
   it('kopiert auf Wunsch nur eine Mahlzeit', async () => {
     const food = await seedFood()
     await logFood({ food, date: daysAgo(1), meal: 'breakfast', amount: 60, unit: 'g' })

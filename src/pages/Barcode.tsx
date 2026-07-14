@@ -143,7 +143,9 @@ export function Barcode() {
           {
             name: product.food.name || t('capture.unknownProduct'),
             amount: 100,
-            unit: 'g',
+            // Getränke als ml erfassen — sonst kippt der createFood-Upsert ein
+            // korrekt als 'ml' angelegtes Produkt wieder auf 'g' (inferPer).
+            unit: product.food.per,
             per100: {
               kcal: product.food.kcal,
               protein: product.food.protein,

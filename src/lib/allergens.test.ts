@@ -23,6 +23,34 @@ describe('matchAllergens', () => {
     expect(matchAllergens({ name: 'Tahini Paste' }, ['sesame'])).toEqual(['sesame'])
     expect(matchAllergens({ allergens: ['en:sulphur-dioxide-and-sulphites'] }, ['sulphites'])).toEqual(['sulphites'])
   })
+
+  it('kurze Keywords matchen nur als ganzes Wort — kein Ei-Alarm bei Reis/Wein/Fleisch', () => {
+    for (const name of ['Reis mit Gemüse', 'Weintrauben', 'Fleischpflanzerl', 'Eis am Stiel', 'Eintopf', 'Veggie-Burger']) {
+      expect(matchAllergens({ name }, ['eggs'])).toEqual([])
+    }
+    expect(matchAllergens({ name: 'Ei, gekocht' }, ['eggs'])).toEqual(['eggs'])
+    expect(matchAllergens({ name: 'Rührei mit Speck' }, ['eggs'])).toEqual(['eggs'])
+    expect(matchAllergens({ name: 'Minutensteak' }, ['nuts'])).toEqual([])
+    expect(matchAllergens({ name: 'Donut' }, ['nuts'])).toEqual([])
+  })
+
+  it('Wort-Präfix-Keywords: Eiersalat ja, Feierabendbier nein', () => {
+    expect(matchAllergens({ name: 'Eiersalat' }, ['eggs'])).toEqual(['eggs'])
+    expect(matchAllergens({ name: 'Feierabendbier' }, ['eggs'])).toEqual([])
+  })
+
+  it('Substring bleibt für deutsche Komposita erhalten', () => {
+    expect(matchAllergens({ name: 'Vollmilchschokolade' }, ['lactose'])).toEqual(['lactose'])
+    expect(matchAllergens({ name: 'Dinkelbrot' }, ['gluten'])).toEqual(['gluten'])
+    expect(matchAllergens({ name: 'Haselnusscreme' }, ['nuts'])).toEqual(['nuts'])
+  })
+
+  it('„glutenfrei"/„laktosefrei" im Namen hebt den Keyword-Fallback auf', () => {
+    expect(matchAllergens({ name: 'Glutenfreies Brot' }, ['gluten'])).toEqual([])
+    expect(matchAllergens({ name: 'Laktosefreie Milch' }, ['lactose'])).toEqual([])
+    // Strukturierte Tags bleiben die Primärquelle und werden NICHT negiert.
+    expect(matchAllergens({ allergens: ['en:gluten'], name: 'Glutenfreies Brot' }, ['gluten'])).toEqual(['gluten'])
+  })
 })
 
 describe('checkAllergens (Spuren vs. enthält)', () => {
