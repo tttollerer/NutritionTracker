@@ -119,6 +119,42 @@ export async function updateFoodValues(id: string, patch: FoodValuesPatch): Prom
   return updated
 }
 
+/**
+ * EINE benannte Portionseinheit additiv ergänzen (Verzehr-Moment: „+ Einheit"
+ * im PortionSheet). Bestehende Einheiten bleiben erhalten; ein gleichnamiges
+ * Label (case-insensitiv) wird durch den neuen Wert ersetzt. Normalisierung/
+ * Dedupe übernimmt updateFoodValues — hier wird nur additiv gemerged.
+ */
+export async function addFoodServing(
+  id: string,
+  serving: { label: string; amount: number },
+): Promise<FoodItem> {
+  const food = await db.foods.get(id)
+  if (!food || food.deletedAt) throw new Error(`FoodItem ${id} nicht gefunden`)
+  const label = serving.label.trim().toLowerCase()
+  const rest = (food.servings ?? []).filter((s) => s.label.toLowerCase() !== label)
+  return updateFoodValues(id, { servings: [...rest, serving] })
+}
+
+/** Obergrenze für automatisch angehängte Scan-Fotos (attachScanPhoto). */
+export const FOOD_PHOTO_LIMIT = 5
+
+/**
+ * Scan-Foto (Label-/Barcode-/Unified-Scan) automatisch als Produktfoto
+ * anhängen. Regel bewusst simpel und robust: identische Data-URLs nie doppelt,
+ * und ab FOOD_PHOTO_LIMIT Fotos wird schlicht NICHT mehr angehängt — statt
+ * still alte Fotos zu löschen. So wächst die Galerie im Scan-Loop (dasselbe
+ * Produkt wird oft erneut gescannt) nicht unbegrenzt, und es geht nie ein
+ * Foto verloren, das der Nutzer behalten wollte; Aufräumen bleibt bewusst
+ * beim Nutzer im Produkt-Editor. Rückgabe: Photo-ID oder null (übersprungen).
+ */
+export async function attachScanPhoto(foodId: string, dataUrl: string): Promise<string | null> {
+  const photos = await getFoodPhotos(foodId)
+  if (photos.length >= FOOD_PHOTO_LIMIT) return null
+  if (photos.some((p) => p.dataUrl === dataUrl)) return null
+  return addFoodPhoto(foodId, dataUrl)
+}
+
 /** Produktfoto (Data-URL, bereits verkleinert) anlegen und ans Produkt hängen. */
 export async function addFoodPhoto(foodId: string, dataUrl: string): Promise<string> {
   const food = await db.foods.get(foodId)

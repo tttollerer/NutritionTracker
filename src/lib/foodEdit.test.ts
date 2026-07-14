@@ -2,7 +2,15 @@ import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '@/db'
 import { createFood } from '@/db/repo'
-import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues } from './foodEdit'
+import {
+  FOOD_PHOTO_LIMIT,
+  addFoodPhoto,
+  addFoodServing,
+  attachScanPhoto,
+  getFoodPhotos,
+  removeFoodPhoto,
+  updateFoodValues,
+} from './foodEdit'
 
 const base = { per: 'g' as const, kcal: 100, protein: 5, carbs: 10, fat: 2 }
 
@@ -132,6 +140,63 @@ describe('foodEdit (Produkt-Editor, Paket B)', () => {
       const food = await createFood({ name: 'Weg', ...base })
       await db.foods.update(food.id, { deletedAt: Date.now() })
       await expect(updateFoodValues(food.id, { kcal: 1 })).rejects.toThrow()
+    })
+  })
+
+  describe('addFoodServing („+ Einheit" im Verzehr-Moment)', () => {
+    it('ergänzt additiv — bestehende Einheiten bleiben erhalten', async () => {
+      const food = await createFood({ name: 'Whey', ...base })
+      await updateFoodValues(food.id, { servings: [{ label: 'EL', amount: 15 }] })
+
+      const updated = await addFoodServing(food.id, { label: 'Kappe', amount: 30 })
+      expect(updated.servings).toEqual([
+        { label: 'EL', amount: 15 },
+        { label: 'Kappe', amount: 30 },
+      ])
+    })
+
+    it('ersetzt eine gleichnamige Einheit (case-insensitiv) statt zu duplizieren', async () => {
+      const food = await createFood({ name: 'Whey', ...base })
+      await addFoodServing(food.id, { label: 'Kappe', amount: 30 })
+      const updated = await addFoodServing(food.id, { label: 'kappe ', amount: 32 })
+      expect(updated.servings).toEqual([{ label: 'kappe', amount: 32 }])
+    })
+
+    it('wirft für unbekannte Produkte', async () => {
+      await expect(addFoodServing('nope', { label: 'Kappe', amount: 30 })).rejects.toThrow()
+    })
+  })
+
+  describe('attachScanPhoto (Scan-Fotos ans Produkt, Dedupe + Limit)', () => {
+    it('hängt neue Fotos an, überspringt identische Data-URLs', async () => {
+      const food = await createFood({ name: 'Riegel', ...base })
+      const id = await attachScanPhoto(food.id, 'data:A')
+      expect(id).toBeTypeOf('string')
+
+      // Wiederholter Scan desselben Bilds (z. B. Scan-Loop) → kein Duplikat.
+      expect(await attachScanPhoto(food.id, 'data:A')).toBeNull()
+      expect((await getFoodPhotos(food.id)).map((p) => p.dataUrl)).toEqual(['data:A'])
+    })
+
+    it(`hängt ab ${FOOD_PHOTO_LIMIT} Fotos schlicht nicht mehr an (kein stilles Löschen)`, async () => {
+      const food = await createFood({ name: 'Riegel', ...base })
+      for (let i = 0; i < FOOD_PHOTO_LIMIT; i++) await attachScanPhoto(food.id, `data:${i}`)
+      expect((await getFoodPhotos(food.id)).length).toBe(FOOD_PHOTO_LIMIT)
+
+      expect(await attachScanPhoto(food.id, 'data:neu')).toBeNull()
+      const photos = await getFoodPhotos(food.id)
+      expect(photos.length).toBe(FOOD_PHOTO_LIMIT)
+      expect(photos.some((p) => p.dataUrl === 'data:neu')).toBe(false)
+    })
+
+    it('gelöschte Fotos zählen nicht gegen das Limit', async () => {
+      const food = await createFood({ name: 'Riegel', ...base })
+      const ids: string[] = []
+      for (let i = 0; i < FOOD_PHOTO_LIMIT; i++) ids.push((await attachScanPhoto(food.id, `data:${i}`))!)
+      await removeFoodPhoto(food.id, ids[0])
+
+      expect(await attachScanPhoto(food.id, 'data:neu')).toBeTypeOf('string')
+      expect((await getFoodPhotos(food.id)).length).toBe(FOOD_PHOTO_LIMIT)
     })
   })
 

@@ -142,7 +142,22 @@
     "pantryPrice": "Preis (€)",
     "pantryPackSize": "Packung ({{unit}})",
     "pantryCost": "Kostet ca. {{cost}}",
-    "newProduct": "Neues Produkt anlegen"
+    "newProduct": "Neues Produkt anlegen",
+    "unitAdd": "+ Einheit",
+    "unitAddTitle": "Neue Einheit — z. B. Kappe oder Esslöffel",
+    "unitSave": "Einheit speichern",
+    "unitPhoto": "Einheit fotografieren — KI schätzt die Gramm",
+    "unitPresets": {
+      "tbsp": "Esslöffel",
+      "tsp": "Teelöffel",
+      "cap": "Kappe",
+      "slice": "Scheibe",
+      "piece": "Stück"
+    },
+    "amountPhoto": "Menge per Foto schätzen",
+    "amountPhotoDone": "KI-Schätzung: ~{{amount}} {{unit}} — du kannst den Wert anpassen.",
+    "photosOpen": "Produktfotos öffnen ({{count}})",
+    "photosMore": "+{{count}}"
   },
   "week": {
     "title": "Woche",
