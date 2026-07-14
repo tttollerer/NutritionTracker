@@ -10,6 +10,8 @@ import {
   incrementPantry,
   isExpiringSoon,
   lowPantryFoods,
+  removeFromPantry,
+  restorePantry,
   setExpiry,
   setPantryQty,
   undoPantryAdd,
@@ -134,6 +136,82 @@ describe('Vorrats-Bestand (pantryQty)', () => {
 
     const low = await lowPantryFoods()
     expect(low.map((f) => f.name)).toEqual(['Nudeln', 'Milch'])
+  })
+})
+
+describe('Aus dem Vorrat entfernen (removeFromPantry/restorePantry)', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()))
+  })
+
+  it('entfernt Flag, Zähler und MHD — das Food selbst bleibt erhalten', async () => {
+    const food = await createFood({ name: 'Fehlscan', ...base })
+    await setPantryQty(food.id, 3)
+    await setExpiry(food.id, '2026-07-20')
+
+    const snapshot = await removeFromPantry(food.id)
+    const stored = (await db.foods.get(food.id))!
+    expect('pantry' in stored).toBe(false)
+    expect('pantryQty' in stored).toBe(false)
+    expect('expiryDate' in stored).toBe(false)
+    // KEIN Löschen des Foods — Logs referenzieren es weiterhin.
+    expect(stored.deletedAt).toBeUndefined()
+    expect(stored.name).toBe('Fehlscan')
+    expect(snapshot).toEqual({ pantryQty: 3, expiryDate: '2026-07-20' })
+  })
+
+  it('nicht im Vorrat → null (kein Undo-Toast nötig), Food bleibt unverändert', async () => {
+    const food = await createFood({ name: 'Apfel', ...base })
+    expect(await removeFromPantry(food.id)).toBeNull()
+    expect('pantry' in (await db.foods.get(food.id))!).toBe(false)
+  })
+
+  it('Wieder-Hinzufügen nach dem Entfernen startet frisch mit 1 Packung', async () => {
+    const food = await createFood({ name: 'Reis', ...base })
+    await setPantryQty(food.id, 5)
+    await removeFromPantry(food.id)
+
+    await incrementPantry(food.id)
+    const stored = (await db.foods.get(food.id))!
+    // Nicht wieder bei 5 (alte Anzahl), sondern frische Einzelpackung.
+    expect(effectivePantryQty(stored)).toBe(1)
+    expect('pantryQty' in stored).toBe(false)
+  })
+
+  it('restorePantry (Undo) stellt Status, Packungsanzahl und MHD wieder her', async () => {
+    const food = await createFood({ name: 'Milch', ...base })
+    await setPantryQty(food.id, 3)
+    await setExpiry(food.id, '2026-07-20')
+
+    const snapshot = await removeFromPantry(food.id)
+    await restorePantry(food.id, snapshot!)
+    expect((await db.foods.get(food.id))!).toMatchObject({
+      pantry: true,
+      pantryQty: 3,
+      expiryDate: '2026-07-20',
+    })
+  })
+
+  it('restorePantry erhält die Zähler-Konvention undefined == 1', async () => {
+    const food = await createFood({ name: 'Senf', ...base })
+    await setPantry(food.id, true) // qty undefined == 1
+
+    const snapshot = await removeFromPantry(food.id)
+    await restorePantry(food.id, snapshot!)
+    const stored = (await db.foods.get(food.id))!
+    expect(stored.pantry).toBe(true)
+    expect('pantryQty' in stored).toBe(false)
+    expect(effectivePantryQty(stored)).toBe(1)
+  })
+
+  it('restorePantry stellt auch eine leere Packung (qty 0) wieder als „leer" her', async () => {
+    const food = await createFood({ name: 'Nudeln', ...base })
+    await setPantryQty(food.id, 0) // leer gemerkter Nachkauf-Kandidat
+
+    const snapshot = await removeFromPantry(food.id)
+    await restorePantry(food.id, snapshot!)
+    expect((await db.foods.get(food.id))!).toMatchObject({ pantry: true, pantryQty: 0 })
+    expect((await lowPantryFoods()).map((f) => f.id)).toContain(food.id)
   })
 })
 
