@@ -143,7 +143,9 @@ export function Barcode() {
           {
             name: product.food.name || t('capture.unknownProduct'),
             amount: 100,
-            unit: 'g',
+            // Getränke als ml erfassen — sonst kippt der createFood-Upsert ein
+            // korrekt als 'ml' angelegtes Produkt wieder auf 'g' (inferPer).
+            unit: product.food.per,
             per100: {
               kcal: product.food.kcal,
               protein: product.food.protein,
@@ -181,7 +183,7 @@ export function Barcode() {
   return (
     <div className="space-y-5">
       <header className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)} aria-label={t('common.back')} className="text-muted-foreground">
+        <button onClick={() => navigate(-1)} aria-label={t('common.back')} className="focus-ring -ml-2 flex h-12 w-10 items-center justify-center rounded-md text-muted-foreground">
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold">{t('capture.barcodeTitle')}</h1>
@@ -275,7 +277,7 @@ export function Barcode() {
       {errorKey && (
         <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
           <p className="text-destructive">{t(errorKey)}</p>
-          {errorKey === 'errors.offline' && (
+          {(errorKey === 'errors.offline' || errorKey === 'errors.budgetExceeded') && (
             <Button variant="secondary" className="w-full" onClick={() => navigate('/add')}>
               {t('errors.manualFallback')}
             </Button>
@@ -283,17 +285,23 @@ export function Barcode() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <form
+        className="space-y-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (manual.trim() && !busy) void handleCode(manual)
+        }}
+      >
         <Input
           inputMode="numeric"
           placeholder={t('capture.manualBarcode')}
           value={manual}
           onChange={(e) => setManual(e.target.value)}
         />
-        <Button className="w-full" disabled={!manual.trim() || busy} onClick={() => handleCode(manual)}>
+        <Button type="submit" className="w-full" disabled={!manual.trim() || busy}>
           {busy ? <Spinner size={18} /> : t('capture.scan')}
         </Button>
-      </div>
+      </form>
     </div>
   )
 }

@@ -23,6 +23,7 @@ import type { FoodItem, Meal } from '@/db/types'
 import { defaultMeal, MEALS } from '@/lib/meal'
 import { FOOD_CATALOG } from '@/lib/foodCatalog'
 import { todayKey } from '@/lib/utils'
+import { useTodayKey } from '@/hooks/useTodayKey'
 import { describePortion } from '@/lib/portion'
 import { PageHeader } from '@/components/PageHeader'
 import { PortionSheet } from '@/components/PortionSheet'
@@ -36,14 +37,21 @@ export function Add() {
   const navigate = useNavigate()
   const { showUndo } = useOverlays()
   const [meal, setMeal] = useState<Meal>(defaultMeal())
+  // Reaktiv über Mitternacht (wie CaptureSheet) — sonst kopiert eine über
+  // Nacht offene Seite die falsche Tagesbasis.
+  const today = useTodayKey()
   const recents = useLiveQuery(() => recentFoods(), [])
   const favorites = useLiveQuery(() => favoriteFoods(), [])
   const pantry = useLiveQuery(() => pantryFoods(), [])
   // Vorrat-Verzehr über das Mengen-Sheet (Menge + Einheit + Mahlzeit).
   const [portionFood, setPortionFood] = useState<FoodItem | null>(null)
-  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(), []) ?? 0
+  // „Menge per Foto": das Mengen-Sheet stößt beim Öffnen direkt den
+  // Foto-Schätz-Flow an (autoPhotoEstimate) — Flag wird bei JEDEM Öffnen
+  // explizit über openPortionSheet gesetzt, damit kein Alt-Wert hängen bleibt.
+  const [portionAutoPhoto, setPortionAutoPhoto] = useState(false)
+  const yesterdayCount = useLiveQuery(() => yesterdayLogCount(today), [today]) ?? 0
   // Kontext für „Gestern kopieren" (Befund 11): Zähler der gewählten Mahlzeit.
-  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(todayKey(), meal), [meal]) ?? 0
+  const yesterdayMealCount = useLiveQuery(() => yesterdayLogCount(today, meal), [today, meal]) ?? 0
   // Katalog-Suche (live über db.foods)
   const [query, setQuery] = useState('')
   const results = useLiveQuery(() => searchFoods(query), [query])
@@ -84,9 +92,21 @@ export function Add() {
     })
   }
 
-  /** Menge eines bekannten Lebensmittels per Foto schätzen (mode 'portion'). */
+  /** Mengen-Sheet öffnen — optional direkt mit dem Foto-Schätz-Flow starten. */
+  function openPortionSheet(food: FoodItem, autoPhoto = false) {
+    setPortionAutoPhoto(autoPhoto)
+    setPortionFood(food)
+  }
+
+  /**
+   * Menge eines bekannten Lebensmittels per Foto schätzen (Audit #9): öffnet
+   * das Mengen-Sheet DIESES Produkts und stößt darin den Foto-Schätz-Flow an
+   * (analyzeImage 'portion' mit Produkt-Hint, Ergebnis füllt das Mengenfeld).
+   * Früher führte der Weg über /capture?mode=portion — dort legte der Review
+   * per Namens-Match ein NEUES Food an, statt nur die Menge zu schätzen.
+   */
   function portionPhoto(food: FoodItem) {
-    navigate(`/capture?mode=portion&meal=${meal}&hint=${encodeURIComponent(food.name)}`)
+    openPortionSheet(food, true)
   }
 
   /**
@@ -163,7 +183,7 @@ export function Add() {
           results.length > 0 ? (
             <div className="space-y-2">
               {results.map((f) => (
-                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
+                <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => openPortionSheet(f)} onPortionPhoto={() => portionPhoto(f)} />
               ))}
             </div>
           ) : (
@@ -185,7 +205,7 @@ export function Add() {
                 key={f.id}
                 food={f}
                 onLog={() => void quickLog(f)}
-                onPickAmount={() => setPortionFood(f)}
+                onPickAmount={() => openPortionSheet(f)}
                 showFavorite={false}
               />
             ))}
@@ -199,7 +219,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('add.favorites')}</h2>
           <div className="space-y-2">
             {favorites.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => openPortionSheet(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -237,7 +257,7 @@ export function Add() {
           <h2 className="text-sm font-medium text-muted-foreground">{t('entry.recent')}</h2>
           <div className="space-y-2">
             {recentsWithoutFavs.map((f) => (
-              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => setPortionFood(f)} onPortionPhoto={() => portionPhoto(f)} />
+              <FoodRow key={f.id} food={f} onLog={() => void quickLog(f)} onPickAmount={() => openPortionSheet(f)} onPortionPhoto={() => portionPhoto(f)} />
             ))}
           </div>
         </section>
@@ -271,6 +291,7 @@ export function Add() {
       <PortionSheet
         food={portionFood}
         initialMeal={meal}
+        autoPhotoEstimate={portionAutoPhoto}
         onClose={() => setPortionFood(null)}
         onLogged={(entry, food) => {
           void (async () => {
@@ -291,7 +312,7 @@ export function Add() {
         onClose={() => setCreating(null)}
         onCreated={(food, action) => {
           setCreating(null)
-          if (action === 'log') setPortionFood(food)
+          if (action === 'log') openPortionSheet(food)
           else showUndo(t('food.create.createdPantry', { name: food.name }), () => undoPantryAdd(food.id))
         }}
       />
@@ -301,8 +322,8 @@ export function Add() {
 
 /**
  * Lebensmittel-Zeile mit 1-Tap-Log (gemerkte Portion), optional „Menge per Foto"
- * (Capture mode 'portion') bzw. Mengen-Sheet (Vorrat), Vorrat-Toggle und
- * Favoriten-Stern (48-px-Targets, aria-pressed).
+ * (Mengen-Sheet mit direktem Foto-Schätz-Flow) bzw. Mengen-Sheet (Vorrat),
+ * Vorrat-Toggle und Favoriten-Stern (48-px-Targets, aria-pressed).
  */
 function FoodRow({
   food,

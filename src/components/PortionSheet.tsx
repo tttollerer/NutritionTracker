@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
@@ -12,11 +12,13 @@ import { downscaleImage } from '@/lib/image'
 import { gramsFromPortionResult, portionPhotoHint } from '@/lib/portion'
 import { parsePositiveNumber, formatEuro } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
+import { planFood } from '@/lib/planning'
 import { todayKey } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Field, Input } from '@/components/ui/Input'
 import { Spinner } from '@/components/ui/Spinner'
+import { CalendarSheet } from '@/components/CalendarSheet'
 import { FoodDetailSheet } from '@/components/FoodDetailSheet'
 
 interface Props {
@@ -28,12 +30,32 @@ interface Props {
   onLogged?: (entry: LogEntry, food: FoodItem) => void
   /**
    * Edit-Modus: bestehenden Log-Eintrag bearbeiten statt neu loggen.
-   * Vorbefüllt Menge/Einheit/Mahlzeit (inkl. serving-Snapshot → passender
+   * Vorbefüllt Menge/Einheit/Mahlzeit/Tag (inkl. serving-Snapshot → passender
    * Einheiten-Chip), speichert via updateLog (computed/cost werden dort neu
    * gerechnet) und zieht KEINEN Vorrats-Bestand ab (das tun nur die
    * onLogged-Handler der Aufrufer im Log-Modus).
    */
   editEntry?: LogEntry | null
+  /**
+   * Zieltag des Logs 'YYYY-MM-DD' (Default: heute) — der Wochenplaner trägt
+   * damit vergangene Tage nach. Nur im Log-/Plan-Modus; Edit nutzt die
+   * Datums-Zeile des Formulars.
+   */
+  date?: string
+  /**
+   * Plan-Modus: statt eines echten Logs einen geplanten Eintrag (planned=true,
+   * planFood) für `date` anlegen — Wochenplaner „Aus Vorrat planen". Der
+   * onLogged-Callback erhält den planned-Eintrag (Undo beim Aufrufer).
+   */
+  planned?: boolean
+  /**
+   * Direkteinstieg „Menge per Foto" (Erfassen-Zeile, Audit #9): beim Öffnen
+   * sofort den Kamera-Input des Foto-Schätz-Flows anstoßen. Ohne erteilte
+   * Foto-Einwilligung erscheint stattdessen der Consent-Block; blockiert das
+   * System den programmatischen Öffner (z. B. iOS ohne frische User-Geste),
+   * bleibt der sichtbare Kamera-Button neben dem Mengenfeld der Ausweg.
+   */
+  autoPhotoEstimate?: boolean
 }
 
 /**
@@ -45,7 +67,7 @@ interface Props {
  * Mit `editEntry` arbeitet dasselbe Sheet als Log-Editor („Eintrag
  * bearbeiten") — EIN Mengen-Sheet für Loggen und Korrigieren.
  */
-export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry }: Props) {
+export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry, date, planned, autoPhotoEstimate }: Props) {
   const { t } = useTranslation()
 
   return (
@@ -77,6 +99,9 @@ export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry }
               onClose={onClose}
               onLogged={onLogged}
               editEntry={editEntry}
+              date={date}
+              planned={planned}
+              autoPhotoEstimate={autoPhotoEstimate}
             />
           </motion.div>
         </>
@@ -113,8 +138,8 @@ function servingsOf(food: FoodItem): { label: string; amount: number }[] {
   return (food.servings ?? []).filter((s) => !dpLabel || s.label.toLowerCase() !== dpLabel)
 }
 
-function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEntry }: Props & { food: FoodItem }) {
-  const { t } = useTranslation()
+function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEntry, date, planned, autoPhotoEstimate }: Props & { food: FoodItem }) {
+  const { t, i18n } = useTranslation()
   // Lokale Produkt-Kopie: der Editor (FoodDetailSheet) kann Name/Portion/Preis
   // ändern — onSaved zieht diese Kopie nach, damit das Sheet nichts Veraltetes
   // zurückschreibt (z. B. den alten Packungspreis beim Loggen).
@@ -139,6 +164,9 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
       : { kind: 'unit', unit: dp?.unit ?? food.per },
   )
   const [meal, setMeal] = useState<Meal>(editEntry?.meal ?? initialMeal)
+  // Edit-Modus: Tag des Eintrags — die Datums-Zeile verschiebt falsch datierte
+  // Einträge („gestern statt heute") ohne Löschen + Neuanlegen.
+  const [logDate, setLogDate] = useState(editEntry?.date ?? date ?? todayKey())
   // Haushaltskasse (optional): Packungspreis in EUR + Packungsgröße in g/ml.
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
   const [packText, setPackText] = useState(food.price ? String(food.price.per) : '')
@@ -201,6 +229,19 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
     setConsentOpen(false)
     ref.current?.click()
   }
+
+  // Direkteinstieg „Menge per Foto" (autoPhotoEstimate): sobald die
+  // Einwilligung aus Dexie geladen ist, genau EINMAL pro Öffnen den
+  // Foto-Schätz-Flow anstoßen — dieselbe Kette wie der Kamera-Button
+  // (requestPhoto: Consent-Block oder Kamera-/Galerie-Dialog).
+  const autoPhotoDoneRef = useRef(false)
+  useEffect(() => {
+    if (!autoPhotoEstimate || autoPhotoDoneRef.current) return
+    if (photoConsent === undefined) return // Einwilligung lädt noch (Dexie, async)
+    autoPhotoDoneRef.current = true
+    requestPhoto(amountCamRef)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- requestPhoto ist pro Render neu; der Ref hält den Start einmalig
+  }, [autoPhotoEstimate, photoConsent])
 
   /**
    * Gemeinsamer Foto-Schätz-Lauf (Muster FoodDetailSheet.onPortionPhotoFile):
@@ -300,12 +341,25 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
           amount: baseAmount,
           unit: baseUnit,
           meal,
+          date: logDate,
           serving: servingSnap ?? null,
         })
+      } else if (planned) {
+        // Plan-Modus (Wochenplaner): geplanter Eintrag statt echtem Verzehr —
+        // planned=true zählt nirgends als gegessen, erst confirmPlanned bucht.
+        const entry = await planFood({
+          food: { ...food, price: effectivePrice },
+          date: date ?? todayKey(),
+          meal,
+          amount: baseAmount,
+          unit: baseUnit,
+          serving: servingSnap,
+        })
+        onLogged?.(entry, food)
       } else {
         const entry = await logFood({
           food: { ...food, price: effectivePrice },
-          date: todayKey(),
+          date: date ?? todayKey(),
           meal,
           amount: baseAmount,
           unit: baseUnit,
@@ -333,6 +387,19 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
           {/* Edit-Modus: Overline macht klar, dass ein Eintrag korrigiert wird. */}
           {editEntry && (
             <p className="text-xs font-medium text-muted-foreground">{t('today.edit.title')}</p>
+          )}
+          {/* Plan-/Nachtrag-Modus: Overline nennt Kontext + Zieltag, damit klar
+              ist, dass NICHT für heute gebucht wird (Wochenplaner). */}
+          {!editEntry && (planned || (date && date !== todayKey())) && (
+            <p className="text-xs font-medium text-muted-foreground">
+              {t(planned ? 'plan.planMeal' : 'week.backfillMeal')}
+              {' · '}
+              {new Intl.DateTimeFormat(i18n.language, {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              }).format(new Date(`${date ?? todayKey()}T12:00:00`))}
+            </p>
           )}
           <h2 className="truncate text-lg font-semibold">{food.name}</h2>
         </div>
@@ -535,6 +602,15 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
         </div>
       </div>
 
+      {/* Datums-Zeile (nur Edit): falsch datierte Einträge auf einen anderen
+          Tag verschieben — Heute/Gestern als Chips, Rest über den Kalender. */}
+      {editEntry && (
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-muted-foreground">{t('today.edit.date')}</p>
+          <LogDateRow value={logDate} onChange={setLogDate} />
+        </div>
+      )}
+
       {/* Haushaltskasse: Packungspreis nachpflegen — komplett optional. */}
       <div className="space-y-2 rounded-lg bg-muted/50 p-3">
         <p className="text-xs font-medium text-muted-foreground">{t('add.pantryPriceTitle')}</p>
@@ -568,7 +644,7 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
           {t('common.cancel')}
         </Button>
         <Button className="flex-1" onClick={save} disabled={!valid || saving}>
-          {t(editEntry ? 'today.edit.save' : 'add.pantryLog')}
+          {t(editEntry ? 'today.edit.save' : planned ? 'plan.save' : 'add.pantryLog')}
         </Button>
       </div>
 
@@ -587,6 +663,51 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEn
           setPriceText(updated.price ? String(updated.price.amount).replace('.', ',') : '')
           setPackText(updated.price ? String(updated.price.per) : '')
         }}
+      />
+    </div>
+  )
+}
+
+/**
+ * Datums-Zeile für die Log-Editoren (PortionSheet-Edit + EditLogSheet-Fallback):
+ * Chips „Heute"/„Gestern" für die häufigsten Korrekturen, „Anderer Tag …"
+ * öffnet den bestehenden Monatskalender (CalendarSheet). Ein Datum außerhalb
+ * von heute/gestern wird direkt als aktiver Chip angezeigt.
+ */
+export function LogDateRow({ value, onChange }: { value: string; onChange: (date: string) => void }) {
+  const { t, i18n } = useTranslation()
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const today = todayKey()
+  const yesterdayDate = new Date()
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1)
+  const yesterday = todayKey(yesterdayDate)
+  const isOther = value !== today && value !== yesterday
+  // Kompaktes Datum als Chip-Label („Mo., 7. Juli"), wenn ein anderer Tag gewählt ist.
+  const otherLabel = isOther
+    ? new Intl.DateTimeFormat(i18n.language, { weekday: 'short', day: 'numeric', month: 'long' }).format(
+        new Date(`${value}T12:00:00`),
+      )
+    : t('today.edit.datePick')
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Chip label={t('today.edit.dateToday')} selected={value === today} onClick={() => onChange(today)} />
+      <Chip
+        label={t('today.edit.dateYesterday')}
+        selected={value === yesterday}
+        onClick={() => onChange(yesterday)}
+      />
+      <Chip label={otherLabel} selected={isOther} onClick={() => setCalendarOpen(true)} />
+      {/* Monatskalender (bestehende Komponente) — Tap wählt den Zieltag. */}
+      <CalendarSheet
+        open={calendarOpen}
+        focusDate={value}
+        today={today}
+        onSelect={(d) => {
+          onChange(d)
+          setCalendarOpen(false)
+        }}
+        onClose={() => setCalendarOpen(false)}
       />
     </div>
   )

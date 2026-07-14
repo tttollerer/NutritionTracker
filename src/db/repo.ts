@@ -76,9 +76,15 @@ export async function updateProfile(patch: Partial<Omit<Profile, 'id'>>) {
     )
     await db.goals.bulkPut(goals.filter((g) => !coachNutrients.has(g.nutrient)))
   })
-  // Gewichtsänderung als Messpunkt festhalten, damit der Verlauf konsistent bleibt.
+  // Gewichtsänderung als Messpunkt festhalten, damit der Verlauf konsistent
+  // bleibt. Aber kein Phantom-Messpunkt: das Profil-Formular ist mit dem
+  // jüngsten Messwert vorbelegt (der vom Profilgewicht abweichen kann) —
+  // nur ein wirklich neuer Wert wird als Messung festgehalten.
   if (patch.weightKg != null && patch.weightKg !== current.weightKg) {
-    await addMeasurement('weight', patch.weightKg, 'kg')
+    const history = await measurementsByType('weight')
+    if (history[history.length - 1]?.value !== patch.weightKg) {
+      await addMeasurement('weight', patch.weightKg, 'kg')
+    }
   }
   // CoachMemory.diet mit den geänderten Ernährungsformen synchron halten (Paket 11).
   if (patch.dietForms) {
@@ -520,9 +526,9 @@ export function computeCost(food: FoodItem, amount: number, unit: Unit): number 
 }
 
 /**
- * Menge und/oder Mahlzeit eines Log-Eintrags ändern; der computed-Snapshot wird
- * aus dem zugehörigen FoodItem neu berechnet. Gibt den aktualisierten Eintrag
- * zurück (undefined, wenn der Eintrag fehlt oder gelöscht ist).
+ * Menge, Mahlzeit und/oder Tag eines Log-Eintrags ändern; der computed-Snapshot
+ * wird aus dem zugehörigen FoodItem neu berechnet. Gibt den aktualisierten
+ * Eintrag zurück (undefined, wenn der Eintrag fehlt oder gelöscht ist).
  */
 export async function updateLog(
   id: string,
@@ -530,6 +536,8 @@ export async function updateLog(
     amount?: number
     unit?: Unit
     meal?: Meal
+    /** Zieltag 'YYYY-MM-DD' — verschiebt einen falsch datierten Eintrag. */
+    date?: string
     /** `null` entfernt den Anzeige-Snapshot („2 Stück"), `undefined` lässt ihn unverändert. */
     serving?: { label: string; count: number } | null
   },
@@ -545,6 +553,7 @@ export async function updateLog(
       amount,
       unit,
       meal: patch.meal ?? entry.meal,
+      date: patch.date ?? entry.date,
       // Ohne Food (sollte nicht vorkommen) bleibt der alte Snapshot stehen,
       // statt Werte aus der Luft zu greifen.
       computed: food ? computeLogValues(food, amount, unit) : entry.computed,
@@ -807,6 +816,10 @@ export async function copyYesterday(meal?: Meal, targetDate = todayKey()): Promi
     amount: l.amount,
     unit: l.unit,
     computed: structuredClone(l.computed),
+    // Kosten- und Portions-Snapshot gehören zur Menge, nicht zur Aufnahme —
+    // ohne sie zählt die Haushaltskasse kopierte Tage als 0 €.
+    ...(l.cost != null ? { cost: l.cost } : {}),
+    ...(l.serving ? { serving: structuredClone(l.serving) } : {}),
     updatedAt: now(),
   }))
   if (copies.length) await db.logs.bulkPut(copies)

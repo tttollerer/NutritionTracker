@@ -80,6 +80,49 @@ export async function undoPantryAdd(foodId: string, by = 1): Promise<void> {
   }
 }
 
+/** Vorher-Zustand eines Vorrats-Artikels — Undo-Grundlage für removeFromPantry. */
+export interface PantrySnapshot {
+  pantryQty?: number
+  expiryDate?: string
+}
+
+/**
+ * Artikel aus dem Vorrat entfernen (Fehlscan/Aufräumen): Flag, Zähler und MHD
+ * verschwinden — gleiche Feld-Semantik wie repo.setPantry(id, false). Das
+ * FoodItem selbst bleibt erhalten (Logs referenzieren es). Gibt den
+ * Vorher-Zustand für restorePantry (Undo) zurück; null = war nicht im Vorrat.
+ */
+export async function removeFromPantry(foodId: string): Promise<PantrySnapshot | null> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt || !food.pantry) return null
+  const snapshot: PantrySnapshot = { pantryQty: food.pantryQty, expiryDate: food.expiryDate }
+  // Dexie entfernt undefined-Properties — ein späteres Wieder-Hinzufügen
+  // startet damit frisch bei 1 Packung (Konvention undefined == 1).
+  await db.foods.update(foodId, {
+    pantry: undefined,
+    pantryQty: undefined,
+    expiryDate: undefined,
+    updatedAt: now(),
+  })
+  return snapshot
+}
+
+/**
+ * Undo von removeFromPantry: Vorrats-Status samt vorheriger Packungsanzahl und
+ * MHD wiederherstellen. undefined-Werte im Snapshot bleiben entfernt — so
+ * überlebt auch die Zähler-Konvention (undefined == 1) den Undo.
+ */
+export async function restorePantry(foodId: string, snapshot: PantrySnapshot): Promise<void> {
+  const food = await db.foods.get(foodId)
+  if (!food || food.deletedAt) return
+  await db.foods.update(foodId, {
+    pantry: true,
+    pantryQty: snapshot.pantryQty,
+    expiryDate: snapshot.expiryDate,
+    updatedAt: now(),
+  })
+}
+
 /** Vorrats-Foods, die zur Neige gehen (qty <= 1) — Basis für Einkaufsvorschläge. */
 export async function lowPantryFoods(): Promise<FoodItem[]> {
   const foods = await db.foods

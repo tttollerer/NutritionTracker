@@ -2,17 +2,18 @@ import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, ShoppingBasket, Sparkles, Star, X } from 'lucide-react'
+import { Camera, Check, ChevronDown, ChevronRight, Image as ImageIcon, Plus, ShoppingBasket, Sparkles, Star, Trash2, X } from 'lucide-react'
 import type { FoodItem } from '@/db/types'
 import { addFoodPhoto, getFoodPhotos, removeFoodPhoto, updateFoodValues, type FoodValuesPatch } from '@/lib/foodEdit'
 import { createFood, getActiveGoalsMap, getAllergies, getSettings, toggleFavorite, updateSettings } from '@/db/repo'
-import { incrementPantry, setExpiry } from '@/lib/pantryStock'
+import { incrementPantry, removeFromPantry, restorePantry, setExpiry } from '@/lib/pantryStock'
 import { checkAllergens } from '@/lib/allergens'
 import { analyzeImage, estimateNutrients } from '@/lib/ai'
 import { toApiError } from '@/lib/apiError'
 import { downscaleImage } from '@/lib/image'
 import { NUTRIENTS } from '@/lib/nutrients'
 import { formatEuro, parsePositiveNumber } from '@/lib/money'
+import { useOverlays } from '@/lib/overlays-context'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Input'
 import { ExpiryBadge } from '@/components/ExpiryBadge'
@@ -144,6 +145,8 @@ function FoodDetailForm({
   onCreated?: (food: FoodItem, action: ProductCreateAction) => void
 }) {
   const { t } = useTranslation()
+  // Undo-Snackbar fürs Entfernen aus dem Vorrat (Muster Add/Pantry-Seite).
+  const { showUndo } = useOverlays()
   // Draft-Modus: id '' = Produkt existiert noch nicht (siehe draftFood).
   const isDraft = !food.id
 
@@ -365,6 +368,26 @@ function FoodDetailForm({
       setPortionError(toApiError(err).i18nKey)
     } finally {
       setPortionBusy(false)
+    }
+  }
+
+  /**
+   * Aus dem Vorrat entfernen (Fehlscan/Aufräumen): nimmt nur Flag, Zähler und
+   * MHD weg — das Produkt selbst bleibt erhalten (Logs referenzieren es).
+   * Sheet schließt sofort; Undo über die Snackbar stellt Vorrats-Status UND
+   * vorherige Packungsanzahl wieder her (Snapshot aus removeFromPantry).
+   */
+  async function removePantryEntry() {
+    if (saving) return
+    setSaving(true)
+    try {
+      const snapshot = await removeFromPantry(food.id)
+      onClose()
+      if (snapshot) {
+        showUndo(t('food.edit.pantryRemoved', { name: food.name }), () => restorePantry(food.id, snapshot))
+      }
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -855,13 +878,29 @@ function FoodDetailForm({
           </div>
         </div>
       ) : (
-        <div className="flex gap-3 pt-1">
-          <Button variant="ghost" className="flex-1 border border-input" onClick={onClose}>
-            {t('common.close')}
-          </Button>
-          <Button className="flex-1" onClick={() => void save()} disabled={!valid || saving}>
-            {t('food.edit.save')}
-          </Button>
+        <div className="space-y-2 pt-1">
+          <div className="flex gap-3">
+            <Button variant="ghost" className="flex-1 border border-input" onClick={onClose}>
+              {t('common.close')}
+            </Button>
+            <Button className="flex-1" onClick={() => void save()} disabled={!valid || saving}>
+              {t('food.edit.save')}
+            </Button>
+          </div>
+          {/* Vorrat aufräumen: dezente destruktive Aktion am Ende — nimmt nur
+              den Vorrats-Eintrag weg, das Produkt (und seine Logs) bleiben. */}
+          {food.pantry && (
+            <button
+              type="button"
+              onClick={() => void removePantryEntry()}
+              disabled={saving}
+              aria-label={t('food.edit.pantryRemoveNamed', { name: food.name })}
+              className="focus-ring flex min-h-[48px] w-full items-center justify-center gap-2 rounded-md text-sm font-medium text-destructive disabled:opacity-50"
+            >
+              <Trash2 size={16} aria-hidden="true" />
+              {t('food.edit.pantryRemove')}
+            </button>
+          )}
         </div>
       )}
     </div>

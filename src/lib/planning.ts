@@ -21,8 +21,10 @@ export async function planFood(args: {
   meal: Meal
   amount: number
   unit: Unit
+  /** Anzeige-Snapshot „2 Stück" — amount/unit tragen weiterhin die Basis-Menge (wie logFood). */
+  serving?: { label: string; count: number }
 }): Promise<LogEntry> {
-  const { food, date, meal, amount, unit } = args
+  const { food, date, meal, amount, unit, serving } = args
   const entry: LogEntry = {
     id: uuid(),
     foodId: food.id,
@@ -33,10 +35,12 @@ export async function planFood(args: {
     unit,
     computed: computeLogValues(food, amount, unit),
     cost: computeCost(food, amount, unit),
+    serving,
     planned: true,
     updatedAt: now(),
   }
   if (entry.cost === undefined) delete entry.cost // kein Leer-Feld persistieren
+  if (entry.serving === undefined) delete entry.serving
   await db.logs.put(entry)
   return entry
 }

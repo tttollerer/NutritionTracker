@@ -3,10 +3,19 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Scale, Search, Trash2 } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Meal, Photo } from '@/db/types'
-import { computeLogValues, deleteLog, getActiveGoalsMap, getSettings, pantryFoods, restoreLog } from '@/db/repo'
+import {
+  computeLogValues,
+  deleteLog,
+  getActiveGoalsMap,
+  getSettings,
+  pantryFoods,
+  recentFoods,
+  restoreLog,
+  searchFoods,
+} from '@/db/repo'
 import { budgetProgress } from '@/lib/budget'
 import { formatEuro, sumCost } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
@@ -19,7 +28,7 @@ import {
   sumPlannedCost,
 } from '@/lib/planning'
 import { weekOffsetOf } from '@/lib/calendar'
-import { incrementPantry } from '@/lib/pantryStock'
+import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
 import { removeShoppingItem } from '@/lib/shopping'
 import { describePortion, formatLogAmount } from '@/lib/portion'
 import { cn, todayKey } from '@/lib/utils'
@@ -34,6 +43,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
+import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 /** Montag der Woche, in der `d` liegt (deutsche Wochenkonvention). */
@@ -317,7 +327,7 @@ export function Week() {
           type="button"
           onClick={() => setWeekOffset((w) => w - 1)}
           aria-label={t('week.prevWeek')}
-          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card"
+          className="focus-ring flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card"
         >
           <ChevronLeft size={20} />
         </button>
@@ -325,7 +335,7 @@ export function Week() {
           type="button"
           onClick={() => setWeekOffset((w) => w + 1)}
           aria-label={t('week.nextWeek')}
-          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card"
+          className="focus-ring flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card"
         >
           <ChevronRight size={20} />
         </button>
@@ -643,8 +653,10 @@ function PlannedRow({
 
 /**
  * Bottom-Sheet „Aus Vorrat planen"/„Mahlzeit nachtragen" (Muster PortionSheet):
- * Mahlzeit wählen, dann ein Vorrats-Lebensmittel antippen. Zukunft/heute →
- * planFood (planned-Log), Vergangenheit (`backfill`) → backfillFood (echter
+ * Mahlzeit wählen, dann ein Vorrats-Lebensmittel antippen (1-Tap, übliche
+ * Portion) ODER über Katalog-Suche/„Zuletzt" ein beliebiges Lebensmittel mit
+ * anpassbarer Menge übers Mengen-Sheet buchen. Zukunft/heute → planFood
+ * (planned-Log), Vergangenheit (`backfill`) → backfillFood-Semantik (echter
  * Log, Vorrats-Abzug wie beim normalen Loggen). Undo-Toast beim Aufrufer.
  */
 function PlanSheet({
@@ -715,15 +727,26 @@ function PlanForm({
   const navigate = useNavigate()
   const [meal, setMeal] = useState<Meal>('lunch')
   const [saving, setSaving] = useState(false)
+  // Katalog-Suche über ALLE Lebensmittel — Restaurant-Fall: Nachtragen geht
+  // auch ohne Vorrats-Artikel (Muster Add.tsx „Katalog-Suche").
+  const [query, setQuery] = useState('')
+  // Food fürs Mengen-Sheet (Suche/„Zuletzt" bzw. Waage-Button am Vorrats-Eintrag).
+  const [pickerFood, setPickerFood] = useState<FoodItem | null>(null)
   const pantry = useLiveQuery(() => pantryFoods(), [])
+  const recents = useLiveQuery(() => recentFoods(), [])
+  const results = useLiveQuery(() => searchFoods(query), [query])
+  const searching = query.trim().length > 0
+  // „Zuletzt" ohne Vorrats-Duplikate — der Vorrat hat seine eigene Sektion.
+  const recentsWithoutPantry = (recents ?? []).filter((f) => !f.pantry)
   const fmtDate = new Intl.DateTimeFormat(i18n.language, {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
   })
 
-  // Ein Tipp übernimmt die übliche Portion (defaultPortion, sonst 100 g/ml):
-  // Zukunft/heute wird geplant, Vergangenheit direkt als gegessen nachgetragen.
+  // 1-Tap-Schnellweg (Vorrats-Liste): übernimmt die übliche Portion
+  // (defaultPortion, sonst 100 g/ml). Zukunft wird geplant, Vergangenheit
+  // direkt als gegessen nachgetragen.
   async function pick(food: FoodItem) {
     if (saving) return
     setSaving(true)
@@ -743,6 +766,41 @@ function PlanForm({
     }
   }
 
+  /**
+   * Buchung aus dem Mengen-Sheet (PortionSheet): Zukunft hat dort geplant
+   * (planned-Log), Vergangenheit echt geloggt — im Backfill-Fall geht wie bei
+   * backfillFood eine Vorrats-Packung ab (Undo im Aufrufer legt sie zurück).
+   */
+  function handleSheetLogged(entry: LogEntry, food: FoodItem) {
+    setPickerFood(null)
+    if (backfill) {
+      void decrementPantryOnLog(food.id).then((took) => onBackfilled(entry, food, took))
+    } else {
+      onPlanned(entry, food)
+    }
+    onClose()
+  }
+
+  /** Zeile für Suche/„Zuletzt": Tap öffnet das Mengen-Sheet (Menge anpassbar). */
+  const foodRow = (f: FoodItem) => (
+    <li key={f.id}>
+      <button
+        type="button"
+        onClick={() => setPickerFood(f)}
+        aria-label={t('add.pantryAmount', { name: f.name })}
+        className="focus-ring flex min-h-[48px] w-full items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">{f.name}</span>
+          <span className="block text-xs text-muted-foreground">
+            {f.kcal} kcal / 100 {f.per}
+          </span>
+        </span>
+        <Scale size={16} aria-hidden="true" className="shrink-0 text-muted-foreground" />
+      </button>
+    </li>
+  )
+
   return (
     <div className="space-y-4">
       <div>
@@ -760,54 +818,118 @@ function PlanForm({
         ))}
       </div>
 
-      {pantry === undefined ? (
+      {/* Suche über den ganzen Katalog (Muster Add.tsx) — findet auch
+          Nicht-Vorrats-Lebensmittel („gestern im Restaurant"). */}
+      <div className="relative">
+        <Search
+          size={18}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('add.searchPh')}
+          aria-label={t('add.searchPh')}
+          className="pl-10"
+        />
+      </div>
+
+      {pantry === undefined || recents === undefined ? (
         <Skeleton className="h-24 w-full" />
-      ) : pantry.length === 0 ? (
-        <div className="space-y-3 py-2 text-center">
-          <p className="text-sm text-muted-foreground">{t('plan.pickerEmpty')}</p>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              onClose()
-              navigate('/pantry')
-            }}
-          >
-            {t('nav.pantry')}
-          </Button>
-        </div>
       ) : (
-        <ul className="max-h-72 space-y-2 overflow-y-auto">
-          {pantry.map((f) => {
-            const dp = f.defaultPortion
-            const kcal = computeLogValues(f, dp?.amount ?? 100, dp?.unit ?? f.per).kcal
-            return (
-              <li key={f.id}>
-                <button
-                  type="button"
-                  onClick={() => void pick(f)}
-                  disabled={saving}
-                  aria-label={t(backfill ? 'week.backfillPick' : 'plan.pickFood', { name: f.name })}
-                  className="focus-ring flex min-h-[48px] w-full items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left disabled:opacity-50"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{f.name}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {dp ? describePortion(dp, t('today.edit.unitPortion')) : `100 ${f.per}`}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                    {Math.round(kcal)} kcal
-                  </span>
-                </button>
-              </li>
+        <div className="max-h-72 space-y-4 overflow-y-auto">
+          {searching ? (
+            results && results.length > 0 ? (
+              <ul className="space-y-2">{results.map(foodRow)}</ul>
+            ) : (
+              results && <p className="text-sm text-muted-foreground">{t('pantryPage.searchNone')}</p>
             )
-          })}
-        </ul>
+          ) : pantry.length === 0 && recentsWithoutPantry.length === 0 ? (
+            <div className="space-y-3 py-2 text-center">
+              <p className="text-sm text-muted-foreground">
+                {t(backfill ? 'week.backfillPickerEmpty' : 'plan.pickerEmpty')}
+              </p>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  onClose()
+                  navigate('/pantry')
+                }}
+              >
+                {t('nav.pantry')}
+              </Button>
+            </div>
+          ) : (
+            <>
+              {pantry.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-medium text-muted-foreground">{t('add.pantry')}</h3>
+                  <ul className="space-y-2">
+                    {pantry.map((f) => {
+                      const dp = f.defaultPortion
+                      const kcal = computeLogValues(f, dp?.amount ?? 100, dp?.unit ?? f.per).kcal
+                      return (
+                        <li key={f.id} className="flex items-center gap-1">
+                          {/* 1-Tap-Schnellweg: übliche Portion sofort buchen … */}
+                          <button
+                            type="button"
+                            onClick={() => void pick(f)}
+                            disabled={saving}
+                            aria-label={t(backfill ? 'week.backfillPick' : 'plan.pickFood', { name: f.name })}
+                            className="focus-ring flex min-h-[48px] min-w-0 flex-1 items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 text-left disabled:opacity-50"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium">{f.name}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {dp ? describePortion(dp, t('today.edit.unitPortion')) : `100 ${f.per}`}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {Math.round(kcal)} kcal
+                            </span>
+                          </button>
+                          {/* … oder Menge/Einheit übers Mengen-Sheet anpassen. */}
+                          <button
+                            type="button"
+                            onClick={() => setPickerFood(f)}
+                            aria-label={t('add.pantryAmount', { name: f.name })}
+                            className="focus-ring flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-muted-foreground"
+                          >
+                            <Scale size={20} aria-hidden="true" />
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
+              {recentsWithoutPantry.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-xs font-medium text-muted-foreground">{t('entry.recent')}</h3>
+                  <ul className="space-y-2">{recentsWithoutPantry.map(foodRow)}</ul>
+                </section>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       <Button variant="ghost" className="w-full border border-input" onClick={onClose}>
         {t('common.cancel')}
       </Button>
+
+      {/* Mengen-Sheet über dem Picker: bucht auf `date` — Zukunft als geplanter
+          Eintrag (planned=true), Vergangenheit als echter Log (Nachtragen). */}
+      <PortionSheet
+        food={pickerFood}
+        date={date}
+        planned={!backfill}
+        initialMeal={meal}
+        onClose={() => setPickerFood(null)}
+        onLogged={handleSheetLogged}
+      />
     </div>
   )
 }

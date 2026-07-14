@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -27,6 +28,8 @@ import { NudgeCard } from '@/components/NudgeCard'
 import { ExpiryHint } from '@/components/ExpiryHint'
 import { CaptureCta } from '@/components/CaptureCta'
 import { WeekBarsMini } from '@/components/WeekBarsCard'
+import { TrendsTeaser } from '@/components/TrendsTeaser'
+import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/PageHeader'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
@@ -35,7 +38,7 @@ import { Skeleton } from '@/components/ui/Skeleton'
 export function Today() {
   const { t, i18n } = useTranslation()
   const date = useTodayKey() // reaktiv über Mitternacht (Befund 1)
-  const { showUndo } = useOverlays()
+  const { showUndo, openCapture } = useOverlays()
   const [editing, setEditing] = useState<LogEntry | null>(null)
 
   const logs = useLiveQuery(
@@ -138,13 +141,14 @@ export function Today() {
     <div className="space-y-6">
       <PageHeader title={t('today.title')} subtitle={dateLabel}>
         {typeof streak === 'number' && streak > 0 && (
-          <span
+          <Link
+            to="/awards"
             aria-label={t('today.streak', { count: streak })}
-            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 shadow-sm"
+            className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 shadow-sm"
           >
             <Flame size={16} className="text-warning" aria-hidden="true" />
             <span className="text-sm font-bold tabular-nums">{streak}</span>
-          </span>
+          </Link>
         )}
         <ProfileAvatar />
       </PageHeader>
@@ -208,10 +212,16 @@ export function Today() {
       {/* Kompakte Wochen-Balken (planned zählt nicht) — Sprungbrett zur Woche. */}
       <WeekBarsMini today={date} kcalGoal={kcalGoal} />
 
+      {/* Dezenter Verlauf-Teaser (Gewicht bzw. Ø kcal) — Sprungbrett zu /trends. */}
+      <TrendsTeaser today={date} />
+
       {logs.length === 0 ? (
-        <p className="rounded-lg bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-          {t('today.empty')}
-        </p>
+        <div className="space-y-3 rounded-lg bg-muted/50 p-6 text-center">
+          <p className="text-sm text-muted-foreground">{t('today.empty')}</p>
+          <Button variant="secondary" onClick={openCapture}>
+            {t('capture.ctaTitle')}
+          </Button>
+        </div>
       ) : (
         <div className="space-y-4">
           {MEALS.map((meal) => {

@@ -43,7 +43,7 @@ const OFF_TAGS: Record<string, string[]> = {
 const KEYWORDS: Record<string, string[]> = {
   gluten: ['gluten', 'weizen', 'wheat', 'roggen', 'rye', 'gerste', 'barley', 'dinkel', 'brot', 'bread', 'nudel', 'pasta', 'mehl', 'flour'],
   crustaceans: ['krebs', 'garnele', 'shrimp', 'prawn', 'krabbe', 'crab', 'hummer', 'lobster', 'languste', 'scampi', 'krill'],
-  eggs: ['ei', 'eier', 'egg', 'omelett', 'omelette', 'mayonnaise'],
+  eggs: ['ei', 'eier', 'egg', 'eggs', 'rührei', 'spiegelei', 'omelett', 'omelette', 'mayonnaise'],
   fish: ['fisch', 'fish', 'lachs', 'salmon', 'thunfisch', 'tuna', 'hering', 'herring', 'makrele', 'mackerel', 'anchovis', 'anchovy'],
   peanuts: ['erdnuss', 'erdnüsse', 'peanut'],
   soy: ['soja', 'soy', 'tofu', 'edamame', 'sojabohne', 'tempeh'],
@@ -55,6 +55,30 @@ const KEYWORDS: Record<string, string[]> = {
   sulphites: ['sulfit', 'sulphite', 'schwefel', 'sulfur', 'sulphur'],
   lupin: ['lupine', 'lupin'],
   molluscs: ['muschel', 'mussel', 'auster', 'oyster', 'tintenfisch', 'squid', 'calamari', 'octopus', 'schnecke', 'snail', 'weichtier'],
+}
+
+/**
+ * Kurze, hochgradig mehrdeutige Keywords zählen nur als eigenständiges Wort —
+ * als Substring stecken sie in harmlosen Namen ('ei' in Reis/Wein/Fleisch,
+ * 'egg' in Veggie, 'nut' in Minute/Donut).
+ */
+const WHOLE_WORD_ONLY = new Set(['ei', 'egg', 'eggs', 'nut', 'nuts'])
+
+/** Nur am Wortanfang matchen: „Eiersalat" ja, „Feierabend" nein. */
+const WORD_PREFIX_ONLY = new Set(['eier'])
+
+/** „glutenfrei"/„laktosefrei" im Namen hebt den Keyword-Fallback auf. */
+const NEGATIONS: Record<string, string[]> = {
+  gluten: ['glutenfrei', 'gluten-free', 'gluten free'],
+  lactose: ['laktosefrei', 'lactose-free', 'lactose free', 'milchfrei'],
+  eggs: ['eifrei', 'egg-free', 'egg free'],
+}
+
+function nameMatchesKeyword(name: string, words: string[], kw: string): boolean {
+  if (WHOLE_WORD_ONLY.has(kw)) return words.includes(kw)
+  if (WORD_PREFIX_ONLY.has(kw)) return words.some((w) => w.startsWith(kw))
+  // Substring deckt deutsche Komposita ab (Vollmilchschokolade, Dinkelbrot).
+  return name.includes(kw)
 }
 
 function normTags(tags?: string[]): Set<string> {
@@ -74,6 +98,7 @@ export function checkAllergens(
   const allergenTags = normTags(food.allergens)
   const traceTags = normTags(food.traces)
   const name = (food.name ?? '').toLowerCase()
+  const words = name.split(/[^a-zäöüßà-ÿ]+/).filter(Boolean)
   const hasStructured = allergenTags.size > 0 || traceTags.size > 0
 
   const contains: string[] = []
@@ -90,7 +115,11 @@ export function checkAllergens(
       continue
     }
     // Namens-Keywords nur als Fallback nutzen, wenn keine strukturierten Tags vorliegen.
-    if (!hasStructured && (KEYWORDS[key] ?? []).some((kw) => name.includes(kw))) {
+    if (
+      !hasStructured &&
+      !(NEGATIONS[key] ?? []).some((neg) => name.includes(neg)) &&
+      (KEYWORDS[key] ?? []).some((kw) => nameMatchesKeyword(name, words, kw))
+    ) {
       contains.push(key)
     }
   }

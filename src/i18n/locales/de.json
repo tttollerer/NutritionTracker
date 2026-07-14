@@ -6,7 +6,7 @@
     "today": "Heute",
     "week": "Woche",
     "add": "Erfassen",
-    "pantry": "Einkauf",
+    "pantry": "Vorrat",
     "coach": "Coach",
     "awards": "Erfolge",
     "profile": "Profil"
@@ -17,7 +17,7 @@
     "kcalOver": "{{count}} kcal über Ziel",
     "kcalToGoal": "noch {{count}} kcal bis Ziel",
     "kcalReached": "Ziel erreicht 💪",
-    "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
+    "empty": "Noch nichts erfasst — logge deine erste Mahlzeit.",
     "meals": {
       "breakfast": "Frühstück",
       "lunch": "Mittag",
@@ -36,7 +36,8 @@
       "undo": "Letztes rückgängig"
     },
     "entryDeleted": "{{name}} gelöscht",
-    "streak": "{{count}} Tage Streak",
+    "streak_one": "{{count}} Tag Streak",
+    "streak_other": "{{count}} Tage Streak",
     "foodCost": "Essenskosten heute",
     "expiringHint_one": "1 Artikel läuft bald ab — heute verbrauchen?",
     "expiringHint_other": "{{count}} Artikel laufen bald ab — heute verbrauchen?",
@@ -48,6 +49,10 @@
       "unit": "Einheit",
       "unitPortion": "Portion",
       "meal": "Mahlzeit",
+      "date": "Tag",
+      "dateToday": "Heute",
+      "dateYesterday": "Gestern",
+      "datePick": "Anderer Tag …",
       "save": "Speichern"
     }
   },
@@ -183,6 +188,7 @@
     "backfill": "Nachtragen",
     "backfillMeal": "Mahlzeit nachtragen",
     "backfillPick": "{{name}} nachtragen",
+    "backfillPickerEmpty": "Dein Vorrat ist noch leer — nutze die Suche oder lege zuerst Lebensmittel in deinen Vorrat.",
     "backfilled": "{{name}} nachgetragen"
   },
   "calendar": {
@@ -196,7 +202,7 @@
     "dayPlannedSuffix_other": ", {{count}} geplant"
   },
   "pantryPage": {
-    "title": "Einkauf",
+    "title": "Vorrat",
     "subtitle_one": "1 Artikel im Vorrat",
     "subtitle_other": "{{count}} Artikel im Vorrat",
     "scanProduct": "Produkt scannen",
@@ -207,7 +213,6 @@
     "empty": "Dein Vorrat ist leer. Scanne deinen Einkauf per Barcode oder Foto — die KI erfasst die Nährwerte.",
     "consume": "{{name}} in Verzehr",
     "open": "{{name}} öffnen",
-    "inPantry": "im Vorrat",
     "stock_one": "1× im Vorrat",
     "stock_other": "{{count}}× im Vorrat",
     "stockInc": "Eine Packung {{name}} hinzufügen",
@@ -221,6 +226,7 @@
     "title": "Coach",
     "subtitle": "dein Ernährungscoach",
     "empty": "Frag mich alles rund um deine Ernährung — z. B. „Was soll ich heute noch essen, um mein Eiweißziel zu treffen?\"",
+    "emptyMemory": "Ziele & Vorlieben merkt sich dein Coach dauerhaft — unabhängig vom Chat-Verlauf.",
     "inputPh": "Nachricht oder Mikrofon …",
     "send": "Senden",
     "listening": "Höre zu …",
@@ -230,6 +236,8 @@
     "mic": "Mikrofon",
     "disclaimer": "Orientierung, keine medizinische Beratung. Bei Beschwerden bitte Fachleute fragen.",
     "retry": "Erneut versuchen",
+    "clearHistory": "Verlauf löschen",
+    "historyCleared": "Chat-Verlauf gelöscht",
     "suggestTitle": "Vorschläge",
     "applyGoal": "Ziel übernehmen",
     "applyChallenge": "Challenge starten",
@@ -254,7 +262,8 @@
     "level": "Level {{level}}",
     "points": "{{points}} Punkte",
     "toNext": "noch {{count}} bis Level {{level}}",
-    "streak": "{{count}} Tage Streak",
+    "streak_one": "{{count}} Tag Streak",
+    "streak_other": "{{count}} Tage Streak",
     "streakNone": "Heute starten!",
     "freeze": "{{count}} Joker",
     "challenges": "Aktive Challenges",
@@ -312,7 +321,7 @@
       "height": "Bitte eine Größe zwischen 100 und 250 cm angeben.",
       "weight": "Bitte ein Gewicht zwischen 30 und 300 kg angeben."
     },
-    "disclaimer": "NutriScan dient der Orientierung und ersetzt keine ärztliche oder ernährungsmedizinische Beratung.",
+    "disclaimer": "{{app}} dient der Orientierung und ersetzt keine ärztliche oder ernährungsmedizinische Beratung.",
     "personas": {
       "strength": "Kraft/Muskelaufbau",
       "endurance": "Ausdauer",
@@ -346,19 +355,9 @@
     }
   },
   "entry": {
-    "title": "Manuell erfassen",
-    "name": "Name",
-    "namePh": "z. B. Haferflocken",
-    "per": "Bezug",
     "unitToggle": "Einheit wählen",
-    "kcal": "kcal / 100",
-    "protein": "Eiweiß (g)",
-    "carbs": "Kohlenh. (g)",
-    "fat": "Fett (g)",
     "amount": "Menge",
-    "recent": "Zuletzt benutzt",
-    "photo": "Foto hinzufügen",
-    "save": "Hinzufügen"
+    "recent": "Zuletzt benutzt"
   },
   "profile": {
     "title": "Profil & Ziele",
@@ -379,7 +378,7 @@
     "proteinPerKg": "Eiweiß (g/kg)",
     "proteinPerKgHint": "Leer lassen = Standard für deinen Schwerpunkt.",
     "targetsPreview": "Neue Tagesziele",
-    "reset": "Onboarding erneut",
+    "reset": "Alle Daten löschen & neu starten",
     "health": "Gesundheits-Module",
     "bloodSugar": "Blutzucker-Tracking",
     "bloodSugarHint": "Diabetes: Messwerte eintragen & Warnungen",
@@ -420,6 +419,11 @@
     "title": "Verlauf & Messwerte",
     "intro": "Trage deine Werte regelmäßig ein — daraus erkennen wir und der Coach deinen Fortschritt.",
     "measurementsTitle": "Messwerte",
+    "teaser": {
+      "title": "Dein Verlauf",
+      "weightLine": "{{value}} kg · {{rate}} kg/Woche",
+      "kcalLine": "Ø {{kcal}} kcal in 7 Tagen"
+    },
     "nutrition": {
       "title": "Ernährung",
       "kcalTitle": "Kalorien",
@@ -518,6 +522,7 @@
   },
   "capture": {
     "mealTitle": "Essen fotografieren",
+    "portionTitle": "Menge schätzen",
     "labelTitle": "Produkt scannen",
     "barcodeTitle": "Barcode scannen",
     "receiptTitle": "Kassenbon scannen",
@@ -605,7 +610,12 @@
     "refineCta": "Neu schätzen",
     "refining": "Wird neu geschätzt …",
     "refineConfirm": "Ja, neu schätzen",
-    "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut."
+    "refineReplaceWarn": "Deine Anpassungen werden durch die neue Schätzung ersetzt. Tippe zum Bestätigen erneut.",
+    "itemKcal": "= {{kcal}} kcal",
+    "total": "Gesamt: {{kcal}} kcal · {{protein}} g Eiweiß",
+    "meal": "Mahlzeit",
+    "logged_one": "1 Eintrag geloggt",
+    "logged_other": "{{count}} Einträge geloggt"
   },
   "receipt": {
     "title": "Kassenbon prüfen",
@@ -665,7 +675,10 @@
       "portionEstimated": "KI-Schätzung: {{amount}} {{unit}} — unten prüfen und mit + übernehmen.",
       "portionEstimateNone": "Keine Mengenschätzung erkennbar — bitte Menge von Hand eintragen.",
       "estimateCta": "Nährwerte per KI schätzen",
-      "estimateDone": "KI-Schätzung übernommen — bitte prüfen und bei Bedarf korrigieren."
+      "estimateDone": "KI-Schätzung übernommen — bitte prüfen und bei Bedarf korrigieren.",
+      "pantryRemove": "Aus dem Vorrat entfernen",
+      "pantryRemoveNamed": "{{name}} aus dem Vorrat entfernen",
+      "pantryRemoved": "{{name}} aus dem Vorrat entfernt"
     },
     "create": {
       "title": "Neues Produkt",
@@ -699,12 +712,7 @@
     "empty": "Deine Einkaufsliste ist leer. Füge Artikel hinzu oder lass dir Vorschläge aus dem Vorrat geben.",
     "addPh": "Artikel hinzufügen …",
     "add": "Hinzufügen",
-    "qty": "Menge",
-    "note": "Notiz",
     "suggest": "Aus „bald leer\" übernehmen",
-    "suggestNone": "Nichts nachzukaufen — dein Vorrat ist gut gefüllt.",
-    "suggested_one": "1 Vorschlag ergänzt",
-    "suggested_other": "{{count}} Vorschläge ergänzt",
     "checkOff": "{{name}} abhaken",
     "uncheck": "{{name}} wieder auf die Liste setzen",
     "checked": "{{name}} abgehakt",
@@ -713,15 +721,10 @@
     "remove": "{{name}} entfernen",
     "removed": "Artikel entfernt",
     "open_one": "1 offener Artikel",
-    "open_other": "{{count}} offene Artikel",
-    "sourceAuto": "Vorrat fast leer",
-    "sourceManual": "manuell",
-    "sourcePlan": "aus Wochenplan",
-    "lowStock": "Fast leer",
-    "emptyStock": "Leer"
+    "open_other": "{{count}} offene Artikel"
   },
   "budget": {
-    "title": "Budget",
+    "title": "Haushaltskasse",
     "weeklyBudget": "Wochenbudget",
     "weeklyBudgetPh": "z. B. 60",
     "perWeek": "pro Woche",
@@ -738,15 +741,13 @@
     "proteinPrice": "Protein-Preis",
     "proteinPriceHint": "EUR je 100 g Protein — günstigste Eiweißquellen zuerst.",
     "kcalPrice": "Kalorien-Preis",
-    "kcalPriceHint": "EUR je 1000 kcal.",
-    "noPrices": "Noch keine Preise hinterlegt — ergänze Packungspreise im Produkt, um Auswertungen zu sehen."
+    "kcalPriceHint": "EUR je 1000 kcal."
   },
   "plan": {
-    "title": "Wochenplan",
     "planMeal": "Mahlzeit planen",
+    "save": "Einplanen",
     "planned": "Geplant",
     "plannedBadge": "geplant",
-    "empty": "Noch nichts geplant — plane Mahlzeiten aus Vorrat, Favoriten oder Rezepten.",
     "confirm": "Gegessen",
     "confirmAria": "{{name}} als gegessen bestätigen",
     "confirmed": "Als gegessen übernommen",
@@ -754,16 +755,14 @@
     "removeAria": "Planung von {{name}} entfernen",
     "removed": "Planung entfernt",
     "plannedFor": "{{name}} geplant",
-    "pickerEmpty": "Dein Vorrat ist leer — lege im Einkauf Lebensmittel an, um zu planen.",
+    "pickerEmpty": "Dein Vorrat ist noch leer — nutze die Suche oder lege zuerst Lebensmittel in deinen Vorrat.",
     "pickFood": "{{name}} einplanen",
     "missing": "Fehlt für deinen Plan",
     "missingCount_one": "1 Zutat fehlt im Vorrat",
     "missingCount_other": "{{count}} Zutaten fehlen im Vorrat",
-    "missingNone": "Alles für deinen Plan ist im Vorrat.",
     "toShoppingList": "Auf die Einkaufsliste",
     "addedToList_one": "1 Artikel auf die Einkaufsliste gesetzt",
-    "addedToList_other": "{{count}} Artikel auf die Einkaufsliste gesetzt",
-    "notCounted": "Geplante Mahlzeiten zählen erst nach dem Bestätigen."
+    "addedToList_other": "{{count}} Artikel auf die Einkaufsliste gesetzt"
   },
   "recipes": {
     "title": "Rezepte",
@@ -799,19 +798,8 @@
     "ingredientCount_other": "{{count}} Zutaten"
   },
   "expiry": {
-    "title": "Haltbarkeit",
-    "mhd": "MHD",
-    "set": "MHD setzen",
-    "remove": "MHD entfernen",
-    "setAria": "MHD für {{name}} setzen",
-    "expiresOn": "MHD {{date}}",
     "expiresToday": "läuft heute ab",
-    "expiresTomorrow": "läuft morgen ab",
-    "expiresInDays": "läuft in {{count}} Tagen ab",
-    "expired": "abgelaufen",
-    "soonTitle": "Bald ablaufend",
-    "soonEmpty": "Nichts läuft demnächst ab.",
-    "useFirst": "Zuerst verbrauchen"
+    "expired": "abgelaufen"
   },
   "pwa": {
     "updateAvailable": "Update verfügbar",

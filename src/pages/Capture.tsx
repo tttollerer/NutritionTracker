@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
-import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, ShoppingBasket, Sparkles, RotateCcw } from 'lucide-react'
+import { Camera, Image as ImageIcon, ChevronLeft, ShieldCheck, Mic, ShoppingBasket, Sparkles, RotateCcw, X } from 'lucide-react'
 import { analyzeAuto, analyzeImage, analyzeReceipt, type AnalyzeMode } from '@/lib/ai'
 import { enrichAnalyzeWithBarcode } from '@/lib/barcodeEnrich'
 import { toApiError } from '@/lib/apiError'
@@ -24,6 +24,14 @@ import { Field, Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Spinner } from '@/components/ui/Spinner'
 import { cn } from '@/lib/utils'
+
+/**
+ * Doppelstart-Schutz über Mount-Grenzen: die Seiten-Transition mountet
+ * /capture kurz doppelt (siehe captureHandoff.ts) — ein Ref im Component-Scope
+ * reicht daher nicht als alleinige Sicherung. Merkt sich modulweit, für
+ * welches Handoff-Bild die Auto-Analyse bereits gestartet wurde.
+ */
+let autoStartedForImage: string | null = null
 
 export function Capture() {
   const { t } = useTranslation()
@@ -50,6 +58,21 @@ export function Capture() {
   const [runCount, setRunCount] = useState<number | null>(() => (batch ? readScanRun() : null))
   const consent = useLiveQuery(async () => (await getSettings()).photoConsent ?? false, [])
 
+  // Auto-Analyse des Handoff-Bilds: Merker, welches Bild übergeben wurde (nur
+  // DIESES darf automatisch starten — ein später manuell gewähltes nie) und ob
+  // diese Instanz schon gestartet hat (ein Mal pro Besuch, auch nach Abbruch).
+  const handoffImageRef = useRef(preview)
+  const autoStartedRef = useRef(false)
+  // Erster aus Dexie geladener Consent-Wert: Auto-Start nur, wenn die
+  // Einwilligung schon VOR diesem Besuch erteilt war — direkt nach dem
+  // Consent-Dialog soll der Nutzer den ersten KI-Upload bewusst selbst auslösen.
+  const initialConsentRef = useRef<boolean | null>(null)
+  // Abbrechen ohne AbortSignal: analyzeImage & Co. (src/lib/ai.ts) bieten nach
+  // außen keins an — stattdessen entwertet ein hochgezählter Lauf-Zähler das
+  // Ergebnis: eine abgebrochene Analyse läuft im Hintergrund aus, ihr Ergebnis
+  // wird komplett ignoriert (keine Navigation, kein Fehler, kein busy-Reset).
+  const analyzeRunRef = useRef(0)
+
   // Batch-Runde beim Betreten sicherstellen und beim echten Verlassen beenden.
   // Der Transition-Doppelmount (siehe captureHandoff) und der Weg zur Analyse
   // (/review) zählen NICHT als Verlassen — dort läuft die Runde weiter. Ein
@@ -69,6 +92,44 @@ export function Capture() {
       if (!stillInLoop) clearScanRun()
     }
   }, [batch])
+
+  // Stale-Foto-Schutz: Verlässt der Nutzer /capture über die Tab-Leiste (ohne
+  // Analyse/Neu aufnehmen/Zurück), darf das übergebene Bild nicht beim nächsten
+  // Besuch als alte Vorschau wieder auftauchen — ein unachtsamer Tap auf
+  // „Analysieren" würde die alte Mahlzeit erneut loggen. /capture und /review
+  // zählen nicht als Verlassen (Transition-Doppelmount bzw. Analyse-Weg, s. o.).
+  useEffect(() => {
+    return () => {
+      const { pathname } = window.location
+      if (pathname !== '/capture' && pathname !== '/review') clearPendingImage()
+    }
+  }, [])
+
+  // Auto-Analyse: Kommt das Bild aus dem Quick-Sheet (Handoff) und ist die
+  // Foto-Einwilligung bereits erteilt, entfällt der Pflicht-Tap „Analysieren" —
+  // der häufigste Flow läuft durch. Verfeinern bleibt möglich: Abbrechen hier
+  // (unten im Busy-Zustand) bzw. „Neu schätzen" im Review. Sonderfälle bleiben
+  // manuell: mode 'portion' und der Batch-Loop (dorthin führt kein Handoff —
+  // Review verlinkt ohne Bild zurück). Der verzögerte Start überbrückt den
+  // Transition-Doppelmount (siehe captureHandoff.ts): die flüchtige erste
+  // Instanz räumt ihren Timer beim Unmount ab, nur die bleibende startet.
+  useEffect(() => {
+    if (consent === undefined) return // Einwilligung lädt noch (Dexie, async)
+    if (initialConsentRef.current === null) initialConsentRef.current = consent
+    if (autoStartedRef.current) return
+    if (!handoffImageRef.current || preview !== handoffImageRef.current) return
+    if (initialConsentRef.current !== true || consent !== true) return
+    if (mode === 'portion' || batch) return
+    const timer = window.setTimeout(() => {
+      // Modul-weiter Zweitschutz, falls beide Mounts den Timer überleben.
+      if (autoStartedForImage === handoffImageRef.current) return
+      autoStartedForImage = handoffImageRef.current
+      autoStartedRef.current = true
+      void analyze()
+    }, 250)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- analyze ist pro Render neu; die Guards oben halten den Start einmalig
+  }, [consent, preview, mode, batch])
 
   // Speech-to-Text füllt das Beschreibungsfeld (Hinweis ans Modell).
   const recog = useSpeechRecognition((text) => setHint((h) => (h ? `${h} ${text}` : text)))
@@ -95,6 +156,9 @@ export function Capture() {
     setPriceDone(true)
   }
 
+  // mode 'portion' wird in der App nicht mehr verlinkt (die Mengen-Schätzung
+  // läuft im PortionSheet über analyzeImage), bleibt aber für Deep-Links/alte
+  // PWA-Stände erreichbar — mit eigenem Titel statt „Essen fotografieren".
   const title =
     mode === 'auto'
       ? t('capture.autoTitle')
@@ -102,7 +166,9 @@ export function Capture() {
         ? t('capture.labelTitle')
         : mode === 'receipt'
           ? t('capture.receiptTitle')
-          : t('capture.mealTitle')
+          : mode === 'portion'
+            ? t('capture.portionTitle')
+            : t('capture.mealTitle')
   const uiHint =
     mode === 'auto'
       ? t('capture.hintAuto')
@@ -126,7 +192,11 @@ export function Capture() {
   }
 
   async function analyze() {
-    if (!preview || consent !== true) return
+    if (busy || !preview || consent !== true) return
+    // Lauf-Marke für den Abbrechen-Weg: cancelAnalyze() zählt den Zähler hoch,
+    // damit ist DIESER Lauf veraltet — alles nach einem await wird verworfen.
+    const run = ++analyzeRunRef.current
+    const cancelled = () => analyzeRunRef.current !== run
     setErrorKey(null)
     setBusy(true)
     try {
@@ -135,6 +205,7 @@ export function Capture() {
       // scanRoute.ts entscheidet über Ziel-Screen und Primäraktion.
       if (mode === 'auto') {
         const auto = await analyzeAuto(preview, trimmedHint)
+        if (cancelled()) return
         const target = autoScanPath(auto.kind, intent)
         if (auto.kind === 'receipt') {
           // Kassenbon ist immer Einkauf — auch bei Intent „Gegessen"
@@ -147,6 +218,7 @@ export function Capture() {
         const route = routeAutoScan(auto.kind, intent)
         // label/barcode: abgelesener Strichcode → OFF-Lookup wie im v1.4-Flow.
         const enriched = await enrichAnalyzeWithBarcode(auto)
+        if (cancelled()) return
         setReview({
           items: enriched.items,
           meal,
@@ -168,15 +240,18 @@ export function Capture() {
       // Kassenbon: eigenes Antwortschema + eigener Prüf-Screen (/receipt).
       if (mode === 'receipt') {
         const receipt = await analyzeReceipt(preview, trimmedHint)
+        if (cancelled()) return
         setReceiptDraft(receipt.items)
         clearPendingImage()
         navigate('/receipt')
         return
       }
       const result = await analyzeImage(mode, preview, trimmedHint)
+      if (cancelled()) return
       // Vertrag v1.4: Hat die KI einen Strichcode abgelesen, liefern die
       // exakten OFF-Daten Name/Nährwerte — die Mengen-Schätzung bleibt.
       const enriched = await enrichAnalyzeWithBarcode(result)
+      if (cancelled()) return
       // Foto nur beim Essens-Modus als Mahlzeitenfoto behalten (nicht bei Tabellen-Scans).
       // notes: freie Hinweise der KI (z. B. Unsicherheiten) — im Review anzeigen.
       // mode/hint/imageBase64/questions: Verfeinerungsschleife („Neu schätzen" im Review).
@@ -197,10 +272,22 @@ export function Capture() {
       clearPendingImage()
       navigate('/review')
     } catch (err) {
-      setErrorKey(toApiError(err).i18nKey)
+      // Fehler eines abgebrochenen Laufs interessieren nicht mehr — der Nutzer
+      // ist längst zurück in der Vorschau.
+      if (!cancelled()) setErrorKey(toApiError(err).i18nKey)
     } finally {
-      setBusy(false)
+      if (!cancelled()) setBusy(false)
     }
+  }
+
+  // Abbrechen während der (Auto-)Analyse: zurück zur Vorschau — Bild und
+  // Beschreibungsfeld bleiben erhalten, damit man einen Hinweis ergänzen und
+  // manuell neu analysieren kann. Der laufende Request wird nicht hart
+  // abgebrochen (kein AbortSignal in src/lib/ai.ts), sein Ergebnis aber über
+  // die Lauf-Marke ignoriert (s. o.).
+  function cancelAnalyze() {
+    analyzeRunRef.current++
+    setBusy(false)
   }
 
   function retake() {
@@ -216,7 +303,7 @@ export function Capture() {
     <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
       <p className="font-medium text-destructive">{t('capture.error')}</p>
       <p className="text-muted-foreground">{t(errorKey)}</p>
-      {errorKey === 'errors.offline' && (
+      {(errorKey === 'errors.offline' || errorKey === 'errors.budgetExceeded') && (
         <Button variant="secondary" className="w-full" onClick={() => navigate('/add')}>
           {t('errors.manualFallback')}
         </Button>
@@ -294,6 +381,11 @@ export function Capture() {
           <p className="text-sm text-muted-foreground">
             {mode === 'auto' ? t('capture.analyzingAuto') : t('capture.analyzing')}
           </p>
+          {/* Ausweg aus der (auto-gestarteten) Analyse: zurück zur Vorschau,
+              z. B. um der KI noch eine Beschreibung mitzugeben. */}
+          <Button variant="ghost" className="border border-input" onClick={cancelAnalyze}>
+            <X size={18} /> {t('common.cancel')}
+          </Button>
         </div>
       ) : preview ? (
         /* ── Vorschau + Beschreibung (Text/Sprache) vor dem Senden ── */

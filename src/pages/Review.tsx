@@ -9,18 +9,42 @@ import { getReview, setReview, clearReview, presetsFor, presetLabel, amountForUn
 import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
 import { useOverlays } from '@/lib/overlays-context'
-import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
+import { computeLogValues, createFood, deleteLog, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
 import { applyScanServings, attachScanPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
 import { clearScanRun, decrementScanRun, incrementScanRun } from '@/lib/scanRun'
 import { downscaleImage } from '@/lib/image'
-import type { Unit } from '@/db/types'
+import type { FoodItem, LogEntry, Meal, Unit } from '@/db/types'
+import { MEALS } from '@/lib/meal'
 import { todayKey } from '@/lib/utils'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Chip } from '@/components/ui/Chip'
 import { Spinner } from '@/components/ui/Spinner'
+
+/** Effektive Buchungsmenge eines Items — exakt der Fallback, mit dem confirm() loggt. */
+function loggedAmount(it: AiItem): number {
+  return it.amount || (it.unit === 'portion' ? 1 : 100)
+}
+
+/**
+ * Live-Vorschau je Item: Menge × per100 über computeLogValues — also EXAKT
+ * die Rechnung, die beim Übernehmen in logFood landet (Vorschau und Buchung
+ * laufen nie auseinander). 'portion' rechnet dabei wie bei frischen KI-Foods
+ * über die 100er-Basis; eine gemerkte übliche Portion aus dem Katalog floss
+ * bereits im Prefill-Effekt als konkrete g/ml-Menge in die Items ein.
+ */
+function previewValues(it: AiItem): LogEntry['computed'] {
+  const pseudoFood = {
+    per: it.unit === 'ml' ? 'ml' : 'g',
+    kcal: it.per100.kcal,
+    protein: it.per100.protein,
+    carbs: it.per100.carbs,
+    fat: it.per100.fat,
+  } as FoodItem
+  return computeLogValues(pseudoFood, loggedAmount(it), it.unit)
+}
 
 export function Review() {
   const { t } = useTranslation()
@@ -33,6 +57,9 @@ export function Review() {
   const { showUndo } = useOverlays()
   const payload = getReview()
   const [items, setItems] = useState<AiItem[]>(payload?.items ?? [])
+  // Mahlzeit fürs Loggen — bisher wurde payload.meal beim Übernehmen stumm
+  // verwendet; jetzt vorbelegt sichtbar und per Chips änderbar.
+  const [meal, setMeal] = useState<Meal>(payload?.meal ?? 'snack')
   const [ack, setAck] = useState(false)
   const [busy, setBusy] = useState(false)
   // Verfeinerungsschleife (Paket B): Zusatzinfo → Neu-Schätzung mit demselben Bild.
@@ -191,6 +218,16 @@ export function Review() {
   // Harte Treffer („enthält") erfordern eine bewusste Bestätigung vor dem Übernehmen.
   const hasContains = items.some((it) => allergyHit(it.name).contains.length > 0)
 
+  // Live-Summe über alle Positionen — gleiche Rechnung wie die spätere
+  // Buchung (previewValues → computeLogValues), reagiert auf jede Änderung.
+  const totals = items.reduce(
+    (acc, it) => {
+      const v = previewValues(it)
+      return { kcal: acc.kcal + v.kcal, protein: acc.protein + v.protein }
+    },
+    { kcal: 0, protein: 0 },
+  )
+
   async function confirm() {
     if (busy || (hasContains && !ack)) return
     setBusy(true) // Doppel-Tap-Schutz: Button disabled + früher Guard oben
@@ -198,6 +235,8 @@ export function Review() {
       const date = todayKey()
       // Mahlzeitenfoto einmal speichern, ID an alle Einträge hängen.
       const photoBlobId = payload!.photo ? await savePhoto(payload!.photo) : undefined
+      // Gerade erzeugte Einträge sammeln — der Undo-Toast nimmt genau sie zurück.
+      const logged: LogEntry[] = []
       for (const it of items) {
         const per: 'g' | 'ml' = it.unit === 'ml' ? 'ml' : 'g'
         // createFood upsertet per Barcode/Name (Dedupe seit Welle 2) — bekannte
@@ -216,7 +255,8 @@ export function Review() {
           source: payload!.source === 'openfoodfacts' ? 'openfoodfacts' : 'ai',
           barcode: payload!.barcode,
         })
-        await logFood({ food, date, meal: payload!.meal, amount: it.amount || (it.unit === 'portion' ? 1 : 100), unit: it.unit, photoBlobId })
+        const entry = await logFood({ food, date, meal, amount: loggedAmount(it), unit: it.unit, photoBlobId })
+        logged.push(entry)
         // Vom Etikett gelesene Einheiten (Vertrag v1.7, z. B. „Messlöffel =
         // 50 g") ans Produkt hängen — bestehende gleichnamige Einheiten
         // (manuell gepflegt) gewinnen und bleiben unangetastet.
@@ -232,6 +272,12 @@ export function Review() {
       }
       clearReview()
       clearScanRun() // Loggen als Mahlzeit beendet einen laufenden Einräum-Scan-Loop
+      // Undo wie auf allen anderen Log-Pfaden (Muster Add.tsx): Soft-Delete je
+      // gerade erzeugtem Eintrag. confirm() verändert keinen Vorratsbestand —
+      // zurückzunehmen sind also genau die neuen Logs.
+      showUndo(t('review.logged', { count: logged.length }), async () => {
+        await Promise.all(logged.map((e) => deleteLog(e.id)))
+      })
       navigate('/')
     } finally {
       setBusy(false)
@@ -406,6 +452,10 @@ export function Review() {
                     <Chip key={a} label={presetLabel(a)} selected={it.amount === a} onClick={() => patch(i, { amount: a })} />
                   ))}
                 </div>
+                {/* Live-Ergebnis der Position: Menge × per100 — exakt die Rechnung der Buchung. */}
+                <p className="text-sm font-medium tabular-nums">
+                  {t('review.itemKcal', { kcal: previewValues(it).kcal })}
+                </p>
               </div>
 
               {/* Nährwerte je 100 (bei 'portion' bezogen auf 100 g Basis) */}
@@ -436,6 +486,13 @@ export function Review() {
             </Card>
           )
         })
+      )}
+
+      {/* Live-Summe unter der Liste — rechnet bei jeder Mengen-Änderung sofort mit. */}
+      {items.length > 0 && (
+        <p aria-live="polite" className="rounded-lg bg-muted/50 px-3 py-2 text-sm font-semibold tabular-nums">
+          {t('review.total', { kcal: totals.kcal, protein: Math.round(totals.protein) })}
+        </p>
       )}
 
       {/* ── Produkt-Fotos (Design 1d): Scan-Foto + weitere Bilder — alle landen
@@ -531,6 +588,17 @@ export function Review() {
 
       {items.length > 0 && (
         <div className="space-y-3">
+          {/* Mahlzeit fürs Loggen („Übernehmen") — vorbelegt aus dem Scan-Kontext
+              (payload.meal), hier sichtbar und änderbar (Muster EditLogSheet).
+              „Nur in den Vorrat" loggt nichts und ignoriert die Wahl. */}
+          <div>
+            <p className="mb-1.5 text-sm font-medium text-muted-foreground">{t('review.meal')}</p>
+            <div role="group" aria-label={t('review.meal')} className="flex flex-wrap gap-2">
+              {MEALS.map((m) => (
+                <Chip key={m} label={t(`today.meals.${m}`)} selected={meal === m} onClick={() => setMeal(m)} />
+              ))}
+            </div>
+          </div>
           {hasContains && (
             <label className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               <input

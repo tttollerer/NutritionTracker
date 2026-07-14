@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Download, Upload, RefreshCw, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle, Trophy, Wallet } from 'lucide-react'
+import { Download, Upload, Trash2, RotateCcw, Activity, Bot, Candy, FlaskConical, HeartPulse, LineChart, ChevronRight, Pencil, AlertTriangle, Trophy, Wallet } from 'lucide-react'
 import {
   getCoachMemory,
   getGoals,
@@ -237,10 +237,10 @@ export function Profile({ onReset }: { onReset: () => void }) {
 
       <Button
         variant="ghost"
-        className="w-full text-muted-foreground"
+        className="w-full text-destructive"
         onClick={() => setPending({ kind: 'reset' })}
       >
-        <RefreshCw size={18} /> {t('profile.reset')}
+        <Trash2 size={18} /> {t('profile.reset')}
       </Button>
 
       {/* Bestätigungsdialog für destruktive Aktionen (Import überschreibt / Reset löscht alles). */}
