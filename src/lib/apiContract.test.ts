@@ -102,6 +102,40 @@ describe('AnalyzeResultSchema v1.4 — optionales barcode-Feld (Foto-Scan)', () 
   })
 })
 
+describe('AnalyzeItemSchema v1.7 — optionales servings-Feld (Messlöffel vom Etikett)', () => {
+  const item = {
+    name: 'Huel Pulver',
+    amount: 100,
+    unit: 'g',
+    per100: { kcal: 400, protein: 30, carbs: 37, fat: 13 },
+  }
+
+  it('parst OHNE servings (abwärtskompatibel, Feld fehlt einfach)', () => {
+    const parsed = AnalyzeResultSchema.parse({ items: [item] })
+    expect(parsed.items[0].servings).toBeUndefined()
+  })
+
+  it('parst MIT bis zu 3 benannten Einheiten (amount = g/ml pro EINZELNER Einheit)', () => {
+    const parsed = AnalyzeResultSchema.parse({
+      items: [{ ...item, servings: [{ label: 'Messlöffel', amount: 50 }, { label: 'Portion', amount: 100 }] }],
+    })
+    expect(parsed.items[0].servings).toEqual([
+      { label: 'Messlöffel', amount: 50 },
+      { label: 'Portion', amount: 100 },
+    ])
+  })
+
+  it('lehnt mehr als 3 Einheiten, amount ≤ 0 und leere/überlange Labels ab (Sanitizing macht der Server)', () => {
+    const withServings = (servings: unknown) =>
+      AnalyzeResultSchema.safeParse({ items: [{ ...item, servings }] }).success
+    expect(withServings([{ label: 'a', amount: 1 }, { label: 'b', amount: 2 }, { label: 'c', amount: 3 }, { label: 'd', amount: 4 }])).toBe(false)
+    expect(withServings([{ label: 'Messlöffel', amount: 0 }])).toBe(false)
+    expect(withServings([{ label: 'Messlöffel', amount: -50 }])).toBe(false)
+    expect(withServings([{ label: '', amount: 50 }])).toBe(false)
+    expect(withServings([{ label: 'x'.repeat(31), amount: 50 }])).toBe(false)
+  })
+})
+
 describe('AnalyzeRequestSchema v1.5 — mode estimate (Text-Schätzung ohne Bild)', () => {
   it('estimate braucht KEIN Bild, aber einen Namen im hint', () => {
     expect(AnalyzeRequestSchema.safeParse({ mode: 'estimate', hint: 'Leberkäse Brötchen' }).success).toBe(true)

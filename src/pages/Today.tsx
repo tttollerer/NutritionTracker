@@ -8,6 +8,8 @@ import type { FoodItem, LogEntry, Photo } from '@/db/types'
 import { deleteLog, getActiveGoalsMap, getAllergies, getSettings, restoreLog } from '@/db/repo'
 import { useOverlays } from '@/lib/overlays-context'
 import { EditLogSheet } from '@/components/EditLogSheet'
+import { PortionSheet } from '@/components/PortionSheet'
+import { formatLogAmount } from '@/lib/portion'
 import { DIABETES_SUGAR_LIMIT_G } from '@/lib/glucose'
 import { activeChallenges, evaluateChallenge } from '@/lib/challenges'
 import { sumsByDate } from '@/lib/gamification'
@@ -250,10 +252,8 @@ export function Today() {
                         <span className="min-w-0">
                           <span className="block truncate font-medium">{foodName(l.foodId)}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {/* In benannter Einheit erfasst („2 Stück") → genau so anzeigen. */}
-                            {l.serving
-                              ? `${String(l.serving.count).replace('.', ',')} ${l.serving.label}`
-                              : `${l.amount} ${l.unit === 'portion' ? t('today.edit.unitPortion') : l.unit}`}
+                            {/* In benannter Einheit erfasst → „2 × Kappe (60 g)". */}
+                            {formatLogAmount(l, t('today.edit.unitPortion'))}
                             {' · '}{Math.round(l.computed.kcal)} kcal
                           </span>
                         </span>
@@ -345,9 +345,19 @@ export function Today() {
 
       <WaterCard weightKg={profile?.weightKg} />
 
+      {/* Eintrag bearbeiten: EIN Mengen-Sheet für Loggen und Korrigieren —
+          das PortionSheet im Edit-Modus bringt benannte Einheiten, „+ Einheit",
+          Menge-per-Foto, Produktfotos und den Produkt-Editor mit. */}
+      <PortionSheet
+        food={(editing && foods.get(editing.foodId)) || null}
+        editEntry={editing}
+        initialMeal={editing?.meal ?? 'lunch'}
+        onClose={() => setEditing(null)}
+      />
+      {/* Fallback: Food gelöscht/fehlt → schlankes EditLogSheet, das ganz ohne
+          FoodItem auskommt (Menge/Einheit/Mahlzeit bleiben korrigierbar). */}
       <EditLogSheet
-        entry={editing}
-        food={editing ? foods.get(editing.foodId) : undefined}
+        entry={editing && !foods.get(editing.foodId) ? editing : null}
         onClose={() => setEditing(null)}
       />
     </div>

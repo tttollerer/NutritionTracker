@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Camera, Pencil, Plus } from 'lucide-react'
 import type { FoodItem, LogEntry, Meal, Unit } from '@/db/types'
-import { computeCost, getSettings, logFood, setFoodPrice, updateSettings } from '@/db/repo'
+import { computeCost, getSettings, logFood, setFoodPrice, updateLog, updateSettings } from '@/db/repo'
 import { addFoodServing, getFoodPhotos } from '@/lib/foodEdit'
 import { analyzeImage } from '@/lib/ai'
 import { toApiError } from '@/lib/apiError'
@@ -24,8 +24,16 @@ interface Props {
   /** Vorauswahl der Mahlzeit (aus der Erfassen-Seite). */
   initialMeal: Meal
   onClose: () => void
-  /** Nach erfolgreichem Log (Undo-Toast übernimmt der Aufrufer). */
-  onLogged: (entry: LogEntry, food: FoodItem) => void
+  /** Nach erfolgreichem Log (Undo-Toast übernimmt der Aufrufer) — nur Log-Modus. */
+  onLogged?: (entry: LogEntry, food: FoodItem) => void
+  /**
+   * Edit-Modus: bestehenden Log-Eintrag bearbeiten statt neu loggen.
+   * Vorbefüllt Menge/Einheit/Mahlzeit (inkl. serving-Snapshot → passender
+   * Einheiten-Chip), speichert via updateLog (computed/cost werden dort neu
+   * gerechnet) und zieht KEINEN Vorrats-Bestand ab (das tun nur die
+   * onLogged-Handler der Aufrufer im Log-Modus).
+   */
+  editEntry?: LogEntry | null
 }
 
 /**
@@ -34,9 +42,10 @@ interface Props {
  * lassen sich direkt hier anlegen („+ Einheit", mit Presets wie Esslöffel),
  * die Menge per Foto schätzen (KI-Modus 'portion') und der Packungspreis
  * (Haushaltskasse) nachpflegen — strikt optional.
- * Gleiches Sheet-/Motion-Muster wie EditLogSheet.
+ * Mit `editEntry` arbeitet dasselbe Sheet als Log-Editor („Eintrag
+ * bearbeiten") — EIN Mengen-Sheet für Loggen und Korrigieren.
  */
-export function PortionSheet({ food, initialMeal, onClose, onLogged }: Props) {
+export function PortionSheet({ food, initialMeal, onClose, onLogged, editEntry }: Props) {
   const { t } = useTranslation()
 
   return (
@@ -57,10 +66,18 @@ export function PortionSheet({ food, initialMeal, onClose, onLogged }: Props) {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[88vh] max-w-md overflow-y-auto rounded-t-3xl bg-card p-5 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] shadow-lg"
             role="dialog"
-            aria-label={t('add.pantryAmount', { name: food.name })}
+            aria-label={editEntry ? t('today.edit.title') : t('add.pantryAmount', { name: food.name })}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted" />
-            <PortionForm key={food.id} food={food} initialMeal={initialMeal} onClose={onClose} onLogged={onLogged} />
+            {/* key: pro Eintrag (Edit) bzw. Produkt (Log) frisch initialisieren. */}
+            <PortionForm
+              key={editEntry?.id ?? food.id}
+              food={food}
+              initialMeal={initialMeal}
+              onClose={onClose}
+              onLogged={onLogged}
+              editEntry={editEntry}
+            />
           </motion.div>
         </>
       )}
@@ -87,16 +104,41 @@ const UNIT_PRESETS = [
 /** Menge im deutschen Format („0,5") für Chip-Beschriftungen. */
 const fmtAmount = (n: number) => String(n).replace('.', ',')
 
-function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Props & { food: FoodItem }) {
+/**
+ * Benannte Portionseinheiten fürs Chip-Angebot („Stück", „Kappe", „EL") —
+ * ein gleichnamiges Label der üblichen Portion nicht doppelt anbieten.
+ */
+function servingsOf(food: FoodItem): { label: string; amount: number }[] {
+  const dpLabel = food.defaultPortion?.label?.toLowerCase()
+  return (food.servings ?? []).filter((s) => !dpLabel || s.label.toLowerCase() !== dpLabel)
+}
+
+function PortionForm({ food: initialFood, initialMeal, onClose, onLogged, editEntry }: Props & { food: FoodItem }) {
   const { t } = useTranslation()
   // Lokale Produkt-Kopie: der Editor (FoodDetailSheet) kann Name/Portion/Preis
   // ändern — onSaved zieht diese Kopie nach, damit das Sheet nichts Veraltetes
   // zurückschreibt (z. B. den alten Packungspreis beim Loggen).
   const [food, setFood] = useState(initialFood)
   const dp = food.defaultPortion
-  const [amountText, setAmountText] = useState(String(dp?.amount ?? 100))
-  const [sel, setSel] = useState<UnitSel>({ kind: 'unit', unit: dp?.unit ?? food.per })
-  const [meal, setMeal] = useState<Meal>(initialMeal)
+  // Edit-Modus: mit Menge/Einheit des Eintrags starten. Wurde in einer
+  // benannten Einheit erfasst („2 Kappe"), startet der Editor genau dort —
+  // der passende Chip ist aktiv, die Menge ist der count des Snapshots.
+  const initialServingIdx = editEntry?.serving
+    ? servingsOf(food).findIndex((s) => s.label.toLowerCase() === editEntry.serving!.label.toLowerCase())
+    : -1
+  const [amountText, setAmountText] = useState(
+    editEntry
+      ? String(initialServingIdx >= 0 ? editEntry.serving!.count : editEntry.amount)
+      : String(dp?.amount ?? 100),
+  )
+  const [sel, setSel] = useState<UnitSel>(
+    editEntry
+      ? initialServingIdx >= 0
+        ? { kind: 'serving', idx: initialServingIdx }
+        : { kind: 'unit', unit: editEntry.unit }
+      : { kind: 'unit', unit: dp?.unit ?? food.per },
+  )
+  const [meal, setMeal] = useState<Meal>(editEntry?.meal ?? initialMeal)
   // Haushaltskasse (optional): Packungspreis in EUR + Packungsgröße in g/ml.
   const [priceText, setPriceText] = useState(food.price ? String(food.price.amount).replace('.', ',') : '')
   const [packText, setPackText] = useState(food.price ? String(food.price.per) : '')
@@ -124,13 +166,13 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
   const amount = Number.parseFloat(amountText.replace(',', '.'))
   const valid = Number.isFinite(amount) && amount > 0
 
-  // Benannte Portionseinheiten („Stück", „Kappe", „EL") — ein gleichnamiges
-  // Label der üblichen Portion nicht doppelt anbieten.
-  const servings = (food.servings ?? []).filter(
-    (s) => !dp?.label || s.label.toLowerCase() !== dp.label.toLowerCase(),
-  )
-  // Log-Einheiten: konkrete Basis (g/ml) + 'portion', wenn eine übliche Portion bekannt ist.
-  const units: Unit[] = dp ? [food.per, 'portion'] : [food.per]
+  // Benannte Portionseinheiten („Stück", „Kappe", „EL") — ohne dp-Duplikat.
+  const servings = servingsOf(food)
+  // Log-Einheiten: konkrete Basis (g/ml) + 'portion', wenn eine übliche Portion
+  // bekannt ist ODER der bearbeitete Eintrag bereits in Portionen erfasst wurde
+  // (sonst hätte sein aktiver Einheiten-Chip keine Heimat).
+  const units: Unit[] =
+    dp || editEntry?.unit === 'portion' ? [food.per, 'portion'] : [food.per]
   const unitLabelOf = (u: Unit) => (u === 'portion' ? dp?.label ?? t('today.edit.unitPortion') : u)
 
   // Gerechnet wird IMMER in der Basis-Menge; die benannte Einheit ist nur
@@ -219,9 +261,7 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
       const updated = await addFoodServing(food.id, { label, amount: grams })
       setFood(updated)
       // Neue Einheit direkt anwählen — Index in der GEFILTERTEN Chip-Liste suchen.
-      const list = (updated.servings ?? []).filter(
-        (s) => !dp?.label || s.label.toLowerCase() !== dp.label.toLowerCase(),
-      )
+      const list = servingsOf(updated)
       const idx = list.findIndex((s) => s.label.toLowerCase() === label.toLowerCase())
       if (idx >= 0) {
         setSel({ kind: 'serving', idx })
@@ -252,15 +292,27 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
       const priceChanged = (nextPrice || bothEmpty) &&
         JSON.stringify(effectivePrice ?? null) !== JSON.stringify(food.price ?? null)
       if (priceChanged) await setFoodPrice(food.id, effectivePrice)
-      const entry = await logFood({
-        food: { ...food, price: effectivePrice },
-        date: todayKey(),
-        meal,
-        amount: baseAmount,
-        unit: baseUnit,
-        serving: servingSnap,
-      })
-      onLogged(entry, food)
+      if (editEntry) {
+        // Edit-Modus: bestehenden Eintrag patchen — updateLog rechnet computed
+        // und Kosten-Snapshot aus dem (ggf. frisch bepreisten) Food neu.
+        // Bewusst OHNE onLogged: kein Undo-Toast, kein Vorrats-Abzug.
+        await updateLog(editEntry.id, {
+          amount: baseAmount,
+          unit: baseUnit,
+          meal,
+          serving: servingSnap ?? null,
+        })
+      } else {
+        const entry = await logFood({
+          food: { ...food, price: effectivePrice },
+          date: todayKey(),
+          meal,
+          amount: baseAmount,
+          unit: baseUnit,
+          serving: servingSnap,
+        })
+        onLogged?.(entry, food)
+      }
       onClose()
     } finally {
       setSaving(false)
@@ -277,7 +329,13 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold">{food.name}</h2>
+        <div className="min-w-0">
+          {/* Edit-Modus: Overline macht klar, dass ein Eintrag korrigiert wird. */}
+          {editEntry && (
+            <p className="text-xs font-medium text-muted-foreground">{t('today.edit.title')}</p>
+          )}
+          <h2 className="truncate text-lg font-semibold">{food.name}</h2>
+        </div>
         {/* Einstieg Produkt-Editor (Paket B): Nährwerte, Portion, Preis, Fotos */}
         <button
           type="button"
@@ -510,7 +568,7 @@ function PortionForm({ food: initialFood, initialMeal, onClose, onLogged }: Prop
           {t('common.cancel')}
         </Button>
         <Button className="flex-1" onClick={save} disabled={!valid || saving}>
-          {t('add.pantryLog')}
+          {t(editEntry ? 'today.edit.save' : 'add.pantryLog')}
         </Button>
       </div>
 

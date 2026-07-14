@@ -1,4 +1,4 @@
-# NutriScan API-Vertrag v1.6
+# NutriScan API-Vertrag v1.7
 
 Vertrag zwischen Client (`src/`) und Netlify Functions (`netlify/functions/analyze.mts`,
 `netlify/functions/coach.mts`). Bezug: [PLAN.md](../PLAN.md) §6/§9.3,
@@ -17,7 +17,8 @@ Dokument + apiContract.ts der Soll-Zustand**, der Code der Ist-Zustand.
 | v1.3 | Vierter analyze-Modus `receipt` (Kassenbon-Scan) mit eigenem Antwortschema `ReceiptResultSchema`, nur additiv zu v1.2 |
 | v1.4 | Optionales `barcode`-Feld in `AnalyzeResultSchema` — KI liest EAN/UPC-Ziffern vom Foto ab, Client macht den OpenFoodFacts-Lookup (Ersatz für den fehlenden `BarcodeDetector` in iOS Safari), nur additiv zu v1.3 |
 | v1.5 | Fünfter analyze-Modus `estimate` — Nährwert-Schätzung NUR aus dem Namen im `hint`, der einzige Modus ohne Bild, nur additiv zu v1.4 |
-| v1.6 | Dieser Vertrag — sechster analyze-Modus `auto` (Unified Scan): das Modell klassifiziert das Bild selbst und antwortet mit `AutoAnalyzeResultSchema` (bestehende Result-Formen + Pflichtfeld `kind`), nur additiv zu v1.5 |
+| v1.6 | Sechster analyze-Modus `auto` (Unified Scan): das Modell klassifiziert das Bild selbst und antwortet mit `AutoAnalyzeResultSchema` (bestehende Result-Formen + Pflichtfeld `kind`), nur additiv zu v1.5 |
+| v1.7 | Dieser Vertrag — optionales `servings`-Feld je Item in `AnalyzeItemSchema`: auf der Verpackung EXPLIZIT lesbare Messlöffel-/Scoop-/Portionsangaben als benannte Einheiten (max. 3, `amount` = g/ml PRO EINZELNER Einheit), befüllt nur in den label-/auto-Pfaden, nur additiv zu v1.6 |
 
 ---
 
@@ -87,6 +88,9 @@ Bildanalyse in vier Modi (PLAN.md §6). Serverseitige zod-Validierung der Modell
       "amount": 60,
       "unit": "g" | "ml" | "portion",
       "confidence": 0.8,            // optional, 0..1
+      "servings": [                  // optional (v1.7), max. 3 — nur label/auto
+        { "label": "Messlöffel", "amount": 50 }
+      ],
       "per100": {
         "kcal": 370, "protein": 13, "carbs": 59, "fat": 7,
         "micros": { "fiber": 10, "iron": 4.3 }   // optional; Schlüssel = src/lib/nutrients.ts
@@ -96,6 +100,16 @@ Bildanalyse in vier Modi (PLAN.md §6). Serverseitige zod-Validierung der Modell
   "notes": "optional"
 }
 ```
+
+**`servings` (v1.7, nur label/auto):** Auf der Verpackung EXPLIZIT lesbare
+Messlöffel-/Scoop-/Portionsangaben als benannte Einheiten — `label` ist der deutsche
+Einheitenname (1–30 Zeichen), `amount` sind Gramm bzw. Milliliter **pro einzelner
+Einheit** („2 gestrichene Messlöffel (100 g)" → `{ "label": "Messlöffel", "amount": 50 }`).
+Der Prompt verbietet erfundene Angaben; der Server sanitisiert vor der Validierung
+(`clampServings`: trim, case-insensitives Dedupe, `amount > 0`, max. 3 — leeres Feld
+fliegt raus). Der Client hängt die Einheiten beim Übernehmen bzw. „Nur in den Vorrat"
+via `applyScanServings` an `FoodItem.servings` — **bestehende gleichnamige Einheiten
+gewinnen** (manuell gepflegte Einheiten werden nie vom Scan überschrieben).
 
 ### Response 200 bei `mode: "receipt"` (`ReceiptResultSchema`, v1.3)
 
@@ -136,7 +150,7 @@ Payload-Format:
 ```
 
 Serverseitiges Sanitizing (`clampAuto`): `kind: "receipt"` → `clampReceipt`, alle anderen
-kinds → `clampBarcode` + `clampQuestions`. Fehlendes/fremdes `kind` scheitert an der
+kinds → `clampBarcode` + `clampQuestions` + `clampServings` (v1.7). Fehlendes/fremdes `kind` scheitert an der
 Validierung (Retry, dann `UPSTREAM_ERROR`). Die bestehenden Modi bleiben unverändert —
 Clients, die `auto` nicht senden, merken von v1.6 nichts.
 

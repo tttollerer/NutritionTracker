@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import '@/i18n'
 import { db } from '@/db'
-import { createFood } from '@/db/repo'
+import { createFood, logFood, setPantry } from '@/db/repo'
 import { updateFoodValues } from '@/lib/foodEdit'
 import type { FoodItem, LogEntry } from '@/db/types'
 import { PortionSheet } from './PortionSheet'
@@ -73,5 +73,77 @@ describe('PortionSheet — benannte Einheiten', () => {
       const stored = await db.foods.get(food.id)
       expect(stored?.servings).toEqual([{ label: 'Esslöffel', amount: 15 }])
     })
+  })
+})
+
+/**
+ * UX-Fix „ein Sheet für alles": Statt des abgespeckten EditLogSheets öffnet
+ * das Bearbeiten eines Log-Eintrags dasselbe reiche Mengen-Sheet im
+ * Edit-Modus (editEntry) — vorbefüllt, Speichern via updateLog, OHNE
+ * erneuten Vorrats-Abzug.
+ */
+describe('PortionSheet — Edit-Modus (editEntry)', () => {
+  beforeEach(async () => {
+    await Promise.all(db.tables.map((t) => t.clear()))
+  })
+
+  it('vorbefüllt mit serving-Snapshot; Speichern patcht via updateLog und rechnet computed neu', async () => {
+    const food = await makeFood([{ label: 'Kappe', amount: 30 }])
+    const entry = await logFood({
+      food,
+      date: '2026-07-14',
+      meal: 'breakfast',
+      amount: 60,
+      unit: 'g',
+      serving: { label: 'Kappe', count: 2 },
+    })
+    const onClose = vi.fn()
+    render(<PortionSheet food={food} editEntry={entry} initialMeal="lunch" onClose={onClose} />)
+
+    // Edit-Framing: Titel-Overline + Primärbutton „Speichern" statt „Eintragen".
+    expect(await screen.findByText('Eintrag bearbeiten')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Eintragen' })).toBeNull()
+
+    // Vorbefüllung: serving-Snapshot → Kappe-Chip aktiv, Menge = count (2),
+    // Mahlzeit = die des Eintrags (nicht initialMeal).
+    expect(screen.getByRole('button', { name: 'Kappe (30 g)' })).toHaveAttribute('aria-pressed', 'true')
+    expect((screen.getByLabelText('Menge') as HTMLInputElement).value).toBe('2')
+
+    // Korrektur: 3 Kappen, Mahlzeit → Abend.
+    fireEvent.change(amountInput(), { target: { value: '3' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Abend' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    const stored = (await db.logs.get(entry.id))!
+    expect(stored.amount).toBe(90) // 3 × Kappe (30 g)
+    expect(stored.unit).toBe('g')
+    expect(stored.serving).toEqual({ label: 'Kappe', count: 3 })
+    expect(stored.meal).toBe('dinner')
+    // computed neu gerechnet: 380 kcal / 100 g × 90 g.
+    expect(stored.computed.kcal).toBe(342)
+    // Es wurde kein zweiter Eintrag angelegt.
+    expect(await db.logs.count()).toBe(1)
+  })
+
+  it('zieht beim Speichern KEINEN Vorrats-Bestand ab und ruft onLogged nicht', async () => {
+    const food = await makeFood()
+    await setPantry(food.id, true) // 1 Packung (pantryQty undefined == 1)
+    const entry = await logFood({ food, date: '2026-07-14', meal: 'lunch', amount: 100, unit: 'g' })
+    const onLogged = vi.fn()
+    render(
+      <PortionSheet food={food} editEntry={entry} initialMeal="lunch" onClose={() => {}} onLogged={onLogged} />,
+    )
+
+    fireEvent.change(amountInput(), { target: { value: '80' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Speichern' }))
+
+    await waitFor(async () => expect((await db.logs.get(entry.id))!.amount).toBe(80))
+    // Bestand unangetastet (ein Abzug hätte pantryQty auf 0 gesetzt) …
+    const storedFood = (await db.foods.get(food.id))!
+    expect(storedFood.pantry).toBe(true)
+    expect(storedFood.pantryQty).toBeUndefined()
+    // … und der Log-Modus-Callback (Undo-Toast + Vorrats-Abzug) bleibt stumm.
+    expect(onLogged).not.toHaveBeenCalled()
   })
 })

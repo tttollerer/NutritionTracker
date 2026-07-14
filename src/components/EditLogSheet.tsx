@@ -16,7 +16,11 @@ interface Props {
 }
 
 /**
- * Bottom-Sheet zum Bearbeiten eines Log-Eintrags (Menge, Einheit, Mahlzeit).
+ * Schlankes Bottom-Sheet zum Bearbeiten eines Log-Eintrags (Menge, Einheit,
+ * Mahlzeit). Seit dem Edit-Modus des PortionSheets nur noch FALLBACK für
+ * Einträge, deren Food gelöscht wurde/fehlt — es kommt als einziges Sheet
+ * komplett ohne FoodItem aus. Der Regelweg auf „Heute"/„Woche" ist das
+ * PortionSheet (editEntry), damit es EIN Mengen-Sheet für alles gibt.
  * Gleiches Sheet-/Motion-Muster wie CaptureSheet; Formular-State wird über
  * key={entry.id} pro Eintrag frisch initialisiert.
  */

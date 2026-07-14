@@ -26,9 +26,17 @@ import { z } from 'zod'
  *   Kassenbon) und antwortet mit AutoAnalyzeResultSchema — dem jeweils
  *   BESTEHENDEN Modus-Ergebnis plus Pflichtfeld `kind`. Kein neues
  *   Payload-Format; alle bisherigen Modi bleiben unverändert.
+ *
+ * v1.7 (Messlöffel vom Etikett, nur additiv):
+ * - AnalyzeItemSchema bekommt ein optionales `servings`-Feld: auf der
+ *   Verpackung EXPLIZIT lesbare Portionseinheiten (z. B. „2 gestrichene
+ *   Messlöffel (100 g)" → { label: 'Messlöffel', amount: 50 }). amount ist
+ *   IMMER Gramm bzw. Milliliter PRO EINZELNER Einheit. Sinnvoll nur in den
+ *   label-/auto-Pfaden; global optional ist abwärtskompatibel. Der Server
+ *   sanitisiert vor der Validierung (clampServings in analyzeShared.ts).
  */
 
-export const API_CONTRACT_VERSION = '1.6'
+export const API_CONTRACT_VERSION = '1.7'
 
 // ---------------------------------------------------------------------------
 // Fehler-Envelope (gilt für ALLE Nicht-200-Antworten beider Endpunkte)
@@ -102,11 +110,30 @@ export const AnalyzeRequestSchema = z
   })
 export type AnalyzeRequest = z.infer<typeof AnalyzeRequestSchema>
 
+/**
+ * v1.7 (additiv): EINE auf der Verpackung lesbare Portionseinheit.
+ * `label` = deutscher Einheitenname („Messlöffel", „Scoop", „Portion"),
+ * `amount` = Gramm bzw. Milliliter PRO EINZELNER Einheit (bei
+ * „2 Messlöffel = 100 g" also 50). Der Client hängt sie beim Übernehmen als
+ * FoodItem.servings ans Produkt (bestehende gleichnamige Einheiten gewinnen).
+ */
+export const AnalyzeServingSchema = z.object({
+  label: z.string().min(1).max(30),
+  amount: z.number().positive(),
+})
+export type AnalyzeServing = z.infer<typeof AnalyzeServingSchema>
+
 export const AnalyzeItemSchema = z.object({
   name: z.string().min(1),
   amount: z.number().nonnegative(),
   unit: z.enum(['g', 'ml', 'portion']),
   confidence: z.number().min(0).max(1).optional(),
+  /**
+   * v1.7 (additiv): Auf der Verpackung EXPLIZIT angegebene Portionseinheiten
+   * (max. 3) — nur was lesbar dasteht, nie erfunden. Praktisch nur in den
+   * label-/auto-Pfaden befüllt; fehlt das Feld, stand nichts auf der Packung.
+   */
+  servings: z.array(AnalyzeServingSchema).max(3).optional(),
   per100: z.object({
     kcal: z.number().nonnegative(),
     protein: z.number().nonnegative(),

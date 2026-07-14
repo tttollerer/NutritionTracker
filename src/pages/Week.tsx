@@ -21,12 +21,13 @@ import {
 import { weekOffsetOf } from '@/lib/calendar'
 import { incrementPantry } from '@/lib/pantryStock'
 import { removeShoppingItem } from '@/lib/shopping'
-import { describePortion } from '@/lib/portion'
+import { describePortion, formatLogAmount } from '@/lib/portion'
 import { cn, todayKey } from '@/lib/utils'
 import { useTodayKey } from '@/hooks/useTodayKey'
 import { useOverlays } from '@/lib/overlays-context'
 import { CalendarSheet } from '@/components/CalendarSheet'
 import { EditLogSheet } from '@/components/EditLogSheet'
+import { PortionSheet } from '@/components/PortionSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { WeekBarsCard } from '@/components/WeekBarsCard'
 import { ProfileAvatar } from '@/components/ProfileAvatar'
@@ -566,10 +567,18 @@ export function Week() {
         onClose={() => setCalendarOpen(false)}
       />
 
-      {/* Log-Editor für echte Einträge — gleiches Sheet wie auf „Heute". */}
+      {/* Log-Editor — gleiches reiches Mengen-Sheet wie auf „Heute": das
+          PortionSheet im Edit-Modus (benannte Einheiten, Menge-per-Foto,
+          Produktfotos, Produkt-Editor). */}
+      <PortionSheet
+        food={(editing && foods.get(editing.foodId)) || null}
+        editEntry={editing}
+        initialMeal={editing?.meal ?? 'lunch'}
+        onClose={() => setEditing(null)}
+      />
+      {/* Fallback: Food gelöscht/fehlt → schlankes EditLogSheet ohne FoodItem. */}
       <EditLogSheet
-        entry={editing}
-        food={editing ? foods.get(editing.foodId) : undefined}
+        entry={editing && !foods.get(editing.foodId) ? editing : null}
         onClose={() => setEditing(null)}
       />
     </div>
@@ -822,9 +831,8 @@ function WeekLogRow({
   onDelete: () => void
 }) {
   const { t } = useTranslation()
-  const amountLabel = log.serving
-    ? `${String(log.serving.count).replace('.', ',')} ${log.serving.label}`
-    : `${log.amount} ${log.unit === 'portion' ? t('today.edit.unitPortion') : log.unit}`
+  // In benannter Einheit erfasst → „2 × Kappe (60 g)" (Helfer wie auf „Heute").
+  const amountLabel = formatLogAmount(log, t('today.edit.unitPortion'))
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-2">
       <button

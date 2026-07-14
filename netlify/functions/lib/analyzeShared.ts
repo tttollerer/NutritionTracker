@@ -135,6 +135,48 @@ export function clampBarcode(raw: unknown): unknown {
 }
 
 // ---------------------------------------------------------------------------
+// servings-Feld (Vertrag v1.7) — Sanitizing VOR der zod-Validierung
+// ---------------------------------------------------------------------------
+
+/** Max. Portionseinheiten je Item laut Vertrag (AnalyzeItemSchema.servings). */
+export const MAX_ITEM_SERVINGS = 3
+
+/**
+ * Kappt das `servings`-Feld ALLER Items einer rohen Modellantwort auf das
+ * Vertragsformat, BEVOR AnalyzeResultSchema.parse läuft (Muster clampQuestions):
+ * nur Einträge mit nicht-leerem String-Label (getrimmt, max. 30 Zeichen) und
+ * endlichem amount > 0; Labels case-insensitiv dedupliziert; maximal
+ * MAX_ITEM_SERVINGS Einträge. Bleibt nichts übrig, fliegt das Feld raus —
+ * ein übermotiviertes Modell (5 Einheiten, amount 0) kippt so nicht die
+ * ganze, sonst gültige Antwort in den UPSTREAM_ERROR.
+ */
+export function clampServings(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
+  const items = (raw as Record<string, unknown>).items
+  if (!Array.isArray(items)) return raw
+  const cleanedItems = items.map((it) => {
+    if (!it || typeof it !== 'object' || Array.isArray(it) || !('servings' in it)) return it
+    const { servings, ...rest } = it as Record<string, unknown>
+    const seen = new Set<string>()
+    const cleaned = Array.isArray(servings)
+      ? servings.flatMap((s) => {
+          if (!s || typeof s !== 'object' || Array.isArray(s)) return []
+          const o = s as Record<string, unknown>
+          const label = typeof o.label === 'string' ? o.label.trim().slice(0, 30) : ''
+          const amount = o.amount
+          if (!label || typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) return []
+          const key = label.toLowerCase()
+          if (seen.has(key)) return []
+          seen.add(key)
+          return [{ label, amount }]
+        }).slice(0, MAX_ITEM_SERVINGS)
+      : []
+    return cleaned.length ? { ...rest, servings: cleaned } : rest
+  })
+  return { ...(raw as Record<string, unknown>), items: cleanedItems }
+}
+
+// ---------------------------------------------------------------------------
 // Kassenbon-Antwort (Vertrag v1.3) — Sanitizing VOR der zod-Validierung
 // ---------------------------------------------------------------------------
 
@@ -191,8 +233,9 @@ export function clampReceipt(raw: unknown): unknown {
  * Normalisiert eine rohe auto-Modellantwort anhand ihres `kind`-Felds mit den
  * BESTEHENDEN Clamps: kind 'receipt' → clampReceipt (kind bleibt erhalten,
  * clampReceipt gibt nur { items } zurück), alle anderen kinds → clampBarcode +
- * clampQuestions. Fehlendes/fremdes kind bleibt unverändert — dann scheitert
- * die AutoAnalyzeResultSchema-Validierung wie vorgesehen (Retry/Envelope).
+ * clampQuestions + clampServings (v1.7). Fehlendes/fremdes kind bleibt
+ * unverändert — dann scheitert die AutoAnalyzeResultSchema-Validierung wie
+ * vorgesehen (Retry/Envelope).
  */
 export function clampAuto(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw
@@ -203,5 +246,5 @@ export function clampAuto(raw: unknown): unknown {
       ? { ...(cleaned as Record<string, unknown>), kind: 'receipt' }
       : cleaned
   }
-  return clampQuestions(clampBarcode(raw))
+  return clampServings(clampQuestions(clampBarcode(raw)))
 }

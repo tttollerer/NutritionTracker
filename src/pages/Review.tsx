@@ -10,7 +10,7 @@ import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
 import { useOverlays } from '@/lib/overlays-context'
 import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
-import { attachScanPhoto } from '@/lib/foodEdit'
+import { applyScanServings, attachScanPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
 import { clearScanRun, decrementScanRun, incrementScanRun } from '@/lib/scanRun'
 import { downscaleImage } from '@/lib/image'
@@ -217,6 +217,10 @@ export function Review() {
           barcode: payload!.barcode,
         })
         await logFood({ food, date, meal: payload!.meal, amount: it.amount || (it.unit === 'portion' ? 1 : 100), unit: it.unit, photoBlobId })
+        // Vom Etikett gelesene Einheiten (Vertrag v1.7, z. B. „Messlöffel =
+        // 50 g") ans Produkt hängen — bestehende gleichnamige Einheiten
+        // (manuell gepflegt) gewinnen und bleiben unangetastet.
+        await applyScanServings(food.id, it.servings)
         // Genau EIN erkanntes Produkt → das Scan-Foto gehört (auch) in dessen
         // Galerie (mehrere Bilder je Produkt). Bei Mehr-Item-Mahlzeiten wäre
         // die Zuordnung mehrdeutig — dann bleibt es nur das Mahlzeitenfoto.
@@ -249,6 +253,11 @@ export function Review() {
         allergens: payload!.allergens,
         traces: payload!.traces,
       })
+      // Etikett-Einheiten auch beim reinen Einräumen ans Produkt (foods ist
+      // 1:1 in items-Reihenfolge); vorhandene gleichnamige Einheiten gewinnen.
+      for (const [idx, food] of foods.entries()) {
+        await applyScanServings(food.id, items[idx]?.servings)
+      }
       // Einkauf-Scan mit genau einem Produkt: Foto in die Produkt-Galerie —
       // dedupliziert & gedeckelt (attachScanPhoto), damit wiederholte Scans
       // desselben Produkts die Galerie nicht mit Duplikaten fluten.
@@ -329,6 +338,18 @@ export function Review() {
 
               {knownNames.has(it.name.trim().toLowerCase()) && (
                 <p className="text-xs text-primary">{t('review.knownFood')}</p>
+              )}
+
+              {/* Vom Etikett gelesene Einheiten (v1.7) — dezenter Hinweis, dass
+                  sie beim Übernehmen als benannte Einheit am Produkt landen. */}
+              {(it.servings?.length ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {t('review.servingFromLabel', {
+                    list: it
+                      .servings!.map((s) => `${s.label} (${s.amount} ${it.unit === 'ml' ? 'ml' : 'g'})`)
+                      .join(', '),
+                  })}
+                </p>
               )}
 
               {it.confidence != null && (
