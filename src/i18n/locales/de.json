@@ -6,7 +6,7 @@
     "today": "Heute",
     "week": "Woche",
     "add": "Erfassen",
-    "pantry": "Einkauf",
+    "pantry": "Vorrat",
     "coach": "Coach",
     "awards": "Erfolge",
     "profile": "Profil"
@@ -184,7 +184,7 @@
     "backfill": "Nachtragen",
     "backfillMeal": "Mahlzeit nachtragen",
     "backfillPick": "{{name}} nachtragen",
-    "backfillPickerEmpty": "Dein Vorrat ist leer — lege im Einkauf Lebensmittel an, um nachzutragen.",
+    "backfillPickerEmpty": "Dein Vorrat ist leer — lege im Vorrat Lebensmittel an, um nachzutragen.",
     "backfilled": "{{name}} nachgetragen"
   },
   "calendar": {
@@ -198,7 +198,7 @@
     "dayPlannedSuffix_other": ", {{count}} geplant"
   },
   "pantryPage": {
-    "title": "Einkauf",
+    "title": "Vorrat",
     "subtitle_one": "1 Artikel im Vorrat",
     "subtitle_other": "{{count}} Artikel im Vorrat",
     "scanProduct": "Produkt scannen",
@@ -719,7 +719,7 @@
     "open_other": "{{count}} offene Artikel"
   },
   "budget": {
-    "title": "Budget",
+    "title": "Haushaltskasse",
     "weeklyBudget": "Wochenbudget",
     "weeklyBudgetPh": "z. B. 60",
     "perWeek": "pro Woche",
@@ -749,7 +749,7 @@
     "removeAria": "Planung von {{name}} entfernen",
     "removed": "Planung entfernt",
     "plannedFor": "{{name}} geplant",
-    "pickerEmpty": "Dein Vorrat ist leer — lege im Einkauf Lebensmittel an, um zu planen.",
+    "pickerEmpty": "Dein Vorrat ist leer — lege im Vorrat Lebensmittel an, um zu planen.",
     "pickFood": "{{name}} einplanen",
     "missing": "Fehlt für deinen Plan",
     "missingCount_one": "1 Zutat fehlt im Vorrat",
