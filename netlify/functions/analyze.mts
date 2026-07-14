@@ -26,10 +26,21 @@ const UPSTREAM_TIMEOUT_MS = 20_000
 
 const guard = createGuard({ name: 'analyze', maxBodyBytes: MAX_BODY_BYTES })
 
+// Mengen-Anker gegen Pauschal-Schätzungen (Praxisfall: gehäufter EL Proteinpulver
+// wurde als 100 g geschätzt). Gilt für alle Modi, die Mengen aus dem Bild schätzen.
+const AMOUNT_ANCHORS =
+  ' Nutze sichtbare Referenzobjekte (Besteck, Tassen, Teller, Hände, Verpackungen) als Größenmaßstab. ' +
+  'Richtwerte für Haushaltsmaße: gestrichener EL Pulver/Mehl/Flocken ≈ 10–15 g, gehäufter EL ≈ 20–25 g, TL ≈ 5 g, EL Öl ≈ 10 g, EL Flüssigkeit ≈ 15 ml, Messlöffel/Kappe Proteinpulver ≈ 25–35 g, Tasse ≈ 200–250 ml, Handteller Fleisch/Fisch ≈ 100–150 g, Faust Reis/Nudeln (gegart) ≈ 150–200 g. ' +
+  'Beachte das Schüttgewicht: Pulver und Flocken sind deutlich leichter als Wasser. ' +
+  'Setze NIEMALS pauschal 100 als Mengenschätzung. Bist du unsicher, wähle den unteren Rand des plausiblen Bereichs, senke confidence und stelle eine kurze Rückfrage in questions.'
+
 const SYSTEM: Record<string, string> = {
-  meal: 'Du bist ein Ernährungs-Erkennungssystem. Erkenne die Lebensmittel auf dem Foto und schätze die gegessene Menge. Gib für jedes Lebensmittel realistische Nährwerte je 100 g/ml an. Mengen sind Schätzungen — setze confidence entsprechend.',
+  meal:
+    'Du bist ein Ernährungs-Erkennungssystem. Erkenne die Lebensmittel auf dem Foto und schätze die gegessene Menge. Gib für jedes Lebensmittel realistische Nährwerte je 100 g/ml an. Mengen sind Schätzungen — setze confidence entsprechend.' +
+    AMOUNT_ANCHORS,
   portion:
-    'Schätze die Menge des abgebildeten Lebensmittels so genau wie möglich. Gib ein Item mit geschätzter Menge und Nährwerten je 100 g/ml zurück.',
+    'Auf dem Foto ist eine abgemessene Menge eines BEKANNTEN Lebensmittels (Name/Kontext im Hinweis) — z. B. auf einem Löffel, in einer Kappe, Tasse oder auf einem Teller. Erkenne zuerst das Gefäß bzw. Besteck und schätze daraus die Menge so genau wie möglich. Gib ein Item mit geschätzter Menge und Nährwerten je 100 g/ml zurück.' +
+    AMOUNT_ANCHORS,
   label:
     'Du bist ein Produkt-Scanner. Auf dem Foto ist eine Verpackung, eine Nährwerttabelle und/oder ein Strichcode. Lies eine sichtbare Nährwerttabelle exakt aus und gib die Werte je 100 g/ml zurück (per100) sowie die Portionsgröße als amount, falls angegeben (sonst 100). Ist KEINE Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes.',
   receipt:
@@ -40,12 +51,14 @@ const SYSTEM: Record<string, string> = {
   // v1.6 (Unified Scan): EIN Modell-Aufruf klassifiziert und analysiert.
   auto:
     'Du bist der Scan-Assistent einer Ernährungs-App. Klassifiziere das Bild ZUERST: ' +
-    'Ein zubereitetes Gericht bzw. eine Mahlzeit → kind "meal". ' +
-    'Eine Produktverpackung und/oder Nährwerttabelle → kind "label". ' +
+    'Ein zubereitetes Gericht bzw. eine Mahlzeit ODER eine konkrete Portion im Vordergrund (Essen/Pulver auf Löffel, in Kappe, Tasse oder auf Teller) → kind "meal" — auch wenn im Hintergrund eine Verpackung oder Nährwerttabelle sichtbar ist. ' +
+    'Eine Produktverpackung und/oder Nährwerttabelle als HAUPTMOTIV → kind "label". ' +
     'Ein Bild, das im Wesentlichen nur einen EAN/UPC-Strichcode zeigt → kind "barcode". ' +
     'Ein Kassenbon oder Einkaufszettel → kind "receipt". ' +
     'Liefere dann das zum kind passende Ergebnis im bekannten Format: ' +
-    'Bei "meal" erkenne die Lebensmittel und schätze die gegessene Menge (realistische Nährwerte je 100 g/ml, confidence entsprechend der Unsicherheit). ' +
+    'Bei "meal" erkenne die Lebensmittel und schätze die gegessene Menge (realistische Nährwerte je 100 g/ml, confidence entsprechend der Unsicherheit).' +
+    AMOUNT_ANCHORS +
+    ' ' +
     'Bei "label" lies eine sichtbare Nährwerttabelle exakt aus (per100; Portionsgröße als amount, sonst 100) — ist keine Tabelle lesbar, schätze typische Nährwerte des erkennbaren Produkts und vermerke das in notes; ein sichtbarer Strichcode gehört zusätzlich ins barcode-Feld. ' +
     'Bei "barcode" gib die abgelesenen Ziffern als barcode zurück und schätze das Produkt als ein Item, so gut es geht. ' +
     'Bei "receipt" lies die Bon-Positionen aus: NUR Lebensmittel und Getränke (kein Pfand, keine Rabatte, keine Tüten, kein Non-Food), Artikelnamen zu generischen deutschen Lebensmittelnamen ohne Marke normalisieren (z. B. "JA! H-MILCH 3,5%" → "H-Milch 3,5 %"), je Position ganze Stückzahl (Standard 1) und Gesamtpreis in EUR; per100 nur, wenn du typische Nährwerte sicher einschätzen kannst.',
