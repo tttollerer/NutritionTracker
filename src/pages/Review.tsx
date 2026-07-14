@@ -10,7 +10,7 @@ import { checkAllergens } from '@/lib/allergens'
 import { NUTRIENT_BY_KEY } from '@/lib/nutrients'
 import { useOverlays } from '@/lib/overlays-context'
 import { createFood, findFoodByName, getAllergies, logFood, savePhoto, saveReviewToPantry } from '@/db/repo'
-import { addFoodPhoto } from '@/lib/foodEdit'
+import { attachScanPhoto } from '@/lib/foodEdit'
 import { undoPantryAdd } from '@/lib/pantryStock'
 import { clearScanRun, decrementScanRun, incrementScanRun } from '@/lib/scanRun'
 import { downscaleImage } from '@/lib/image'
@@ -220,8 +220,10 @@ export function Review() {
         // Genau EIN erkanntes Produkt → das Scan-Foto gehört (auch) in dessen
         // Galerie (mehrere Bilder je Produkt). Bei Mehr-Item-Mahlzeiten wäre
         // die Zuordnung mehrdeutig — dann bleibt es nur das Mahlzeitenfoto.
+        // attachScanPhoto dedupliziert & deckelt (Scan-Loop scannt dasselbe
+        // Produkt oft erneut — die Galerie soll nicht unbegrenzt wachsen).
         if (items.length === 1) {
-          for (const dataUrl of productPhotos) await addFoodPhoto(food.id, dataUrl)
+          for (const dataUrl of productPhotos) await attachScanPhoto(food.id, dataUrl)
         }
       }
       clearReview()
@@ -247,9 +249,11 @@ export function Review() {
         allergens: payload!.allergens,
         traces: payload!.traces,
       })
-      // Einkauf-Scan mit genau einem Produkt: Foto in die Produkt-Galerie.
+      // Einkauf-Scan mit genau einem Produkt: Foto in die Produkt-Galerie —
+      // dedupliziert & gedeckelt (attachScanPhoto), damit wiederholte Scans
+      // desselben Produkts die Galerie nicht mit Duplikaten fluten.
       if (foods.length === 1) {
-        for (const dataUrl of productPhotos) await addFoodPhoto(foods[0].id, dataUrl)
+        for (const dataUrl of productPhotos) await attachScanPhoto(foods[0].id, dataUrl)
       }
       clearReview()
       showUndo(t('review.pantrySaved', { count: foods.length }), async () => {
