@@ -317,7 +317,7 @@ export function Week() {
           type="button"
           onClick={() => setWeekOffset((w) => w - 1)}
           aria-label={t('week.prevWeek')}
-          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card"
+          className="focus-ring flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card"
         >
           <ChevronLeft size={20} />
         </button>
@@ -325,7 +325,7 @@ export function Week() {
           type="button"
           onClick={() => setWeekOffset((w) => w + 1)}
           aria-label={t('week.nextWeek')}
-          className="focus-ring flex h-10 w-10 items-center justify-center rounded-md border border-border bg-card"
+          className="focus-ring flex h-12 w-12 items-center justify-center rounded-md border border-border bg-card"
         >
           <ChevronRight size={20} />
         </button>
@@ -764,7 +764,9 @@ function PlanForm({
         <Skeleton className="h-24 w-full" />
       ) : pantry.length === 0 ? (
         <div className="space-y-3 py-2 text-center">
-          <p className="text-sm text-muted-foreground">{t('plan.pickerEmpty')}</p>
+          <p className="text-sm text-muted-foreground">
+            {t(backfill ? 'week.backfillPickerEmpty' : 'plan.pickerEmpty')}
+          </p>
           <Button
             variant="secondary"
             onClick={() => {

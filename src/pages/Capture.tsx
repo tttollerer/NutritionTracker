@@ -216,7 +216,7 @@ export function Capture() {
     <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
       <p className="font-medium text-destructive">{t('capture.error')}</p>
       <p className="text-muted-foreground">{t(errorKey)}</p>
-      {errorKey === 'errors.offline' && (
+      {(errorKey === 'errors.offline' || errorKey === 'errors.budgetExceeded') && (
         <Button variant="secondary" className="w-full" onClick={() => navigate('/add')}>
           {t('errors.manualFallback')}
         </Button>

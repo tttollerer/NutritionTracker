@@ -252,7 +252,7 @@ export function Coach() {
               <Button variant="secondary" onClick={() => void retry()} disabled={busy}>
                 <RotateCcw size={16} /> {t('coach.retry')}
               </Button>
-              {errorKey === 'errors.offline' && (
+              {(errorKey === 'errors.offline' || errorKey === 'errors.budgetExceeded') && (
                 <Button variant="secondary" onClick={() => navigate('/add')}>
                   {t('errors.manualFallback')}
                 </Button>

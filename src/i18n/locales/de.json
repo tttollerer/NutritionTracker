@@ -17,7 +17,7 @@
     "kcalOver": "{{count}} kcal über Ziel",
     "kcalToGoal": "noch {{count}} kcal bis Ziel",
     "kcalReached": "Ziel erreicht 💪",
-    "empty": "Noch nichts erfasst. Tippe auf +, um deine erste Mahlzeit hinzuzufügen.",
+    "empty": "Noch nichts erfasst — logge deine erste Mahlzeit.",
     "meals": {
       "breakfast": "Frühstück",
       "lunch": "Mittag",
@@ -183,6 +183,7 @@
     "backfill": "Nachtragen",
     "backfillMeal": "Mahlzeit nachtragen",
     "backfillPick": "{{name}} nachtragen",
+    "backfillPickerEmpty": "Dein Vorrat ist leer — lege im Einkauf Lebensmittel an, um nachzutragen.",
     "backfilled": "{{name}} nachgetragen"
   },
   "calendar": {
@@ -379,7 +380,7 @@
     "proteinPerKg": "Eiweiß (g/kg)",
     "proteinPerKgHint": "Leer lassen = Standard für deinen Schwerpunkt.",
     "targetsPreview": "Neue Tagesziele",
-    "reset": "Onboarding erneut",
+    "reset": "Alle Daten löschen & neu starten",
     "health": "Gesundheits-Module",
     "bloodSugar": "Blutzucker-Tracking",
     "bloodSugarHint": "Diabetes: Messwerte eintragen & Warnungen",
