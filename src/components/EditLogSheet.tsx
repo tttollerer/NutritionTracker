@@ -8,6 +8,7 @@ import { amountForUnitSwitch } from '@/lib/reviewStore'
 import { Button } from '@/components/ui/Button'
 import { Chip } from '@/components/ui/Chip'
 import { Field, Input } from '@/components/ui/Input'
+import { LogDateRow } from '@/components/PortionSheet'
 
 interface Props {
   entry: LogEntry | null
@@ -75,6 +76,8 @@ function EditForm({ entry, food, onClose }: { entry: LogEntry; food?: FoodItem; 
     String(initialServingIdx >= 0 ? entry.serving!.count : entry.amount),
   )
   const [meal, setMeal] = useState<Meal>(entry.meal)
+  // Tag des Eintrags — die Datums-Zeile verschiebt falsch datierte Einträge.
+  const [logDate, setLogDate] = useState(entry.date)
   const [saving, setSaving] = useState(false)
 
   const amount = Number.parseFloat(amountText.replace(',', '.'))
@@ -116,6 +119,7 @@ function EditForm({ entry, food, onClose }: { entry: LogEntry; food?: FoodItem; 
         amount: baseAmount,
         unit: baseUnit,
         meal,
+        date: logDate,
         serving: activeServing ? { label: activeServing.label, count: amount } : null,
       })
       onClose()
@@ -197,6 +201,12 @@ function EditForm({ entry, food, onClose }: { entry: LogEntry; food?: FoodItem; 
             <Chip key={m} label={t(`today.meals.${m}`)} selected={meal === m} onClick={() => setMeal(m)} />
           ))}
         </div>
+      </div>
+
+      {/* Datums-Zeile: falsch datierte Einträge verschieben (wie PortionSheet-Edit). */}
+      <div>
+        <p className="mb-1.5 text-sm font-medium text-muted-foreground">{t('today.edit.date')}</p>
+        <LogDateRow value={logDate} onChange={setLogDate} />
       </div>
 
       <div className="flex gap-3 pt-1">

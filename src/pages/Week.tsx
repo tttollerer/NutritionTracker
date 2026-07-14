@@ -3,10 +3,19 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, Plus, Scale, Search, Trash2 } from 'lucide-react'
 import { db } from '@/db'
 import type { FoodItem, LogEntry, Meal, Photo } from '@/db/types'
-import { computeLogValues, deleteLog, getActiveGoalsMap, getSettings, pantryFoods, restoreLog } from '@/db/repo'
+import {
+  computeLogValues,
+  deleteLog,
+  getActiveGoalsMap,
+  getSettings,
+  pantryFoods,
+  recentFoods,
+  restoreLog,
+  searchFoods,
+} from '@/db/repo'
 import { budgetProgress } from '@/lib/budget'
 import { formatEuro, sumCost } from '@/lib/money'
 import { MEALS } from '@/lib/meal'
@@ -19,7 +28,7 @@ import {
   sumPlannedCost,
 } from '@/lib/planning'
 import { weekOffsetOf } from '@/lib/calendar'
-import { incrementPantry } from '@/lib/pantryStock'
+import { decrementPantryOnLog, incrementPantry } from '@/lib/pantryStock'
 import { removeShoppingItem } from '@/lib/shopping'
 import { describePortion, formatLogAmount } from '@/lib/portion'
 import { cn, todayKey } from '@/lib/utils'
@@ -34,6 +43,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Chip } from '@/components/ui/Chip'
+import { Input } from '@/components/ui/Input'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 /** Montag der Woche, in der `d` liegt (deutsche Wochenkonvention). */

@@ -526,9 +526,9 @@ export function computeCost(food: FoodItem, amount: number, unit: Unit): number 
 }
 
 /**
- * Menge und/oder Mahlzeit eines Log-Eintrags ändern; der computed-Snapshot wird
- * aus dem zugehörigen FoodItem neu berechnet. Gibt den aktualisierten Eintrag
- * zurück (undefined, wenn der Eintrag fehlt oder gelöscht ist).
+ * Menge, Mahlzeit und/oder Tag eines Log-Eintrags ändern; der computed-Snapshot
+ * wird aus dem zugehörigen FoodItem neu berechnet. Gibt den aktualisierten
+ * Eintrag zurück (undefined, wenn der Eintrag fehlt oder gelöscht ist).
  */
 export async function updateLog(
   id: string,
@@ -536,6 +536,8 @@ export async function updateLog(
     amount?: number
     unit?: Unit
     meal?: Meal
+    /** Zieltag 'YYYY-MM-DD' — verschiebt einen falsch datierten Eintrag. */
+    date?: string
     /** `null` entfernt den Anzeige-Snapshot („2 Stück"), `undefined` lässt ihn unverändert. */
     serving?: { label: string; count: number } | null
   },
@@ -551,6 +553,7 @@ export async function updateLog(
       amount,
       unit,
       meal: patch.meal ?? entry.meal,
+      date: patch.date ?? entry.date,
       // Ohne Food (sollte nicht vorkommen) bleibt der alte Snapshot stehen,
       // statt Werte aus der Luft zu greifen.
       computed: food ? computeLogValues(food, amount, unit) : entry.computed,
